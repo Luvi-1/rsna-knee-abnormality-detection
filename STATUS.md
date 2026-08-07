@@ -3,6 +3,7 @@
 Updated: 2026-08-07T23:38:59Z
 
 - Current branch: `feat/bootstrap-governance`.
+- Bootstrap commit: `fdd9769`.
 - Current chunk: live competition contract and governed local bootstrap completed locally.
 - Competition slug verified by Kaggle CLI: `rsna-knee-abnormality-detection`.
 - Kaggle CLI: 2.2.4; token authentication works.
