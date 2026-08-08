@@ -11,11 +11,18 @@
 
 ## Required start of every chunk
 
-1. Read `STATUS.md`, `DECISIONS.md`, `RISK_REGISTER.md`, and the latest file in `docs/competition_contract/`.
+1. Read `STATUS.md`, `DECISIONS.md`, `RISK_REGISTER.md`,
+   `docs/competition_contract/contract.yaml`, and the latest dated contract snapshot.
 2. Re-verify live Kaggle rules, data, evaluation, timeline, runtime, submission, external-asset, team, license, and sharing constraints.
 3. Inspect the current tree and state one objective, its evidence, and its exit gate.
 4. Work on a feature branch. Use separable agents only; never let agents edit the same files.
 5. Record the experiment contract before compute and stop when the current chunk exit gate passes.
+
+`docs/competition_contract/contract.yaml` is the single operational source for targets, submission
+columns, metric, dates, runtime, limits, and data interface. Code must load it through
+`configs/competition.yaml`; never duplicate those values. A refreshed aggregate-only candidate must
+pass `scripts/check_competition_contract.py` before modeling resumes. Unresolved fields and tracked
+contradictions use their recorded conservative defaults.
 
 ## External-action gates
 

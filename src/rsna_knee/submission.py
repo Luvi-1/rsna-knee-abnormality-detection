@@ -7,21 +7,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-LABELS = (
-    "ACL",
-    "MCL",
-    "Medial Meniscus",
-    "Lateral Meniscus",
-    "Medial OA",
-    "Lateral OA",
-    "PF OA",
-    "Effusion",
-    "Synovitis",
-    "Baker's",
-    "Contusion",
-    "Fracture",
-)
-EXPECTED_COLUMNS = ("StudyInstanceUID", *LABELS)
+from rsna_knee.competition_contract import load_competition_contract
 
 
 class SubmissionValidationError(ValueError):
@@ -33,22 +19,29 @@ class SubmissionSummary:
     rows: int
 
 
-def validate_submission(path: Path) -> SubmissionSummary:
+def validate_submission(path: Path, contract_config: Path) -> SubmissionSummary:
     """Validate exact columns, unique IDs, finite probabilities, and non-empty rows."""
 
+    contract = load_competition_contract(contract_config)
+    if path.name != contract.submission.filename:
+        raise SubmissionValidationError(
+            f"submission filename must be {contract.submission.filename}"
+        )
+    id_column = contract.targets.id_column
+    labels = contract.targets.labels
     seen: set[str] = set()
     with path.open(newline="", encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
-        if tuple(reader.fieldnames or ()) != EXPECTED_COLUMNS:
+        if tuple(reader.fieldnames or ()) != contract.submission.columns:
             raise SubmissionValidationError("submission columns or order do not match the contract")
         for line_number, row in enumerate(reader, start=2):
-            study_id = row["StudyInstanceUID"].strip()
+            study_id = row[id_column].strip()
             if not study_id or study_id in seen:
                 raise SubmissionValidationError(
                     f"invalid or duplicate study ID on line {line_number}"
                 )
             seen.add(study_id)
-            for label in LABELS:
+            for label in labels:
                 try:
                     value = float(row[label])
                 except (TypeError, ValueError) as error:

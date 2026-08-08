@@ -1,5 +1,14 @@
 # Validation Card
 
+## Competition metric contract
+
+- Canonical source: `docs/competition_contract/contract.yaml` through
+  `configs/competition.yaml`.
+- Primary metric: unweighted mean of all 12 per-label ROC AUC values in canonical label order.
+- Degenerate-label behavior is not specified by the organizer. Local evaluation must require at
+  least one positive and one negative for every target and fail closed otherwise.
+- No threshold, transform, fold, label rule, or ensemble weight may be fit on validation rows.
+
 Version: unassigned; no folds exist.
 
 ## Primary metric

@@ -85,3 +85,35 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Risks: clients that do not follow repository symlinks may need direct `.agents/skills` files.
 - Reversal condition: Codex natively discovers `.codex/skills` or a target environment rejects symlinks.
 - Commit/experiment: this Chunk 1 commit; no experiment.
+
+## D-008 - One canonical machine-readable competition contract
+
+- Date: 2026-08-07
+- Owner: Codex
+- Question: How should code consume mutable competition constraints without duplicating them?
+- Alternatives: hard-code values in modules; copy values across configs; one canonical contract plus
+  a project pointer.
+- Evidence: the prior validator duplicated the 12 targets, and official sources contain live drift
+  and contradictions.
+- Decision: keep all operational values in `docs/competition_contract/contract.yaml`, point to it
+  from `configs/competition.yaml`, and require the submission validator and future Kaggle packaging
+  to load that source.
+- Risks: a stale canonical file remains possible if no live refresh occurs.
+- Reversal condition: Kaggle publishes a stable, complete machine API contract that can be consumed
+  directly and reproducibly.
+- Commit/experiment: this Chunk 2 commit; no experiment.
+
+## D-009 - Fail closed on official-source contradictions
+
+- Date: 2026-08-07
+- Owner: Codex
+- Question: Which interpretation governs when official pages or incorporated terms disagree?
+- Alternatives: use the newest wording; use the most permissive wording; apply source authority and
+  the narrowest safe interpretation.
+- Evidence: nine live contradictions affect slug, schema, asset access, derivative works,
+  commercial use, public weights, winner licensing, institution count, and start-date semantics.
+- Decision: binding Rules and MIRA outrank contextual pages; named license legal text controls its
+  meaning; unresolved operational fields fail closed. Track every contradiction in a private issue.
+- Risks: conservative defaults may delay an otherwise permitted action.
+- Reversal condition: written Kaggle or RSNA clarification resolves the specific ambiguity.
+- Commit/experiment: this Chunk 2 commit; no experiment.

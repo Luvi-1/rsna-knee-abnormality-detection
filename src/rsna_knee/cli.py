@@ -7,6 +7,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from rsna_knee.competition_contract import contract_error_summary
 from rsna_knee.config import config_hash, load_experiment_config
 from rsna_knee.submission import SubmissionValidationError, validate_submission
 
@@ -35,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         "validate-submission", help="validate a submission CSV without submitting"
     )
     validate.add_argument("path", type=Path)
+    validate.add_argument("--contract-config", type=Path, required=True)
 
     for command in sorted(DEFERRED_COMMANDS):
         subparsers.add_parser(command, help="reserved for an approved later chunk")
@@ -49,9 +53,15 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "validate-submission":
         try:
-            summary = validate_submission(args.path)
+            summary = validate_submission(args.path, args.contract_config)
         except SubmissionValidationError as error:
             print(f"submission_valid=no reason={error}", file=sys.stderr)
+            return 2
+        except (OSError, ValidationError) as error:
+            print(
+                f"submission_valid=no reason={contract_error_summary(error)}",
+                file=sys.stderr,
+            )
             return 2
         print(f"submission_valid=yes rows={summary.rows}")
         return 0
