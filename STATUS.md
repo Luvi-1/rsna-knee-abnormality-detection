@@ -1,18 +1,20 @@
 # Status
 
-Updated: 2026-08-07T23:38:59Z
+Updated: 2026-08-08T00:04:57Z
 
-- Current branch: `feat/bootstrap-governance`.
-- Bootstrap commit: `fdd9769`.
-- Current chunk: live competition contract and governed local bootstrap completed locally.
+- Current branch: `feat/chunk-1-repository-os`.
+- Current chunk: private-repository operating system completed; no MRI model was trained.
 - Competition slug verified by Kaggle CLI: `rsna-knee-abnormality-detection`.
 - Kaggle CLI: 2.2.4; token authentication works.
-- Kaggle MCP is configured for bearer-token authentication but its tools were not exposed in this task, so official CLI and signed-in official pages were used.
+- Kaggle, GitHub, and Context7 MCP servers are configured and enabled. Their tools were not all exposed in this task.
+- Hugging Face MCP is configured and enabled. W&B is configured but remains disabled.
 - The account had already entered and accepted the competition rules before this chunk. This chunk did not accept rules.
 - Kaggle displays incomplete identity verification.
 - No submissions exist; no submission was made.
 - No model, data manifest, folds, labels, experiments, or artifacts exist yet.
-- No matching private GitHub repository exists under `Luvi-1`; the local repository has no remote.
-- W&B remains disabled.
+- The `Luvi-1` source-of-truth repository exists, is private, and is configured as `origin`.
+- The fine-grained GitHub MCP token does not yet have access to the new private repository; Git operations used the verified `Luvi-1` keyring account.
+- Python 3.11 and exact direct dependencies are locked with `uv`; package install/import, wheel build, Ruff, mypy, two synthetic tests, CLI smoke checks, sensitive-file checks, secret scanning, and the exported-lock dependency audit passed locally.
+- All ten project skills validate and are checked in under `.codex/skills`, discoverable through `.agents/skills`.
 
-Next gate: human approval to create or select the private GitHub repository and grant the fine-grained GitHub token access to it.
+Next gate: grant the fine-grained GitHub token access to this private repository, complete Kaggle identity verification, then run a privacy-safe Kaggle metadata audit. Do not train yet.

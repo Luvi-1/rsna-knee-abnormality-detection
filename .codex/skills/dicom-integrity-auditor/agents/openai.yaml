@@ -1,0 +1,4 @@
+interface:
+  display_name: "DICOM Integrity Auditor"
+  short_description: "Audit DICOM integrity with private-safe checks"
+  default_prompt: "Use $dicom-integrity-auditor to audit DICOM ordering, metadata consistency, and preprocessing safety."

@@ -1,25 +1,25 @@
 # Plans
 
-## Chunk 1 - competition contract and governed bootstrap
+## Chunk 1 - private repository operating system
 
-Status: completed locally; private remote creation remains a human gate
+Status: complete on the Chunk 1 feature-branch commit
 
-Objective: establish a live, timestamped rules baseline and a safe local repository skeleton without accessing competition data or making a remote/competition write.
+Objective: turn the verified governance baseline into an installable, tested, private-repository operating system without accessing competition data or training a model.
 
 Evidence required:
 
-- Official overview, data, rules, MIRA license, and authenticated CLI facts captured with UTC retrieval time.
-- Existing local and private GitHub repositories checked.
-- Required governance documents present on a feature branch.
-- No raw competition data, submission, team action, rule acceptance, public release, or large compute action.
+- Private remote visibility verified without exposing its URL.
+- Reproducible `uv` environment, package, experiment configuration, SQLite registry, CLI, synthetic fixtures, and CI.
+- Ten validated project-scoped skills discoverable from a fresh Codex session.
+- Package install, Ruff, mypy, pytest, pre-commit, secret, sensitive-file, and vulnerability checks pass.
+- No competition data, submission, team action, rule acceptance, public release, or model training.
 
 Exit gate:
 
-- Contract snapshot passes completeness checks.
-- Governance file set passes repository checks.
-- Diff is reviewed.
-- Any missing private remote is reported as a human gate.
+- All required checks pass from the locked environment.
+- Git tree contains no blocked data, credentials, private outputs, or oversized artifacts.
+- Feature branch is committed and pushed without merge.
 
 ## Recommended next chunk
 
-Create or connect the approved private GitHub repository, restrict access to recognized team members, then implement the dependency-locked package skeleton and synthetic-only validation tests. Do not download the full dataset or launch training.
+Run the privacy-safe Kaggle metadata audit needed to design leakage-resistant groups and version the first data manifest. Do not train a model.

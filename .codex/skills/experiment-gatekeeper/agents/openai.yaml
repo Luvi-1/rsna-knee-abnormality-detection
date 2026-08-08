@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experiment Gatekeeper"
+  short_description: "Gate experiments on evidence, safety, and provenance"
+  default_prompt: "Use $experiment-gatekeeper to decide whether a proposed or completed experiment is eligible to run or be promoted."

@@ -3,7 +3,7 @@
 | ID | Risk | Likelihood | Impact | Mitigation / gate | Status |
 |---|---|---:|---:|---|---|
 | R-001 | Kaggle identity verification is incomplete, potentially blocking participation or prize eligibility. | High | Critical | User completes Kaggle/Persona verification; verify status before submissions or compute spend. | Open |
-| R-002 | No private GitHub source-of-truth or remote backup exists. | High | High | Create/select a private `Luvi-1` repository with explicit approval, then protect access. | Open |
+| R-002 | No private GitHub source-of-truth or remote backup exists. | High | High | Private `Luvi-1` source-of-truth created and configured as `origin`; keep access restricted to recognized team members. | Resolved 2026-08-07 |
 | R-003 | Fine-grained GitHub token currently has no private-repository visibility. | High | High | Grant only the approved repository after creation; verify `Luvi-1` before every write. | Open |
 | R-004 | Only a small label subset is official; report-derived labels may be noisy, multilingual, and missing-not-at-random. | High | Critical | Unknown masks, manual validation, provenance, per-label confidence intervals, and versioned label card. | Open |
 | R-005 | Patient/repeat/duplicate/report-template leakage could inflate validation. | High | Critical | Build identity and similarity groups before folds; audit every split. | Open |
@@ -12,3 +12,4 @@
 | R-008 | Rules prohibit private code/data sharing outside the official Kaggle team. | Medium | Critical | Limit private repo access to recognized team members; do not invite collaborators before team/access review. | Open |
 | R-009 | Winner-license text names CC-BY-NC 4.0 while also describing an OSI license that does not limit commercial use. | Medium | High | Treat as a rules ambiguity; obtain organizer clarification before depending on license interpretation. | Open |
 | R-010 | Public leaderboard overfitting could harm private rank. | Medium | High | Use locked OOF validation; treat leaderboard results as weak evidence only. | Open |
+| R-011 | The local Python security policy ignores hidden editable-install path files. | Medium | Medium | Use locked non-editable installs via `UV_NO_EDITABLE=1` locally and in CI. | Mitigated |

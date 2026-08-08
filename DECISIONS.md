@@ -47,3 +47,41 @@
 - Risks: local work is not yet backed up remotely.
 - Reversal condition: user approves a repository name or identifies an existing private repository.
 - Commit/experiment: `fdd9769`; no experiment.
+
+Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth repository was created under `Luvi-1`, verified private, and added as `origin`; it was not merged.
+
+## D-005 - Use uv with locked non-editable installs
+
+- Date: 2026-08-07
+- Owner: Codex
+- Question: Which reproducible Python dependency workflow should govern local and CI execution?
+- Alternatives: pip plus requirements files; Poetry; `uv` with `uv.lock`.
+- Evidence: `uv` 0.11.29 is installed, supports exact direct bounds and locked syncs, and a non-editable install works with the current Python security behavior.
+- Decision: use Python 3.11, exact direct dependencies, `uv.lock`, and `UV_NO_EDITABLE=1` for local and CI commands.
+- Risks: future lock refreshes require deliberate dependency review.
+- Reversal condition: `uv` becomes unsupported on Kaggle or cannot reproduce the approved environment.
+- Commit/experiment: this Chunk 1 commit; `exp-0000-smoke`.
+
+## D-006 - Use SQLite as the experiment and provenance registry
+
+- Date: 2026-08-07
+- Owner: Codex
+- Question: What is the minimum durable registry for experiment contracts, results, metrics, and artifacts?
+- Alternatives: SQLite; Parquet; both.
+- Evidence: the records are relational and low volume; SQLite supplies constraints, foreign keys, and one portable private file without another dependency.
+- Decision: use schema-versioned SQLite. Add Parquet only when aggregate analytics demonstrate a need.
+- Risks: concurrent writers are not a current use case.
+- Reversal condition: registry volume or concurrent analysis makes SQLite measurably inadequate.
+- Commit/experiment: this Chunk 1 commit; `exp-0000-smoke`.
+
+## D-007 - Keep one project-skill source with a discovery link
+
+- Date: 2026-08-07
+- Owner: Codex
+- Question: How should the requested `.codex/skills` layout remain discoverable by a new Codex session?
+- Alternatives: duplicate skills; use only `.agents/skills`; link the discovery path to the requested source.
+- Evidence: current Codex documentation discovers repository skills from `.agents/skills`, while this chunk explicitly requires `.codex/skills`.
+- Decision: keep authoritative skills in `.codex/skills` and expose them through the relative `.agents/skills` symlink.
+- Risks: clients that do not follow repository symlinks may need direct `.agents/skills` files.
+- Reversal condition: Codex natively discovers `.codex/skills` or a target environment rejects symlinks.
+- Commit/experiment: this Chunk 1 commit; no experiment.

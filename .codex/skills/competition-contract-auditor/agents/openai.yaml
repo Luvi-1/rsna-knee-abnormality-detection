@@ -1,0 +1,4 @@
+interface:
+  display_name: "Competition Contract Auditor"
+  short_description: "Audit the live Kaggle competition contract"
+  default_prompt: "Use $competition-contract-auditor to refresh and audit the competition contract before work begins."

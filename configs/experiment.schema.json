@@ -1,0 +1,284 @@
+{
+  "$defs": {
+    "ComputeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "accelerator": {
+          "enum": [
+            "cpu",
+            "gpu"
+          ],
+          "title": "Accelerator",
+          "type": "string"
+        },
+        "estimated_minutes": {
+          "exclusiveMinimum": 0,
+          "title": "Estimated Minutes",
+          "type": "integer"
+        },
+        "max_inference_minutes": {
+          "exclusiveMinimum": 0,
+          "maximum": 540,
+          "title": "Max Inference Minutes",
+          "type": "integer"
+        },
+        "safety_margin_minutes": {
+          "minimum": 30,
+          "title": "Safety Margin Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "accelerator",
+        "estimated_minutes",
+        "max_inference_minutes",
+        "safety_margin_minutes"
+      ],
+      "title": "ComputeSpec",
+      "type": "object"
+    },
+    "EvaluationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 12,
+          "title": "Labels",
+          "type": "array"
+        },
+        "primary_metric": {
+          "const": "macro_roc_auc",
+          "title": "Primary Metric",
+          "type": "string"
+        }
+      },
+      "required": [
+        "primary_metric",
+        "labels"
+      ],
+      "title": "EvaluationSpec",
+      "type": "object"
+    },
+    "ExperimentGate": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_information_gain": {
+          "minLength": 1,
+          "title": "Expected Information Gain",
+          "type": "string"
+        },
+        "kill_criterion": {
+          "minLength": 1,
+          "title": "Kill Criterion",
+          "type": "string"
+        },
+        "promotion_criterion": {
+          "minLength": 1,
+          "title": "Promotion Criterion",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_information_gain",
+        "promotion_criterion",
+        "kill_criterion"
+      ],
+      "title": "ExperimentGate",
+      "type": "object"
+    },
+    "ExperimentIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "frozen_controls": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Frozen Controls",
+          "type": "array"
+        },
+        "hypothesis": {
+          "minLength": 1,
+          "title": "Hypothesis",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^exp-[a-z0-9][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "primary_change": {
+          "minLength": 1,
+          "title": "Primary Change",
+          "type": "string"
+        },
+        "seed": {
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "hypothesis",
+        "primary_change",
+        "frozen_controls",
+        "seed"
+      ],
+      "title": "ExperimentIdentity",
+      "type": "object"
+    },
+    "ModelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ModelSpec",
+      "type": "object"
+    },
+    "TrainingSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "augmentation": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Augmentation",
+          "type": "array"
+        },
+        "batch_size": {
+          "exclusiveMinimum": 0,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "deterministic": {
+          "default": true,
+          "title": "Deterministic",
+          "type": "boolean"
+        },
+        "epochs": {
+          "exclusiveMinimum": 0,
+          "title": "Epochs",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "exclusiveMinimum": 0,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "loss": {
+          "minLength": 1,
+          "title": "Loss",
+          "type": "string"
+        }
+      },
+      "required": [
+        "epochs",
+        "batch_size",
+        "learning_rate",
+        "loss",
+        "augmentation"
+      ],
+      "title": "TrainingSpec",
+      "type": "object"
+    },
+    "VersionRefs": {
+      "additionalProperties": false,
+      "properties": {
+        "data_manifest": {
+          "minLength": 1,
+          "title": "Data Manifest",
+          "type": "string"
+        },
+        "folds": {
+          "minLength": 1,
+          "title": "Folds",
+          "type": "string"
+        },
+        "labels": {
+          "minLength": 1,
+          "title": "Labels",
+          "type": "string"
+        },
+        "preprocessing": {
+          "minLength": 1,
+          "title": "Preprocessing",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data_manifest",
+        "labels",
+        "folds",
+        "preprocessing"
+      ],
+      "title": "VersionRefs",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "compute": {
+      "$ref": "#/$defs/ComputeSpec"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationSpec"
+    },
+    "experiment": {
+      "$ref": "#/$defs/ExperimentIdentity"
+    },
+    "gate": {
+      "$ref": "#/$defs/ExperimentGate"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelSpec"
+    },
+    "training": {
+      "$ref": "#/$defs/TrainingSpec"
+    },
+    "versions": {
+      "$ref": "#/$defs/VersionRefs"
+    }
+  },
+  "required": [
+    "experiment",
+    "versions",
+    "model",
+    "training",
+    "evaluation",
+    "compute",
+    "gate"
+  ],
+  "title": "ExperimentConfig",
+  "type": "object"
+}
