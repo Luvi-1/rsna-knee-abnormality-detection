@@ -1,0 +1,68 @@
+# Competition Contract Change Log
+
+## 2026-08-08T22:03:12Z
+
+Checkpoint 1 remediation refresh before rebuilding and rerunning the private manifest audit:
+
+- All nine official Kaggle page-content SHA-256 values and the incorporated MIRA PDF SHA-256
+  still match the canonical contract exactly.
+- The official API still reports the singular competition identity, notebook-only submissions,
+  the 2026-10-22T23:59:00Z deadline, five submissions available now, and an unchanged root data
+  inventory of 819,640 files: 819,635 DICOM files and five CSV files.
+- The account remains entered. The API does not expose identity-verification state, so the last
+  directly observed incomplete state remains the fail-closed submission and prize gate.
+- Rules, data interface, metric, runtime, team and submission limits, external-asset rules,
+  sharing constraints, licensing, and winner obligations have no material drift.
+- No rules acceptance, submission, team action, data preview, or remote mutation occurred during
+  the refresh.
+
+## 2026-08-08T04:19:27Z
+
+Pre-run revalidation for the private Chunk 4 manifest audit:
+
+- All nine official Kaggle page-content SHA-256 values and the incorporated MIRA PDF SHA-256
+  still match `contract.yaml` and `2026-08-08T025148Z.md` exactly.
+- Rules, data interface, evaluation, timeline, offline runtime, submission/team limits,
+  external-asset rules, sharing constraints, licensing, and winner obligations have no material
+  drift.
+- The account remains entered with rules already accepted. Identity verification remains
+  incomplete, blocking submissions and prize eligibility but not this private aggregate-only CPU
+  audit.
+- No rules acceptance, submission, team action, data preview, or remote mutation occurred during
+  the refresh.
+
+## 2026-08-08T02:51:48Z
+
+Compared with `2026-08-08.md` before the Chunk 4 full-data audit:
+
+- All nine official Kaggle page-content SHA-256 values and the incorporated MIRA PDF SHA-256 are
+  unchanged.
+- Targets, metric, deadlines, runtime limits, submission limits, team size, data inventory,
+  external-asset rules, sharing rules, license constraints, and winner obligations are unchanged.
+- The authenticated account remains entered with rules already accepted; identity verification
+  remains incomplete and blocks submissions/prize eligibility, not this private aggregate-only CPU
+  manifest audit.
+- No rules acceptance, submission, team action, data preview, or compute action occurred during the
+  refresh.
+
+## 2026-08-08
+
+Compared with `2026-08-07T233859Z.md`:
+
+- Added `contract.yaml` as the single machine-readable operational contract and
+  `configs/competition.yaml` as its only project pointer.
+- Target order, macro-AUC formula, deadlines, nine-hour CPU/GPU limits, daily/final submission
+  limits, maximum team size, displayed data size, and total file count are unchanged.
+- Replaced the prior narrative `train.csv` description with the verified current header: ID,
+  report, and 12 targets. `PatientSex` is not in that CSV.
+- Confirmed from a Competition Host that reports are unavailable in the scoring test interface.
+- Added exact aggregate metadata-file byte sizes and current training study/series row counts.
+- Formalized nine official-source contradictions as private GitHub issues #1–#9, each with a source
+  authority and conservative default.
+- Added fail-closed unknowns for degenerate-label scorer behavior, exact DICOM tag names, and exact
+  accelerator hardware.
+- Preserved the distinct public start and API activation timestamps without deriving deadlines from
+  either field.
+- Added page-content and MIRA PDF fingerprints and a material drift checker.
+- Removed time-varying team/participant/submission counts from the operational contract; they are
+  observations, not stable constraints.

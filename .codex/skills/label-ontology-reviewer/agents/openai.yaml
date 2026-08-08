@@ -1,0 +1,4 @@
+interface:
+  display_name: "Label Ontology Reviewer"
+  short_description: "Review label semantics, masks, and mappings"
+  default_prompt: "Use $label-ontology-reviewer to review label definitions, missingness, mappings, and provenance."

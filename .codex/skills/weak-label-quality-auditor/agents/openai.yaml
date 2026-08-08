@@ -1,0 +1,4 @@
+interface:
+  display_name: "Weak Label Quality Auditor"
+  short_description: "Audit report-derived weak-label reliability"
+  default_prompt: "Use $weak-label-quality-auditor to audit weak-label provenance, missingness, and noise risks before an experiment."

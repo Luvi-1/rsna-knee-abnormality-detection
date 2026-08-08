@@ -1,0 +1,40 @@
+[experiment]
+id = "exp-0000-smoke"
+hypothesis = "The operating-system smoke path is reproducible."
+primary_change = "Repository bootstrap only"
+frozen_controls = ["No competition data", "No model training"]
+seed = 20260807
+
+[versions]
+data_manifest = "public-schema-v1"
+labels = "unassigned"
+folds = "unassigned"
+preprocessing = "unassigned"
+
+[model]
+name = "unassigned-baseline"
+
+[model.parameters]
+
+[training]
+epochs = 1
+batch_size = 2
+learning_rate = 0.001
+loss = "binary_cross_entropy"
+augmentation = []
+deterministic = true
+
+[evaluation]
+primary_metric = "macro_roc_auc"
+labels = ["ACL", "MCL", "Medial Meniscus", "Lateral Meniscus", "Medial OA", "Lateral OA", "PF OA", "Effusion", "Synovitis", "Baker's", "Contusion", "Fracture"]
+
+[compute]
+accelerator = "cpu"
+estimated_minutes = 1
+max_inference_minutes = 480
+safety_margin_minutes = 60
+
+[gate]
+expected_information_gain = "Prove the locked synthetic-only toolchain works."
+promotion_criterion = "All Chunk 1 checks pass."
+kill_criterion = "Any data, secret, install, lint, type, test, or audit failure."

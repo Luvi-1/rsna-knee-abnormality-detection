@@ -1,0 +1,27 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff check
+        entry: uv run --no-editable ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run --no-editable ruff format
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: uv run --no-editable mypy src
+        language: system
+        pass_filenames: false
+      - id: sensitive-files
+        name: Sensitive file guard
+        entry: uv run --no-editable python scripts/check_no_sensitive_files.py
+        language: system
+        pass_filenames: false
+      - id: detect-secrets
+        name: detect-secrets
+        entry: uv run --no-editable detect-secrets-hook --baseline .secrets.baseline
+        language: system

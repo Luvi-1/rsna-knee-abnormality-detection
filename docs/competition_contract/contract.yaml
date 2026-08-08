@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "retrieved_at_utc": "2026-08-08T22:03:12Z",
+  "retrieved_at_local": "2026-08-08T15:03:12-07:00",
+  "identity": {
+    "competition_id": 154281,
+    "slug": "rsna-knee-abnormality-detection",
+    "title": "RSNA Knee Abnormality Detection",
+    "host": "Radiological Society of North America",
+    "entered": true,
+    "submissions_enabled": true,
+    "identity_verification": "incomplete_blocking"
+  },
+  "targets": {
+    "prediction_unit": "study",
+    "id_column": "StudyInstanceUID",
+    "labels": [
+      "ACL",
+      "MCL",
+      "Medial Meniscus",
+      "Lateral Meniscus",
+      "Medial OA",
+      "Lateral OA",
+      "PF OA",
+      "Effusion",
+      "Synovitis",
+      "Baker's",
+      "Contusion",
+      "Fracture"
+    ]
+  },
+  "metric": {
+    "name": "macro_roc_auc",
+    "formula": "(1 / 12) * sum(AUC_i for i in 0..11)",
+    "aggregation": "unweighted",
+    "degenerate_label_handling": "unresolved_fail_closed",
+    "safe_default": "Require both classes for every target; never skip, reweight, or impute a target without organizer clarification."
+  },
+  "submission": {
+    "filename": "submission.csv",
+    "columns": [
+      "StudyInstanceUID",
+      "ACL",
+      "MCL",
+      "Medial Meniscus",
+      "Lateral Meniscus",
+      "Medial OA",
+      "Lateral OA",
+      "PF OA",
+      "Effusion",
+      "Synovitis",
+      "Baker's",
+      "Contusion",
+      "Fracture"
+    ],
+    "notebook_only": true
+  },
+  "timeline": {
+    "timezone": "UTC",
+    "start": "2026-07-30",
+    "api_date_enabled": "2026-08-05T15:51:31.833Z",
+    "entry_deadline": "2026-10-15T23:59:00Z",
+    "team_merger_deadline": "2026-10-15T23:59:00Z",
+    "final_submission_deadline": "2026-10-22T23:59:00Z",
+    "winner_requirements_deadline": "2026-11-05T23:59:00Z"
+  },
+  "runtime": {
+    "internet_enabled": false,
+    "cpu_limit_seconds": 32400,
+    "gpu_limit_seconds": 32400,
+    "accelerator_details": "unresolved",
+    "safe_default": "Use one standard Kaggle CPU or GPU, assume no TPU or specific GPU, and revalidate editor limits at packaging."
+  },
+  "limits": {
+    "daily_submissions": 5,
+    "final_submissions": 2,
+    "max_team_size": 5,
+    "max_submission_size_mb": 20480
+  },
+  "data": {
+    "description_fingerprint": "73ad166e0959a489deb425ba037e9c7c871f2a9d617dab8f79ec123c689cceeb",
+    "inventory": {
+      "display_size": "569.76 GB",
+      "total_files": 819640,
+      "dicom_files": 819635,
+      "csv_files": 5,
+      "root_directories": ["train_series", "test_series"],
+      "metadata_files": [
+        {"name": "sample_submission.csv", "bytes": 470},
+        {"name": "test.csv", "bytes": 212},
+        {"name": "test_series.csv", "bytes": 2213},
+        {"name": "train.csv", "bytes": 5690007},
+        {"name": "train_series.csv", "bytes": 3458834}
+      ]
+    },
+    "train_csv_columns": [
+      "StudyInstanceUID",
+      "Report",
+      "ACL",
+      "MCL",
+      "Medial Meniscus",
+      "Lateral Meniscus",
+      "Medial OA",
+      "Lateral OA",
+      "PF OA",
+      "Effusion",
+      "Synovitis",
+      "Baker's",
+      "Contusion",
+      "Fracture"
+    ],
+    "test_csv_columns": ["StudyInstanceUID"],
+    "series_csv_columns": [
+      "StudyInstanceUID",
+      "SeriesInstanceUID",
+      "Fluid_Sensitive",
+      "Fat_Suppression",
+      "Anatomical_Plane"
+    ],
+    "train_dicom_layout": "train_series/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm",
+    "test_dicom_layout": "test_series/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm",
+    "test_reports_available": false,
+    "test_patient_sex_csv_available": false,
+    "official_label_coverage": "small_subset_per_condition",
+    "missing_label_semantics": "unknown_not_negative",
+    "approximate_hidden_test_studies": 1300,
+    "train_studies": 4407,
+    "train_series_rows": 24371,
+    "series_slice_range_typical": [20, 45],
+    "series_slice_median": 30,
+    "transfer_syntaxes": [
+      "Explicit VR Little Endian",
+      "Implicit VR Little Endian",
+      "JPEG Lossless",
+      "JPEG 2000"
+    ],
+    "dicom_metadata": {
+      "allowlisted_tag_count": 86,
+      "tag_names": "unresolved",
+      "patient_sex_host_statement": "present_in_dicom_header",
+      "safe_default": "Do not depend on a DICOM metadata tag until verified in the scoring-equivalent test interface."
+    },
+    "privacy_boundary": "Persist aggregate counts and schemas only; never persist identifiers, reports, pixels, or preview content."
+  },
+  "efficiency_prize": {
+    "eligible_if": "Team-selected or automatically selected eligible leaderboard-prize submission with private score above sample submission benchmark.",
+    "formula": "AUC / (Benchmark - maxAUC) + RuntimeSeconds / 32400",
+    "direction": "minimize",
+    "runtime_scope": "Full notebook wall time, including installs, model loading, and DICOM reads."
+  },
+  "external_assets": {
+    "verified_rule": "External data, pretrained models, and automated tools require adequate rights and equal access or the Rules reasonableness test.",
+    "safe_default": "Use only free, public, equally accessible assets with recorded provenance, version, license, checksum, and winner-delivery compatibility.",
+    "ambiguity_issue": 4
+  },
+  "team_and_sharing": {
+    "private_sharing": "Only recognized members of the same official Kaggle team may receive private competition code or data.",
+    "public_code_during_competition": "Share only through the competition Kaggle forum or notebooks and only with compatible third-party rights.",
+    "data_access": "Every user must register individually and accept the binding terms."
+  },
+  "license": {
+    "dataset": "MIRA Dataset License v2.0, subject to the competition Rules",
+    "operational_scope": "research_only",
+    "clinical_use": false,
+    "redistribution": false,
+    "reidentification": false,
+    "commercial_deployment": "blocked_pending_written_clarification",
+    "winner_license_text": "CC-BY-NC-4.0",
+    "safe_default": "Apply the narrower binding term; do not publish derived artifacts or monetize data-derived work without written permission."
+  },
+  "winner_obligations": {
+    "deliverables": [
+      "training code",
+      "inference code",
+      "weights",
+      "documentation",
+      "environment specification",
+      "reproducibility instructions",
+      "short video",
+      "public code, weights, and model artifacts as specified"
+    ],
+    "public_weights_required": true,
+    "safe_default": "Keep weights private pending potential-winner review, written sponsor confirmation, and memorization checks."
+  },
+  "ambiguities": [
+    {"id": "contract-slug", "github_issue": 1, "status": "open"},
+    {"id": "contract-patientsex", "github_issue": 2, "status": "open"},
+    {"id": "contract-winner-license", "github_issue": 3, "status": "open"},
+    {"id": "contract-external-assets", "github_issue": 4, "status": "open"},
+    {"id": "contract-mira-derivatives", "github_issue": 5, "status": "open"},
+    {"id": "contract-public-weights", "github_issue": 6, "status": "open"},
+    {"id": "contract-commercial-use", "github_issue": 7, "status": "open"},
+    {"id": "contract-institution-count", "github_issue": 8, "status": "open"},
+    {"id": "contract-start-date", "github_issue": 9, "status": "open"},
+    {"id": "contract-auc-degenerate", "github_issue": null, "status": "unresolved"},
+    {"id": "contract-hardware", "github_issue": null, "status": "unresolved"},
+    {"id": "contract-dicom-tags", "github_issue": null, "status": "unresolved"}
+  ],
+  "evidence": {
+    "kaggle_cli_version": "2.2.4",
+    "kaggle_mcp": "configured_but_tools_not_exposed_used_official_cli",
+    "github_issue_transport": "official_connector_denied_private_repo_access_used_verified_owner_cli_fallback",
+    "page_sha256": {
+      "rules": "9105f8f81f96c02aca988197c175d699052be8c06419b21131dccdd426bc404d",
+      "description": "812ccca01a1b01fdd99eda9be315c06a7f1df8053b532b6d3ae4a2af48339433",
+      "evaluation": "2abd98e6882a9493ea19e0582acfe21b8fdeff6a3cb5c04575271245e8d539ba",
+      "timeline": "077c171707c413423852a1d7155ac3784aaf3ffa5f3ad20c6b946deb1100d3f3",
+      "data_description": "73ad166e0959a489deb425ba037e9c7c871f2a9d617dab8f79ec123c689cceeb",
+      "prizes": "60abb2ea73f93e2ce3312b0f0c09c1b5bd9e3b3ffbcd24a5982edad56ef0040a",
+      "code_requirements": "7717ab86668081aa7813ca9aa3067f8ed20b539515fa23129f65cd40b848cc8e",
+      "abstract": "9aaa35cd00ffbe88f3d6a0e53481223e8c6b1fca83a4872f02cd6e8c27456247",
+      "efficiency": "4e18ef1a0b50fb7a9c2a4e7308dde61feaf5746d07f034f9c0ed81cc2018cff0",
+      "mira_pdf": "ae71f7ab5b34cf050e48c431020c2fe5dc1efa4e5b515cc5f489be6b60a3c335"
+    },
+    "sources": [
+      {"authority": 1, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/rules"},
+      {"authority": 1, "url": "https://www.rsna.org/-/media/files/rsna/RSNAI/RSNA-MIRA-Dataset-License-2025.pdf"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/overview"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/overview/evaluation"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/overview/timeline"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/data"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733343"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733423"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733475"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733592"},
+      {"authority": 4, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733652"},
+      {"authority": 3, "url": "https://creativecommons.org/licenses/by-nc/4.0/legalcode.en"},
+      {"authority": 3, "url": "https://opensource.org/osd"},
+      {"authority": 4, "url": "https://www.rsna.org/artificial-intelligence/ai-image-challenge/knee-mri-ai-challenge"},
+      {"authority": 4, "url": "https://www.rsna.org/news/announcements/member-updates"}
+    ]
+  }
+}

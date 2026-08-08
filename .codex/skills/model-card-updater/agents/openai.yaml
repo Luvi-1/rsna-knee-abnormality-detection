@@ -1,0 +1,4 @@
+interface:
+  display_name: "Model Card Updater"
+  short_description: "Update evidence-backed model cards"
+  default_prompt: "Use $model-card-updater to update the model card from this validated experiment evidence."
