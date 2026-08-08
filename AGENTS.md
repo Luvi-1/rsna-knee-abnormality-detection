@@ -4,6 +4,7 @@
 
 - Optimize for private-leaderboard macro ROC AUC without promising placement.
 - Use Kaggle for full data, GPU training, and inference. Keep local work limited to code, public metadata, aggregate summaries, and synthetic fixtures.
+- Treat this private repository as the code and governance source of truth; restrict access to recognized team members.
 - Never send raw DICOM pixels, radiology reports, patient-level metadata, or private competition artifacts to an LLM, Hugging Face, W&B, GitHub, or another external service.
 - Never commit competition data, credentials, checkpoints, or prediction artifacts.
 - Treat outputs as research only, never clinical advice.
@@ -22,12 +23,16 @@ Get explicit human approval immediately before any submission, team creation or 
 
 ## Scientific invariants
 
+- Let locked validation drive decisions; treat public-leaderboard results as weak evidence only.
+- Improve label quality before adding architecture complexity, and reproduce small gains before accepting them.
 - Group patients, repeated studies, exact duplicates, near duplicates, and report templates before folds.
 - Treat missing labels as unknown, not negative. Never call report-derived labels expert ground truth.
 - Fit labels, transforms, thresholds, ensemble weights, and pseudo-label rules within training folds only.
 - A model may be promoted only with out-of-fold predictions, macro AUC, all 12 label AUCs, uncertainty, runtime, memory, size, and prediction-correlation evidence.
 - A model must not pseudo-label any study it trained on.
 - Change one principal experimental factor at a time unless interaction is the stated hypothesis.
+- Do not spend a large GPU budget before a smoke test and cheaper ablation support the hypothesis.
+- Route medical ambiguity to qualified human review; research ideas remain hypotheses until validated.
 - Build against the live nine-hour inference ceiling with a substantial safety margin.
 
 ## Engineering invariants
@@ -38,7 +43,9 @@ Get explicit human approval immediately before any submission, team creation or 
 - Test DICOM ordering, preprocessing, metrics, fold leakage, label masks, submission schema, and ensembles before promotion.
 - Log only structured, non-sensitive identifiers and aggregates.
 - Every artifact records code version, config hash, data-manifest version, fold version, preprocessing version, and label version.
+- Every external asset records provenance, version, identifier, license, checksum, equal-access evidence, and rule justification before use.
 - Keep the package installable from `uv.lock`; run Ruff, mypy, pytest, secret checks, and dependency audit before promotion.
+- Keep a reproducible recovery path for every critical Kaggle notebook.
 - Treat `.agents/skills` as the Codex discovery path and `.codex/skills` as the checked-in project skill source.
 
 ## Experiment contract
