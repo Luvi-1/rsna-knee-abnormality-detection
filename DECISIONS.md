@@ -117,3 +117,43 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Risks: conservative defaults may delay an otherwise permitted action.
 - Reversal condition: written Kaggle or RSNA clarification resolves the specific ambiguity.
 - Commit/experiment: this Chunk 2 commit; no experiment.
+
+## D-010 - Rank research by evidence and information efficiency
+
+- Date: 2026-08-08
+- Owner: Codex
+- Question: How should architecture, label, validation, ensemble, and efficiency ideas be ordered
+  before competition-data experiments?
+- Alternatives: follow public leaderboard notebooks; reproduce the largest published system; rank
+  falsifiable hypotheses using source quality, expected value, compute, runtime, and rule risk.
+- Evidence: 62 structured sources include current official pages, multicenter knee-MRI studies,
+  organizer-confirmed winning solutions, clinical-NLP validation, domain-shift studies, and official
+  inference documentation. Public notebook cards trail the public leaderboard and expose incomplete
+  validation and licensing evidence.
+- Decision: use the deterministic ten-dimension score in
+  `docs/research/hypothesis_backlog.md`; promotion still requires the experiment gate and cannot be
+  inferred from the score.
+- Risks: ordinal scores encode judgment and may change when contract, data audit, or OOF evidence
+  changes.
+- Reversal condition: stronger primary evidence or controlled competition OOF results change the
+  estimated impact, confidence, cost, or risk.
+- Commit/experiment: this Chunk 3 commit; no experiment.
+
+## D-011 - Validation and weak-label integrity precede model complexity
+
+- Date: 2026-08-08
+- Owner: Codex
+- Question: Which research path should receive the first controlled compute?
+- Alternatives: full multi-plane 3D/vision-language system; public-notebook reproduction; honest
+  grouping and label audit followed by a shared 2D MIL control.
+- Evidence: direct multicenter knee studies report lower external than internal AUC; slice-level
+  medical leakage can create extreme inflation; paired report/image studies show granular report
+  labels are incomplete; prior RSNA winners repeatedly use group folds, localization, 2D/2.5D
+  encoders, and ordered aggregation.
+- Decision: first establish patient/repeat/duplicate/template and scanner/protocol stress folds plus
+  per-label weak-label validity. The first image control is MRNet-lite shared 2D MIL; ordered 2.5D,
+  plane gating, compact attention, SSL, localization, and ensembles enter one factor at a time.
+- Risks: a conservative sequence delays a large architecture that might score well publicly.
+- Reversal condition: a cheaper aggregate audit proves the split/label gates already valid or a
+  controlled baseline shows that the proposed image control is scientifically inadequate.
+- Commit/experiment: this Chunk 3 commit; no experiment.

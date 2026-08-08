@@ -20,6 +20,32 @@ Exit gate:
 - Git tree contains no blocked data, credentials, private outputs, or oversized artifacts.
 - Feature branch is committed and pushed without merge.
 
+## Chunk 3 - evidence-ranked research portfolio
+
+Status: complete on `feat/chunk-3-research-portfolio`; not merged.
+
+Objective: rank the exact competition's label, validation, image, ensemble, contrarian, and
+efficiency hypotheses without competition-data processing or model training.
+
+Evidence required:
+
+- Current official competition contract and timestamped public Kaggle landscape.
+- Peer-reviewed and organizer-confirmed sources with validation, code, license, dataset, modality,
+  and transfer limitations recorded.
+- Exactly 35 actionable hypotheses and five hard rejects, with deterministic scores and executable
+  experiment gates.
+- External assets remain blocked unless the full provenance and approval contract is complete.
+
+Exit gate:
+
+- Research matrix is machine-readable and every source row is complete.
+- All 20 requested themes are synthesized.
+- Every selected hypothesis states mechanism, labels, MVP, data, compute, success, kill,
+  leakage/confounding, and closest baseline.
+- No data, model, submission, notebook fork, public action, or external asset use occurs.
+
 ## Recommended next chunk
 
-Run the privacy-safe Kaggle metadata audit needed to design leakage-resistant groups and version the first data manifest. Do not train a model.
+Run a privacy-safe, aggregate-only Kaggle data/label manifest and split-feasibility audit. Establish
+patient/repeat/duplicate/template groups, series/protocol inventories, per-label positive/negative/
+unknown support, and admissible domain strata. Do not train a model.
