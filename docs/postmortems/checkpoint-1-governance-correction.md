@@ -45,8 +45,20 @@ related equations.
 
 ## Current state
 
-The narrow baseline, detection regression, centralized disclosure controller, and governance
-corrections are implemented locally. The clean-history rewrite, regenerated private artifacts,
-final staged-tree gates, cumulative private pull request, and green remote CI are pending. This
-postmortem must be updated from actual evidence after those gates run; it must not be used as proof
-that they already passed.
+The narrow baseline, detection regression, centralized disclosure controller, v2 DICOM disposition
+gate, hard/soft grouping separation, and governance corrections are pinned at code commit
+`6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`.
+
+`audit-0002-manifest-remediation` completed a full private CPU run in 10,092 seconds. Its validated
+schema-v2 release reports complete coverage and reconciliation, `unexplained_dicom_issues: zero`,
+`dicom_issue_dispositions_complete: true`, `protected_graph_closed: true`, and separate soft
+candidate/overflow evidence. Exactly five approved outputs passed the joint disclosure boundary;
+their hashes and the pinned bundle/provenance hashes are recorded in the experiment document. The
+historical audit remains preserved but is superseded.
+
+Guarded cleanup replaced the old feature ref with the clean history, deleted the temporary unsafe
+branch, and verified that no active local or origin ref reaches the unsafe commit. The complete
+staged candidate then passed every final local gate, including 139/139 pytest and all configured
+static, secret, sensitive-file, dependency, contract, disclosure, and byte-identity checks. The
+correction is not fully closed: the private pull request and green GitHub-hosted CI are pending. No
+merge, fold, preprocessing, weak-label, model, prediction, ensemble, or submission action occurred.

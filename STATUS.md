@@ -1,16 +1,15 @@
 # Status
 
-Updated: 2026-08-08T22:03:12Z
+Updated: 2026-08-09T02:33:28Z
 
 ## Current checkpoint
 
-- Branch: `checkpoint/chunks-1-4-remediated`; local remediation is in progress and is not yet
-  merge-ready.
+- Branch: `checkpoint/chunks-1-4-remediated`; the private manifest remediation run is complete,
+  but the cumulative branch is not yet merge-ready.
 - Objective: make the cumulative Chunks 1-4 branch privacy-safe, reproducible, privately rerun,
   remotely validated, and reviewable without starting Chunk 5.
-- Exit gate: a new full private Kaggle audit must pass, all intended files must be staged before the
-  final local gates run, the cumulative private pull request must have green GitHub-hosted CI, and
-  the pull request must remain unmerged.
+- Exit gate: the full private Kaggle audit and complete staged-candidate local gates have passed;
+  the cumulative private pull request must now have green GitHub-hosted CI and remain unmerged.
 - No preprocessing, fold construction, weak-label creation, model training, prediction, ensemble,
   or submission is authorized during this checkpoint.
 
@@ -18,11 +17,11 @@ Updated: 2026-08-08T22:03:12Z
 
 | State | Current evidence |
 |---|---|
-| Implemented | Exact secret-baseline entries and a detection regression; centralized joint disclosure controls and schema; hard-versus-soft protected-group separation in `manifest-v2` / `protected-groups-v2`; refreshed competition contract. These changes are currently working-tree changes. |
-| Locally tested | Focused remediation tests have run during development. The final cumulative install, Ruff, format, mypy, pytest, pre-commit, secret, sensitive-file, dependency, contract, and disclosure gates have **not** yet run after every intended file is staged. |
-| Executed privately on Kaggle | The historical `audit-0001-manifest` ran privately, but its sanitized release and grouping semantics are superseded for promotion. The remediation audit has not yet completed. |
+| Implemented | The v2 DICOM disposition, hard/soft grouping, joint disclosure, and packaging implementation is pinned at code commit `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. Governance and the four retrieved generated artifacts are current working-tree additions. |
+| Locally tested | **Passed on the complete staged candidate.** Locked reinstall/package; pytest 139/139; Ruff lint/format; strict mypy; every pre-commit hook; exact staged secret/baseline comparison; sensitive-file guard; pip-audit with no vulnerabilities; contract drift check; synthetic config/submission validators; remote and local full-output validators; and four canonical byte comparisons all passed. Guarded history/ref cleanup also passed. |
+| Executed privately on Kaggle | `audit-0002-manifest-remediation` completed a full private CPU run in 10,092 seconds. Its five approved sanitized outputs report `coverage.complete: true`, `unexplained_dicom_issues: zero`, and `dicom_issue_dispositions_complete: true`. `audit-0001-manifest` is superseded. |
 | Remotely tested | No GitHub Actions result exists for the cumulative remediation branch yet. |
-| Merge-ready | **No.** A successful private rerun, final staged-tree gates, cumulative private pull request, and green remote CI are still required. |
+| Merge-ready | **No.** The private rerun, history/ref cleanup, and final staged local gates are complete; a cumulative private pull request and green hosted CI are still required. |
 | Merged into `main` | **No.** Merge is outside this checkpoint and requires explicit human approval. |
 
 ## Corrections to the prior status
@@ -31,22 +30,23 @@ Updated: 2026-08-08T22:03:12Z
   the committed branch subsequently contained five provenance/content hashes that the high-entropy
   detector flagged. Manual review found no credential, token, private URL, patient identifier, or
   private competition artifact identifier in those five values. The narrow baseline correction and
-  detection regression exist locally, but the final staged-tree, cumulative-diff, history, and newly
-  generated-artifact checks remain checkpoint exit gates.
+  detection regression exist locally. The complete staged-tree, cumulative-diff, and generated-
+  artifact checks now pass; hosted CI remains required.
 - The prior status said rare values could not be inferred. The old field-by-field suppression
   allowed a below-threshold value to be reconstructed from published complements. The old
   sanitized artifacts and all claims based on that release contract are superseded. The replacement
   uses one central, joint complementary-disclosure policy with qualitative/range tokens and
-  adversarial arithmetic checks; it still requires a fresh private full-data run.
+  adversarial arithmetic checks; the fresh private full-data release passed that boundary.
 - The prior `protected-groups-v1` result mixed strong duplicate/repeat evidence with weak or
   overflow-candidate similarities. Its zero-crossing statement did not establish fold feasibility.
-  The local v2 design keeps hard protected components separate from soft review/stress candidates,
-  preserves edge provenance privately, and creates no folds. Private recomputation and review of
-  the resulting components are pending.
+  The completed v2 audit keeps hard protected components separate from soft review/stress
+  candidates, preserves edge provenance privately, and reports `protected_graph_closed: true`.
+  `folds_assigned: false` and `fold_feasibility: not_assessed` remain controlling.
 - The prior DICOM status recorded nonzero decode/quarantine findings without a complete case-level
-  root-cause and disposition audit. DICOM readiness is therefore unproven. Every private case must
-  receive an explained deterministic disposition, and every valid recoverable object must be
-  supported, before the remediation audit can pass.
+  root-cause and disposition audit. The v2 rerun still reports the approved
+  `below_threshold_nonzero` token for decode failures and quarantined files/series, but now reports
+  `unexplained_dicom_issues: zero`, `dicom_issue_dispositions_complete: true`, and terminal
+  file/series accounting. Case detail remains private.
 
 ## Live competition contract
 
@@ -63,12 +63,5 @@ Updated: 2026-08-08T22:03:12Z
 
 ## Remaining checkpoint work
 
-1. Finish and locally validate DICOM disposition handling and hard/soft grouping semantics.
-2. Create the clean cumulative history required to remove reachability of the unsafe historical
-   disclosure artifact without losing its non-sensitive provenance record.
-3. Package and execute `audit-0002-manifest-remediation` privately on Kaggle; retrieve only the five
-   approved sanitized outputs and validate them locally.
-4. Record the new audit separately, mark `audit-0001-manifest` superseded, and update this status
-   from actual rerun evidence without publishing private counts or identifiers.
-5. Stage every intended file, run every final local gate, push the cumulative branch, open the
-   private pull request, and require green GitHub-hosted CI. Do not merge.
+1. Push the exact locally checked cumulative commit, open the private pull request, and require
+   green GitHub-hosted CI. Do not merge.

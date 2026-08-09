@@ -4,7 +4,9 @@ Status: **superseded for promotion and downstream use** by Checkpoint 1 remediat
 historical audit record; no preprocessing, folds, weak labels, model, prediction, ensemble, or
 submission followed it.
 
-Superseded by: planned `audit-0002-manifest-remediation` (not yet executed).
+Superseded by: completed `audit-0002-manifest-remediation`, code commit
+`6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. The predecessor state is preserved in the private
+registry without overwriting this historical record.
 
 ## Before run
 
@@ -76,14 +78,19 @@ unsafe release equation would repeat the disclosure defect. The correction recor
 fact of the defect, the old artifact hashes, code/config provenance, runtime, and decisions without
 releasing private identifiers or rare counts.
 
-## Historical decision and successor gate
+## Historical decision and successor outcome
 
 The original audit correctly blocked downstream work, but for incomplete reasons. It is now
-formally superseded rather than overwritten. The registry successor must be a new row named
-`audit-0002-manifest-remediation` and must reference this audit as its predecessor.
+formally superseded rather than overwritten. The registry successor is the separate row
+`audit-0002-manifest-remediation`, which references this audit as its predecessor.
 
-The successor may pass only when every accessible object reconciles; every DICOM exception has an
-explained deterministic disposition; hard and soft grouping semantics validate separately; every
-approved aggregate is regenerated from the central joint-disclosure boundary; the old audit is
-marked superseded without losing provenance; and local plus remote release gates pass. Until that
-evidence exists, downstream data and model work remains blocked.
+The successor completed a full private run in 10,092 seconds. Its validated schema-v2 release
+reports complete five-level reconciliation, `unexplained_dicom_issues: zero`,
+`dicom_issue_dispositions_complete: true`, separate hard/soft grouping evidence, and
+`protected_graph_closed: true`. All five approved files passed the joint disclosure boundary, and
+this predecessor is now marked superseded without losing provenance.
+
+That successor result replaces this audit only as current manifest evidence. It does not establish
+fold feasibility or model readiness: no folds were assigned. Guarded history/ref cleanup and final
+complete staged-candidate local gates passed; private pull-request and GitHub-hosted CI gates remain
+pending.

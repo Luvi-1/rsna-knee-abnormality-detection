@@ -7,14 +7,17 @@ Version: `official-labels-v1`
 `ACL`, `MCL`, `Medial Meniscus`, `Lateral Meniscus`, `Medial OA`, `Lateral OA`, `PF OA`,
 `Effusion`, `Synovitis`, `Baker's`, `Contusion`, `Fracture`.
 
-## Historical audit coverage
+## Validated audit coverage
 
-- Source: organizer-provided official label cells only, as recorded by the superseded
-  `audit-0001-manifest`.
-- The exact schema-v1 cell-state counts are intentionally not republished because that release is
-  superseded and all audit population counts must pass the central joint disclosure boundary.
-- Current schema-v2 count states are pending the authoritative private rerun and may appear only as
-  validated disclosure tokens in the canonical v2 outputs.
+- Source: organizer-provided official label cells only, revalidated by the completed private
+  `audit-0002-manifest-remediation`.
+- Schema-v2 reports `official_only: true`, `non_official_sources: zero`, and `conflict_cells: zero`.
+- The validated joint-disclosure tokens are `official_cells: range_52880_52899`,
+  `positive_cells: range_240_259`, `negative_cells: range_440_459`, and
+  `unknown_cells: range_52180_52199`. These tokens must not be converted into exact counts or
+  percentages.
+- Exact schema-v1 cell-state counts remain intentionally unrepublished because that release is
+  superseded.
 - No missing cell was coerced to negative, and no report-derived or model-derived label entered this
   version.
 
@@ -32,7 +35,8 @@ Version: `official-labels-v1`
 
 ## Promotion gate
 
-`official-labels-v1` is not training-ready. The `manifest-v2` private rerun must re-establish label
-reconciliation, complete every DICOM disposition, validate hard/soft grouping semantics, and pass
-the joint disclosure release gate. Weak labels remain blocked until manual report validation,
-per-label error analysis, leakage review, and a new versioned label manifest pass their own gates.
+`official-labels-v1` is reconciled in `manifest-v2`, but it is not yet training-ready. No folds
+exist, final staged local gates passed, the private PR/hosted CI gates remain open, and most target
+cells remain unknown under the approved disclosure token. Weak labels remain blocked until manual
+report validation, per-label error analysis, leakage review, and a new versioned label manifest
+pass their own gates.

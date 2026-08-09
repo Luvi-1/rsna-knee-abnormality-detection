@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOOK = Path(sys.executable).with_name("detect-secrets-hook")
 SCAN = Path(sys.executable).with_name("detect-secrets")
 CONTRACT_PATH = "docs/competition_contract/contract.yaml"
+SUMMARY_PATH = "docs/manifest_summary.json"
 
 
 def run_hook(checkout: Path, *filenames: str) -> subprocess.CompletedProcess[str]:
@@ -29,12 +30,13 @@ def isolated_checkout(tmp_path: Path) -> Path:
         ROOT / "docs/competition_contract/contract.yaml",
         tmp_path / "docs/competition_contract/contract.yaml",
     )
+    copyfile(ROOT / SUMMARY_PATH, tmp_path / SUMMARY_PATH)
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", ".secrets.baseline"], cwd=tmp_path, check=True)
     return tmp_path
 
 
-def test_reviewed_contract_hashes_are_exactly_baselined(tmp_path: Path) -> None:
+def test_reviewed_provenance_hashes_are_exactly_baselined(tmp_path: Path) -> None:
     checkout = isolated_checkout(tmp_path)
     baseline = json.loads((checkout / ".secrets.baseline").read_text())
     settings_only = {**baseline, "results": {}}
@@ -49,6 +51,7 @@ def test_reviewed_contract_hashes_are_exactly_baselined(tmp_path: Path) -> None:
             ".scan-settings.json",
             "--no-verify",
             CONTRACT_PATH,
+            SUMMARY_PATH,
         ],
         cwd=checkout,
         check=False,
@@ -58,11 +61,12 @@ def test_reviewed_contract_hashes_are_exactly_baselined(tmp_path: Path) -> None:
 
     assert scan.returncode == 0, scan.stderr
     observed = json.loads((checkout / ".scan-settings.json").read_text())
-    assert set(baseline["results"]) == {CONTRACT_PATH}
+    assert set(baseline["results"]) == {CONTRACT_PATH, SUMMARY_PATH}
     assert len(baseline["results"][CONTRACT_PATH]) == 10
+    assert len(baseline["results"][SUMMARY_PATH]) == 5
     assert observed["results"] == baseline["results"]
 
-    result = run_hook(checkout, CONTRACT_PATH)
+    result = run_hook(checkout, CONTRACT_PATH, SUMMARY_PATH)
 
     assert result.returncode == 0, result.stdout + result.stderr
 

@@ -198,13 +198,18 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   It stores soft/candidate components, every edge, and provenance separately for private review and
   later fold stress testing. Soft identifiers can never be used as fold group identifiers. No fold
   feasibility is claimed at this checkpoint.
-- Current evidence: implemented and locally testable in the working tree; full private
-  recomputation, representative-component inspection, and remote CI remain pending.
+- Current evidence: the full private `audit-0002-manifest-remediation` recomputed v2 hard and soft
+  structures at commit `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. The sanitized result reports
+  `protected_graph_closed: true`, `near_series_candidate_space_overflow: true`,
+  `near_slice_study_pair_space_overflow: true`, and `near_slice_unresolved_study_pairs: zero`.
+  Candidate/overflow evidence remained soft. No folds were assigned and feasibility was not
+  assessed. Final staged-tree gates passed; remote CI remains pending.
 - Risks: under-classifying a true repeat as soft could permit leakage later; over-classifying hard
   evidence can still reduce fold flexibility.
 - Reversal condition: validated evidence promotes a specific soft relation to a versioned hard rule,
   or disproves an existing hard rule, with private edge-level review and regression coverage.
-- Commit/experiment: pending remediation commit; planned `audit-0002-manifest-remediation`.
+- Commit/experiment: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`;
+  `audit-0002-manifest-remediation`.
 
 ## D-014 - Enforce disclosure jointly across related outputs
 
@@ -221,13 +226,16 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   linked totals and complements are transformed together; redundant percentages are forbidden; and
   all JSON/Markdown outputs must be canonical derivatives of the same controlled object. The
   validator must reject arithmetic reconstruction across fields and files.
-- Current evidence: implemented with adversarial local tests; newly generated full-data artifacts
-  and remote CI are pending.
+- Current evidence: the full private v2 run generated exactly five approved files under
+  `joint-complementary-k20-v1`; the schema-v2 validator accepted their canonical tokens and hashes.
+  No patient metadata, pixels, private tables, raw identifiers, or raw reports were released.
+  Final staged-tree gates passed; remote CI remains pending.
 - Risks: a future output field could create a new equation not represented in the complementary
   groups.
 - Reversal condition: replace only with an independently reviewed policy that proves at least the
   same joint and cross-file protection.
-- Commit/experiment: pending remediation commit; planned `audit-0002-manifest-remediation`.
+- Commit/experiment: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`;
+  `audit-0002-manifest-remediation`.
 
 ## D-015 - Final gates run only on the complete staged release candidate
 
@@ -243,8 +251,39 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   sensitive-file/size guard, dependency audit, contract check, disclosure validation, and the
   applicable manifest/DICOM/grouping tests. Then require green GitHub-hosted CI on the same pushed
   commit.
-- Current evidence: control recorded; the checkpoint's final staged-tree run has not occurred.
+- Current evidence: guarded history/ref cleanup passed and no active local or origin ref reaches the
+  unsafe historical commit. The complete staged candidate then passed locked install/package,
+  pytest 139/139, Ruff lint/format, strict mypy, all pre-commit hooks, exact staged secret/baseline
+  comparison, sensitive-file and dependency audits, contract/config/submission checks, remote and
+  local full-output validation, and four canonical byte comparisons. Hosted CI remains pending.
 - Risks: modifying or generating a file after the final run invalidates the result.
 - Reversal condition: a reproducible release system proves cryptographic identity between the
   checked file set and the pushed commit while enforcing the same gates.
-- Commit/experiment: pending remediation commit; no experiment.
+- Commit/experiment: control implemented at
+  `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`; no experiment.
+
+## D-016 - Accept manifest-v2 audit evidence without promoting downstream work
+
+- Date: 2026-08-08
+- Owner: Codex
+- Question: Does the completed remediation run replace the historical audit as current manifest
+  evidence, and what does it authorize?
+- Alternatives: retain the v1 audit; accept v2 as fold/model readiness; or accept v2 only as the
+  current private manifest and structural-grouping evidence.
+- Evidence: `audit-0002-manifest-remediation` completed a full private CPU run in 10,092 seconds.
+  The validated schema-v2 output reports complete coverage and five-level reconciliation,
+  `unexplained_dicom_issues: zero`, `dicom_issue_dispositions_complete: true`,
+  `protected_graph_closed: true`, `official_only: true`, `folds_assigned: false`, and
+  `fold_feasibility: not_assessed`. Hard duplicate evidence and soft candidate/overflow evidence
+  are represented separately; case details and identifiers remain private.
+- Decision: accept `manifest-v2` / `protected-groups-v2` as the current audit representation and
+  supersede `audit-0001-manifest` for downstream use. This closes the private rerun gate only. It
+  does not authorize preprocessing, fold construction, weak labels, training, prediction,
+  ensembles, submission, merge, or public release.
+- Risks: hidden-test shift remains unevaluable; future folds still need class/support/leakage
+  validation; the cumulative branch still lacks private pull-request review and green
+  GitHub-hosted CI.
+- Reversal condition: new input, loader, schema, grouping, label, or disclosure changes invalidate
+  the pinned audit and require a new versioned private rerun.
+- Commit/experiment: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`;
+  `audit-0002-manifest-remediation`.

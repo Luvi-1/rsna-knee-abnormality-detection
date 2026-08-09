@@ -18,11 +18,11 @@ Delivered evidence:
 - No competition data, report, checkpoint, prediction, model, or credential was intentionally
   committed.
 
-Correction/gate:
+Correction/gate outcome:
 
 - The prior final secret-pass claim was made before the final tracked file set was included. Exact
-  reviewed baseline entries and a detection regression now exist locally. Final staged-tree,
-  cumulative-diff, history, generated-artifact, and remote-CI checks remain pending.
+  reviewed baseline entries and a detection regression now exist locally. The complete staged-tree,
+  cumulative-diff, history, and generated-artifact checks passed; remote CI remains pending.
 
 ## Chunk 2 - live competition contract
 
@@ -64,10 +64,12 @@ Delivered evidence:
 Exit retained: no data processing, model, submission, notebook fork, public action, or external
 asset use occurred in the chunk.
 
-## Chunk 4 - full-data manifest and split-feasibility audit
+## Chunk 4 - full-data manifest and structural grouping audit
 
-Historical status: `audit-0001-manifest` executed privately, but its release output and grouping
-interpretation are **superseded for promotion**. Downstream work remains blocked.
+Current evidence: `audit-0001-manifest` is superseded. Its successor,
+`audit-0002-manifest-remediation`, completed a full private CPU run in 10,092 seconds against
+`manifest-v2` / `protected-groups-v2`. Downstream fold and model work remains blocked by the
+remaining Checkpoint 1 release gates.
 
 What remains valid as historical provenance:
 
@@ -77,6 +79,17 @@ What remains valid as historical provenance:
   retrieved.
 - The run exposed real DICOM exception, bounded-candidate, disclosure, and governance-control gaps
   that now define Checkpoint 1 remediation.
+
+Validated successor evidence:
+
+- Complete five-level reconciliation, foreign-key integrity, and terminal file/series accounting.
+- `unexplained_dicom_issues: zero` and `dicom_issue_dispositions_complete: true`; private case
+  evidence was not exported.
+- Hard protected components remained separate from soft candidate/overflow evidence, with
+  `protected_graph_closed: true`; no folds were assigned and feasibility was not assessed.
+- Exactly five approved outputs passed the schema-v2 joint disclosure boundary. Only the four
+  approved release artifacts are being persisted with governance; the inventory hash remains in
+  the experiment provenance record.
 
 Why the original exit assessment is withdrawn:
 
@@ -91,12 +104,14 @@ Why the original exit assessment is withdrawn:
 
 ## Checkpoint 1 - Chunks 1-4 remediation
 
-Status: in progress on `checkpoint/chunks-1-4-remediated`; not merge-ready and not merged.
+Status: private remediation execution, guarded history/ref cleanup, and complete staged-candidate
+local gates passed on `checkpoint/chunks-1-4-remediated`. Private PR and hosted CI remain pending;
+the branch is not merge-ready and not merged.
 
 Objective: make Chunks 1-4 truthful, privacy-safe, reproducible, privately revalidated, and remotely
 reviewable. Do not start Chunk 5.
 
-Implemented locally so far:
+Completed and validated so far:
 
 - Narrow exact secret-baseline correction plus a regression that must still detect realistic token
   replacement.
@@ -104,19 +119,22 @@ Implemented locally so far:
 - `manifest-v2` / `protected-groups-v2` separation of hard protected components from soft
   candidates; no fold identifiers are created.
 - Live contract refresh with no material drift.
+- Full private `audit-0002-manifest-remediation` execution at commit
+  `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`, completed in 10,092 seconds.
+- Schema-v2 sanitized evidence with complete coverage, zero unexplained DICOM issues, complete
+  dispositions, private hard/soft provenance checks, and five approved artifact hashes.
+- `audit-0001-manifest` preserved as historical provenance and superseded for all downstream use.
+- Guarded history/ref cleanup passed: the old feature ref now points to the clean history, the
+  temporary unsafe branch is deleted, and no active local or origin ref reaches the unsafe commit.
+- Final complete staged-candidate gates passed: locked install/package, 139/139 pytest, Ruff
+  lint/format, strict mypy, pre-commit, secret/baseline comparison, sensitive-file guard,
+  vulnerability audit, contract/config/submission checks, full-output validation, and four
+  canonical byte comparisons.
 
 Pending exit evidence:
 
-1. Complete private DICOM case investigation and deterministic dispositions, with no unexplained
-   case and no valid recoverable unsupported object.
-2. Private recomputation and inspection of hard components, soft candidates, edge provenance, and
-   representative largest-component paths.
-3. A new full private audit recorded as `audit-0002-manifest-remediation`, leaving the prior audit
-   preserved but superseded.
-4. Five newly generated sanitized artifacts that pass the joint disclosure validator and are safe
-   against cross-field and cross-file arithmetic reconstruction.
-5. A clean cumulative history, all final local gates run after staging every intended file, a
-   private pull request, and green GitHub-hosted CI. The pull request must remain unmerged.
+1. Open the cumulative private pull request from the exact locally checked commit and require green
+   GitHub-hosted CI. The pull request must remain unmerged.
 
 ## Recommended next chunk
 

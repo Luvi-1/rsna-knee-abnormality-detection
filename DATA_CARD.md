@@ -1,8 +1,9 @@
 # Data Card
 
-Status: Checkpoint 1 remediation in progress. The historical `manifest-v1` audit is preserved for
-provenance but superseded for downstream use; `manifest-v2` has not completed a private full-data
-rerun.
+Status: the full private `manifest-v2` remediation audit completed in 10,092 seconds and its
+schema-v2 sanitized output passed validation. The historical `manifest-v1` audit is preserved for
+provenance but superseded for downstream use. Guarded history/ref cleanup and final complete
+staged-candidate local gates passed; the private PR and hosted CI remain open.
 
 ## Source, scope, and license
 
@@ -35,43 +36,56 @@ The previous aggregate files and narrative counts are therefore superseded. This
 repeat their private result values. Their non-sensitive code, bundle, configuration, and artifact
 hash provenance remains in `docs/experiments/audit-0001-manifest.md`.
 
-## Remediation schema
+## Validated remediation schema
 
-- Manifest: `manifest-v2` (implemented locally; private rerun pending).
-- Hard grouping: `protected-groups-v2` (implemented locally; private rerun pending).
+- Manifest: `manifest-v2` (full private audit complete).
+- Hard grouping: `protected-groups-v2` (full private recomputation complete).
 - Labels: `official-labels-v1`; missing labels remain unknown, not negative.
 - Preprocessing and folds: `unassigned`.
 
 The v2 private schema retains reconciled entity tables, DICOM issue and disposition evidence, hard
 protected components, separate soft candidate components, edge provenance, and private component
 summaries. The public release boundary receives aggregates only and applies one joint disclosure
-policy across every JSON and Markdown representation.
+policy across every JSON and Markdown representation. The completed output reports
+`coverage.complete: true`, `five_levels_reconciled: true`, `foreign_keys: true`,
+`all_files_terminal: true`, `all_series_terminal: true`, and `private_artifacts_complete: true`.
+Code, bundle, provenance, and artifact hashes are recorded in
+`docs/experiments/audit-0002-manifest-remediation.md`.
 
 ## DICOM integrity status
 
-DICOM readiness is **not established**. Every historical decode/quarantine case must be reopened
-inside private Kaggle and assigned an evidence-backed root-cause category and deterministic
-disposition. The remediation audit may pass with unavoidable, documented source corruption, but it
-must have:
+The audit-specific DICOM disposition gate passed for the pinned v2 manifest without asserting that
+every source object decoded. The approved tokens report `files_decode_failure:
+below_threshold_nonzero`, `files_quarantined: below_threshold_nonzero`, and
+`series_quarantined: below_threshold_nonzero`, together with:
 
-- no unexplained case;
-- no valid recoverable object left unsupported;
-- no fabricated geometry or silent filename ordering;
-- no silently skipped file; and
-- complete object reconciliation and terminal disposition accounting.
+- `unexplained_dicom_issues: zero`;
+- `dicom_issue_dispositions_complete: true`;
+- `files_unreadable: zero`, `series_fallback: zero`, and `path_header_mismatch: zero`; and
+- complete file/series terminal accounting under the versioned private resolution gate.
 
-No case identifier, exact rare count, or case-level path may be published.
+The private producer gate rejects unresolved or recoverable-unsupported cases. No case identifier,
+exception text, exact rare count, or case-level path is published. Any loader, decoder, schema, or
+input change reopens this gate.
 
 ## Duplicate and leakage structure
 
-Hard evidence (for example, accepted exact duplicate or confirmed repeat-patient relations) may
-make studies indivisible. Weak near similarities, report/template candidates, label-vector
-similarities, and approximation/overflow candidates are kept as soft review/stress evidence and do
-not automatically merge hard components. Every edge and its provenance remain private.
+The completed audit found nonzero hard duplicate evidence using only approved tokens:
+`exact_pixel_groups: range_1220_1239`, `exact_series_groups: range_20_39`, and
+`exact_study_groups: below_threshold_nonzero`; `exact_file_groups: zero`. These accepted hard
+relations may make studies indivisible.
+
+Soft candidate evidence remained separate. The release reports `candidate_edges:
+range_8800_8819`, `near_series_candidate_space_overflow: true`,
+`near_slice_study_pair_space_overflow: true`, and `near_slice_unresolved_study_pairs: zero`.
+Weak near similarities, report/template candidates, label-vector similarities, and
+approximation/overflow candidates did not automatically merge hard components. Every edge,
+component statistic, and representative path remains private.
 
 The representation is only a precursor to later fold construction. No fold exists, and no fold
 feasibility, class balance, subgroup support, or leakage-free validation claim is currently
-supported.
+supported. The controlled structural status is `folds_assigned: false` and
+`fold_feasibility: not_assessed`.
 
 ## Shift limitations
 
@@ -89,7 +103,7 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 
 ## Next evidence required
 
-A new private `audit-0002-manifest-remediation` must reconcile every accessible object, validate
-all DICOM dispositions and hard/soft grouping semantics, and generate five canonical sanitized
-artifacts that pass joint arithmetic-disclosure validation. Until then, preprocessing, folds, weak
-labels, training, prediction, ensembles, and submission remain blocked.
+Guarded cleanup verifies that no active local or origin ref reaches the unsafe historical commit,
+and the complete staged candidate passed all final local gates. Checkpoint 1 still requires the
+cumulative private pull request and green GitHub-hosted CI. Preprocessing, folds, weak labels,
+training, prediction, ensembles, and submission remain blocked.

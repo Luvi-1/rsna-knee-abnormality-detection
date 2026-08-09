@@ -22,6 +22,10 @@
 - The final v1 run completed in 11,453 seconds. Its five outputs passed the **then-current**
   field-level validator; this is not a claim that they pass the replacement joint-disclosure
   validator.
+- The successor `audit-0002-manifest-remediation` completed a full private CPU run in 10,092
+  seconds at code commit `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. Its five approved schema-v2
+  outputs passed the replacement validator; pinned bundle, provenance, and artifact hashes are in
+  `docs/experiments/audit-0002-manifest-remediation.md`.
 
 ## Root cause and contributing factors
 
@@ -54,6 +58,13 @@
 - Preserve this audit as superseded provenance and execute a new, separately registered private
   remediation audit rather than overwriting it.
 
+These audit-specific corrective actions were exercised successfully by
+`audit-0002-manifest-remediation`: five-level reconciliation and terminal accounting were complete;
+`unexplained_dicom_issues: zero`; `dicom_issue_dispositions_complete: true`; and hard protected
+components remained separate from soft candidate/overflow evidence with
+`protected_graph_closed: true`. Private case details, component paths, identifiers, and counts were
+not exported.
+
 ## Privacy and validation correction
 
 No raw DICOM pixel, radiology report, patient-level metadata table, private manifest, or prediction
@@ -63,16 +74,19 @@ release artifacts are superseded, their unsafe count narrative is not reproduced
 branch history must be rebuilt so the unsafe result commit is not reachable.
 
 The correct validation statement is: v1 passed only the validator and secret-check file set that
-existed at the time. The new private audit, complete staged-tree local gates, and GitHub-hosted CI
-remain pending.
+existed at the time and is superseded. The v2 private audit, sanitized-output validator, guarded
+history/ref cleanup, and complete staged-tree local gates passed; GitHub-hosted CI remains pending.
 
 ## Remaining action
 
-Run `audit-0002-manifest-remediation` privately; inspect every DICOM exception and the hard/soft
-component evidence; validate the five newly generated release artifacts; update the registry and
-cards; run all final gates after staging; and obtain green remote CI on an unmerged cumulative pull
-request.
+Guarded cleanup verified that no active local or origin ref reaches the unsafe historical commit,
+and the complete staged candidate passed every final local gate. Obtain green remote CI on an
+unmerged cumulative pull request. No fold, model, prediction, ensemble, or submission work may
+begin from this postmortem alone.
 
 - Owner: Codex.
 - Historical code commit: `75792aad08a3685d0c9ce92b5cab90307bf1336c`.
 - Historical audit: `audit-0001-manifest` (superseded).
+- Successor code commit: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`.
+- Successor audit: `audit-0002-manifest-remediation` (private execution complete; checkpoint gates
+  pending).

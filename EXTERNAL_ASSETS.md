@@ -19,6 +19,11 @@ These public PyPI packages contain code only—no data, weights, checkpoints, or
 artifacts. Exact source and wheel hashes are locked in `uv.lock`; the Kaggle bundle manifest records
 the exact selected Linux-wheel hashes. Approval is limited to the private manifest audit.
 
+`audit-0002-manifest-remediation` executed the approved set at code commit
+`6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. The pinned wheel-set SHA-256 is
+`f5811d2526d041af85a463cb954ca1e01573ca2e969cd209896a1f036aa1b743`. This execution does not
+approve any external dataset, model, checkpoint, training asset, or winner-delivery dependency.
+
 | Component | Version | Source | License evidence | Access | Approval |
 |---|---:|---|---|---|---|
 | langdetect | 1.0.9 | `pypi:langdetect` | Apache-2.0 bundled `LICENSE` and `NOTICE`; distribution metadata's free-text `License: MIT` conflicts with its Apache classifier and files, so the bundled license controls | Public/free | Approved for audit |

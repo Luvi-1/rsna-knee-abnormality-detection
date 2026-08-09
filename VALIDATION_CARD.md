@@ -1,7 +1,7 @@
 # Validation Card
 
-Hard-group version: `protected-groups-v2` implemented locally; private full-data recomputation
-pending.
+Hard-group version: `protected-groups-v2`; full private recomputation completed in
+`audit-0002-manifest-remediation`.
 
 Fold version: `unassigned`; no folds exist.
 
@@ -34,26 +34,35 @@ that folds were feasible, balanced, assigned, or leakage-free.
 - **Private provenance:** every relationship edge, evidence kind, component summary, and
   representative review path remains inside Kaggle.
 
-The v2 logic is implemented locally. Exact-duplicate and repeat connectivity, long weak-chain
-separation, overflow semantics, private component recomputation, and representative-largest-path
-review must pass before the representation can be called structurally suitable for a future fold
-chunk.
+The v2 private audit reports `protected_graph_closed: true`, `cross_split_components: zero`, and
+`protected_components: range_4400_4419`. Hard duplicate evidence includes
+`exact_pixel_groups: range_1220_1239`, `exact_series_groups: range_20_39`, and
+`exact_study_groups: below_threshold_nonzero`; `exact_file_groups: zero`.
+
+Soft review evidence remained separate even though `candidate_edges: range_8800_8819`,
+`near_series_candidate_space_overflow: true`, and
+`near_slice_study_pair_space_overflow: true`. The private audit validated component distributions,
+edge attribution, representative transitive paths, and `near_slice_unresolved_study_pairs: zero`
+without exporting identifiers or paths. This establishes structural grouping integrity only:
+`folds_assigned: false` and `fold_feasibility: not_assessed`.
 
 ## Disclosure boundary
 
 The v1 sanitized output independently suppressed fields and allowed a rare value to be derived from
-related totals. It is superseded. The replacement sanitizer controls linked counts jointly, forbids
-unsafe percentages/redundant equations, emits validated qualitative/range tokens, and renders every
-approved JSON/Markdown artifact from one controlled object. Development tests exist; a fresh
-private output and final staged-tree/remote validation are pending.
+related totals. It is superseded. The completed replacement release uses
+`joint-complementary-k20-v1`, controls linked counts jointly, publishes no percentages, emits only
+validated qualitative/fixed-width-range tokens, and renders all five approved files from one
+controlled object. The schema-v2 output, guarded history/ref cleanup, and final complete
+staged-candidate local gates passed. Hosted CI remains pending.
 
 ## DICOM block
 
-DICOM readiness is unproven. Every private exception must receive an explained root cause and
-deterministic disposition. The gate requires complete study/series/file reconciliation, no
-unexplained case, no valid recoverable unsupported object, and no fabricated geometry, filename
-ordering substitution, or silent skip. Unavoidable source corruption may be quarantined only with
-private evidence and a safe aggregate disposition.
+The pinned v2 DICOM disposition gate passed. The approved output reports
+`unexplained_dicom_issues: zero`, `dicom_issue_dispositions_complete: true`,
+`all_files_terminal: true`, and `all_series_terminal: true`. Decode and quarantine findings remain
+represented only as `below_threshold_nonzero`; their root cause, resolution evidence, and scope
+remain private. This result does not survive a loader, decoder, schema, or input change without a
+new audit.
 
 ## Shift and subgroup limits
 
