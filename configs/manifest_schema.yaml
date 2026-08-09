@@ -1,0 +1,175 @@
+{
+  "schema_version": 2,
+  "manifest_version": "manifest-v2",
+  "group_version": "protected-groups-v2",
+  "label_version": "official-labels-v1",
+  "preprocessing_version": "unassigned",
+  "privacy": {
+    "identifier_transform": "hmac-sha256-domain-separated",
+    "minimum_export_cell": 20,
+    "raw_text_persisted": false,
+    "pixel_arrays_persisted": false,
+    "private_tables_leave_kaggle": false
+  },
+  "dicom": {
+    "reading_validation": "raise",
+    "force_read": false,
+    "orientation_norm_tolerance": 0.0001,
+    "orientation_dot_tolerance": 0.0001,
+    "orientation_degrees_tolerance": 0.5,
+    "duplicate_position_mm": 0.01,
+    "spacing_absolute_tolerance_mm": 0.1,
+    "spacing_relative_tolerance": 0.05,
+    "spacing_gap_ratio": 1.5,
+    "near_slice_phash_hamming": 4,
+    "near_slice_study_minimum_matches": 3,
+    "near_slice_study_minimum_series_pairs": 2,
+    "near_slice_maximum_study_pairs": 250000,
+    "near_slice_maximum_evidence_studies_per_component": 128,
+    "near_series_quantile_slices": 9,
+    "near_series_minimum_slices": 5,
+    "near_series_minimum_length_ratio": 0.9,
+    "near_series_median_phash_hamming": 2,
+    "candidate_series_max_phash_hamming": 8,
+    "candidate_series_median_phash_hamming": 4,
+    "near_series_maximum_candidate_pairs": 1000000,
+    "near_series_median_ncc": 0.995,
+    "near_series_minimum_ncc": 0.985,
+    "near_series_gradient_ncc": 0.98
+  },
+  "reports": {
+    "normalization": "nfkc-casefold-whitespace-typed-numbers-v1",
+    "near_minimum_tokens": 20,
+    "near_shingle_size": 5,
+    "near_token_count_ratio": 0.9,
+    "candidate_simhash_hamming": 16,
+    "maximum_candidate_pairs": 1000000,
+    "candidate_jaccard": 0.9,
+    "confirmed_jaccard": 0.95,
+    "confirmed_levenshtein": 0.95,
+    "language_detector": "langdetect-1.0.9-seed-0"
+  },
+  "shift": {
+    "source_context": "train-plus-example-test",
+    "categorical_effects": ["total_variation", "sqrt_js_base2", "unseen_test_mass"],
+    "continuous_effects": ["standardized_mean_difference", "median_over_train_iqr", "wasserstein1_over_train_iqr"],
+    "missingness_effect": "absolute_rate_difference"
+  },
+  "tables": {
+    "study_manifest": {
+      "primary_key": ["study_key"],
+      "fields": [
+        "study_key", "split", "source_row_count", "patient_group_key", "patient_key_evidence",
+        "series_count", "plane_availability", "sequence_categories", "total_slice_count",
+        "report_language", "report_available", "patient_sex", "patient_age_years",
+        "label_status", "known_label_count",
+        "positive_label_count", "negative_label_count", "domain_cluster_key",
+        "scanner_manufacturer", "scanner_model", "field_strength_t", "protocol_cluster_key",
+        "data_quality_flags", "terminal_state"
+      ]
+    },
+    "series_manifest": {
+      "primary_key": ["series_key"],
+      "foreign_keys": {"study_key": "study_manifest.study_key"},
+      "fields": [
+        "series_key", "study_key", "source_row_count", "series_description", "plane",
+        "fluid_sensitive", "fat_suppression", "rows", "columns", "pixel_spacing_row_mm",
+        "pixel_spacing_col_mm", "slice_thickness_mm", "spacing_between_slices_mm", "slice_count",
+        "orientation_vectors", "physical_coverage_mm", "transfer_syntax_class",
+        "photometric_interpretation", "bits_stored", "rescale_slope", "rescale_intercept",
+        "missing_tag_flags", "quality_score", "localizer_likelihood", "ordering_method",
+        "orientation_state", "spacing_state", "decode_state", "protocol_cluster_key",
+        "exact_content_key", "near_fingerprint_version", "terminal_state"
+      ]
+    },
+    "slice_file_manifest": {
+      "primary_key": ["file_key"],
+      "foreign_keys": {
+        "study_key": "study_manifest.study_key",
+        "series_key": "series_manifest.series_key"
+      },
+      "fields": [
+        "file_key", "study_key", "series_key", "sop_key", "file_size_bytes",
+        "path_header_identity_match", "transfer_syntax_class", "number_of_frames", "rows",
+        "columns", "samples_per_pixel", "photometric_interpretation", "bits_allocated",
+        "bits_stored", "high_bit", "pixel_representation", "rescale_slope", "rescale_intercept",
+        "image_orientation_patient", "image_position_patient", "projected_position_mm",
+        "instance_number", "slice_index", "raw_file_exact_key", "decoded_pixel_exact_key",
+        "near_slice_fingerprint", "decode_state", "missing_tag_flags", "terminal_state"
+      ]
+    },
+    "report_manifest": {
+      "primary_key": ["report_key"],
+      "foreign_keys": {"study_key": "study_manifest.study_key"},
+      "fields": [
+        "report_key", "study_key", "source_row_count", "presence_state", "unicode_state",
+        "character_count", "token_count", "script_bucket", "language_code", "language_state",
+        "raw_text_exact_key", "canonical_text_exact_key", "near_report_fingerprint",
+        "template_group_key", "template_match_kind", "terminal_state"
+      ]
+    },
+    "label_source_manifest": {
+      "primary_key": ["study_key", "target_index", "source_kind", "source_version"],
+      "foreign_keys": {"study_key": "study_manifest.study_key"},
+      "fields": [
+        "study_key", "target_index", "target_name", "source_kind", "source_version",
+        "label_state", "confidence", "rule_or_model_hash", "adjudication_state", "state_validity"
+      ],
+      "allowed_source_kinds_chunk4": ["official"]
+    },
+    "duplicate_edge": {
+      "primary_key": ["left_key", "right_key", "entity_level", "edge_kind"],
+      "fields": [
+        "left_key", "right_key", "entity_level", "edge_kind", "decision",
+        "algorithm_version", "private_metrics"
+      ]
+    },
+    "duplicate_group_mapping": {
+      "primary_key": ["group_kind", "group_key", "entity_key"],
+      "fields": ["group_kind", "group_key", "entity_level", "entity_key", "algorithm_version"]
+    },
+    "protected_component": {
+      "primary_key": ["component_kind", "component_key", "study_key"],
+      "fields": ["component_kind", "component_key", "study_key", "evidence_state"]
+    },
+    "candidate_component": {
+      "primary_key": ["component_key", "study_key"],
+      "fields": ["component_key", "study_key", "hard_component_key", "evidence_state"]
+    },
+    "duplicate_component_summary": {
+      "primary_key": ["component_kind", "component_key"],
+      "fields": [
+        "component_kind", "component_key", "representative_study_key",
+        "representative_file_key", "member_count", "hard_edge_count",
+        "candidate_edge_count", "algorithm_version"
+      ]
+    },
+    "duplicate_component_edge": {
+      "primary_key": ["left_study_key", "right_study_key", "edge_kind", "decision"],
+      "fields": [
+        "left_study_key", "right_study_key", "edge_kind", "decision",
+        "evidence_count", "left_hard_component_key", "right_hard_component_key",
+        "soft_component_key", "algorithm_version"
+      ]
+    },
+    "manifest_issue": {
+      "primary_key": ["entity_level", "entity_key", "issue_code"],
+      "fields": [
+        "entity_level", "entity_key", "issue_code", "severity", "terminal_effect",
+        "disposition", "disposition_version", "root_cause_category", "root_cause_version",
+        "resolution_status", "resolution_version", "scope_impact", "private_details"
+      ]
+    },
+    "shift_result": {
+      "primary_key": ["feature", "effect_name"],
+      "fields": [
+        "feature", "feature_type", "effect_name", "effect_value", "effect_tier",
+        "train_n", "test_n", "evaluable", "limitation"
+      ]
+    },
+    "qa_sample": {
+      "primary_key": ["stratum_kind", "stratum_key", "study_key"],
+      "fields": ["stratum_kind", "stratum_key", "study_key", "selection_reason", "priority"]
+    }
+  }
+}

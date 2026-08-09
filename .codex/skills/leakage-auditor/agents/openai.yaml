@@ -1,0 +1,4 @@
+interface:
+  display_name: "Leakage Auditor"
+  short_description: "Detect patient, study, duplicate, and fold leakage"
+  default_prompt: "Use $leakage-auditor to test a fold or experiment design for patient, study, duplicate, template, and preprocessing leakage."

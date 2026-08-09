@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kaggle Intelligence Scout"
+  short_description: "Gather current public Kaggle evidence safely"
+  default_prompt: "Use $kaggle-intelligence-scout to gather current public competition evidence and clearly mark unknowns."

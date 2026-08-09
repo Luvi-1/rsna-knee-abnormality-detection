@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sanitized-manifest-output-v2",
+  "title": "Sanitized manifest audit summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "status",
+    "provenance",
+    "privacy",
+    "disclosure",
+    "aggregates"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "artifact_type": {"const": "manifest-audit-aggregate"},
+    "status": {"const": "complete"},
+    "provenance": {"type": "object"},
+    "privacy": {"type": "object"},
+    "disclosure": {"$ref": "#/$defs/disclosure"},
+    "aggregates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "coverage",
+        "quality",
+        "labels",
+        "duplicates",
+        "shift",
+        "qa",
+        "integrity",
+        "versions",
+        "runtime"
+      ],
+      "properties": {
+        "scope": {"type": "object"},
+        "coverage": {"type": "object"},
+        "quality": {"type": "object"},
+        "labels": {"type": "object"},
+        "duplicates": {"type": "object"},
+        "shift": {"type": "object"},
+        "qa": {"type": "object"},
+        "integrity": {"type": "object"},
+        "versions": {"type": "object"},
+        "runtime": {"type": "object"}
+      }
+    }
+  },
+  "$defs": {
+    "countToken": {
+      "type": "string",
+      "pattern": "^(zero|below_threshold_nonzero|at_or_above_threshold|range_[1-9][0-9]*_[1-9][0-9]*)$",
+      "description": "Code validation additionally requires k=20-aligned bounds and U=L+19."
+    },
+    "disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "minimum_export_cell",
+        "interval_width",
+        "count_representation",
+        "percentages_published",
+        "cross_snapshot_protection"
+      ],
+      "properties": {
+        "policy": {"const": "joint-complementary-k20-v1"},
+        "minimum_export_cell": {"const": 20},
+        "interval_width": {"const": 20},
+        "count_representation": {
+          "const": "zero-below-threshold-at-or-above-threshold-or-fixed-width-range"
+        },
+        "percentages_published": {"const": false},
+        "cross_snapshot_protection": {"const": "fixed-width-intervals"}
+      }
+    }
+  },
+  "x-count-fields": {
+    "coverage": [
+      "files_decoded",
+      "files_quarantined",
+      "files_terminal",
+      "files_total",
+      "series_total",
+      "studies_total",
+      "test_series",
+      "test_studies",
+      "train_series",
+      "train_studies"
+    ],
+    "quality": [
+      "files_decode_failure",
+      "files_unreadable",
+      "path_header_mismatch",
+      "patient_group_missing",
+      "series_fallback",
+      "series_geometry_pass",
+      "series_quarantined",
+      "unexplained_dicom_issues"
+    ],
+    "labels": [
+      "conflict_cells",
+      "negative_cells",
+      "non_official_sources",
+      "official_cells",
+      "positive_cells",
+      "unknown_cells"
+    ],
+    "duplicates": [
+      "altered_metadata_groups",
+      "candidate_edges",
+      "cross_split_components",
+      "exact_file_groups",
+      "exact_pixel_groups",
+      "exact_report_normalized_pairs",
+      "exact_report_overlap_pairs",
+      "exact_report_raw_pairs",
+      "exact_report_union_pairs",
+      "exact_series_groups",
+      "exact_study_groups",
+      "future_fold_crossings",
+      "label_copy_candidates",
+      "near_report_candidate_pair_count_lower_bound",
+      "near_report_edges",
+      "near_report_overflow_study_edges",
+      "near_series_candidate_pair_count_lower_bound",
+      "near_series_edges",
+      "near_series_overflow_study_edges",
+      "near_slice_edges",
+      "near_slice_edges_suppressed",
+      "near_slice_groups",
+      "near_slice_overflow_study_edges",
+      "near_slice_study_pair_count_lower_bound",
+      "near_slice_unresolved_study_pairs",
+      "protected_components",
+      "raw_container_variation_groups"
+    ],
+    "qa": ["selected_studies"]
+  },
+  "x-document-fixed-states": {
+    "leakage_audit.md": {
+      "heading": "Structural grouping checks",
+      "folds_assigned": false,
+      "fold_feasibility": "not_assessed"
+    }
+  },
+  "x-authoritative-validator": "kaggle/manifest_audit/run.py::_validated_summary"
+}

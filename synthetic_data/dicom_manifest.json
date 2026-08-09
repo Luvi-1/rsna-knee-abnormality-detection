@@ -1,0 +1,15 @@
+{
+  "synthetic": true,
+  "studies": [
+    {
+      "study_id": "synthetic-study-001",
+      "series": [
+        {
+          "series_id": "synthetic-series-001",
+          "plane": "Sagittal",
+          "slice_positions": [0.0, 1.0, 2.0]
+        }
+      ]
+    }
+  ]
+}

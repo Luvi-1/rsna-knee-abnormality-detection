@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kaggle Notebook Packager"
+  short_description: "Package Kaggle notebooks reproducibly"
+  default_prompt: "Use $kaggle-notebook-packager to package this experiment for a reproducible Kaggle notebook run."

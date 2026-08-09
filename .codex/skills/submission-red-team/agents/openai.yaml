@@ -1,0 +1,4 @@
+interface:
+  display_name: "Submission Red Team"
+  short_description: "Red-team a Kaggle submission safely"
+  default_prompt: "Use $submission-red-team to audit this candidate submission before any Kaggle upload."
