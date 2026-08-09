@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rsna-knee:preprocessing:v1",
+  "title": "RSNA Knee DICOM preprocessing configuration v1",
+  "description": "The provenance configuration hash covers every effective preprocessing parameter. Immutable schema, preprocessing-version, horizontal-flip, and through-plane-resampling policy is recorded separately in the output schema, provenance version, and transformation ledger.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "preprocessing_version": {
+      "const": "dicom-model-v1"
+    },
+    "lower_percentile": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 100.0
+    },
+    "upper_percentile": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 100.0
+    },
+    "normalization": {
+      "enum": ["minmax", "zscore", "none"]
+    },
+    "sample_count": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "local_contrast_channel": {
+      "type": "boolean"
+    },
+    "local_contrast_window": {
+      "type": "integer",
+      "minimum": 3
+    },
+    "adjacent_slice_channels": {
+      "type": "boolean"
+    },
+    "difference_channel": {
+      "type": "boolean"
+    },
+    "resize_rows_columns": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "minimum": 2
+            },
+            {
+              "type": "integer",
+              "minimum": 2
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ]
+    },
+    "allow_instance_fallback_for_qa": {
+      "type": "boolean"
+    },
+    "horizontal_flip": {
+      "const": false
+    },
+    "through_plane_resampling": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "preprocessing_version",
+    "lower_percentile",
+    "upper_percentile",
+    "normalization",
+    "sample_count",
+    "local_contrast_channel",
+    "local_contrast_window",
+    "adjacent_slice_channels",
+    "difference_channel",
+    "resize_rows_columns",
+    "allow_instance_fallback_for_qa",
+    "horizontal_flip",
+    "through_plane_resampling"
+  ]
+}

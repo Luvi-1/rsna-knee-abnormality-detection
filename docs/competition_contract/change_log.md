@@ -1,5 +1,24 @@
 # Competition Contract Change Log
 
+## 2026-08-09T03:00:03Z
+
+Chunk 5 preflight before deterministic DICOM preprocessing implementation and private QA:
+
+- All nine official competition-page fingerprints and the incorporated MIRA PDF fingerprint
+  still match the immediately previous snapshot and canonical contract exactly.
+- The official API still reports one entered competition match, the final deadline at
+  2026-10-22T23:59:00Z, and five submissions available now.
+- The five official host clarification topics remain available and still cover CSV `PatientSex`
+  removal, the unpublished 86-tag DICOM allowlist, full-notebook runtime, and unavailable test
+  reports.
+- Rules, data interface, evaluation, timeline, runtime, submission/team limits, external-asset
+  requirements, sharing restrictions, licensing, and winner obligations have no material drift.
+- Identity verification is not exposed by the API, so the last directly observed incomplete state
+  remains the fail-closed submission and prize gate.
+- Synthetic-local implementation and bounded private Kaggle QA/benchmarking are allowed under the
+  existing privacy and fail-closed DICOM controls. No rules acceptance, submission, team action,
+  data preview, compute launch, publication, or remote mutation occurred during this refresh.
+
 ## 2026-08-08T22:03:12Z
 
 Checkpoint 1 remediation refresh before rebuilding and rerunning the private manifest audit:

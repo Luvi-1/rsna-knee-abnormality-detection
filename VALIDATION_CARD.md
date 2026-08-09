@@ -14,7 +14,7 @@ Fold version: `unassigned`; no folds exist.
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed at `2026-08-08T22:03:12Z` with no material drift. Identity
+- The live contract refreshed at `2026-08-09T03:00:03Z` with no material drift. Identity
   verification and the recorded unresolved fields still fail closed.
 
 ## Correction to historical grouping evidence
@@ -53,7 +53,8 @@ related totals. It is superseded. The completed replacement release uses
 `joint-complementary-k20-v1`, controls linked counts jointly, publishes no percentages, emits only
 validated qualitative/fixed-width-range tokens, and renders all five approved files from one
 controlled object. The schema-v2 output, guarded history/ref cleanup, and final complete
-staged-candidate local gates passed. Hosted CI remains pending.
+staged-candidate local gates passed. Hosted CI passed for release candidate `cc050a2`; every
+successor remains subject to the same exact-head gate.
 
 ## DICOM block
 
@@ -63,6 +64,71 @@ The pinned v2 DICOM disposition gate passed. The approved output reports
 represented only as `below_threshold_nonzero`; their root cause, resolution evidence, and scope
 remain private. This result does not survive a loader, decoder, schema, or input change without a
 new audit.
+
+## Chunk 5 preprocessing gate
+
+`dicom-model-v1` has synthetic evidence for strict decoding, observed transfer syntaxes,
+IOP/IPP-based physical ordering, fail-closed geometry, laterality preservation, intensity handling,
+deterministic sampling, flexible series slots, and repeated-output checks. Its orientation policy
+canonicalizes the physical slice direction while preserving native in-plane pixels and performing
+no horizontal flip.
+
+The complete staged candidate had no unstaged or untracked residue and passed locked offline
+sync/lock; isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24
+`src` files and seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret
+scan; sensitive-file and path/magic guards; dependency audit with no known vulnerabilities;
+CLI/config/submission/contract-schema smoke checks; and Git diff check. An independent settled
+red-team found no P0/P1. Every later edit requires the complete staged gate again. Competition-pixel
+execution, human review, and private Kaggle validation have not occurred.
+
+This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
+the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
+superseded audit. Distinct private version-1 Run A and Run B kernels must independently process the
+entire authorized training set from the same bundle, preprocessing configuration, competition
+input, and source-manifest input. Every discovered study, series, and file must reconcile to an
+explicit terminal state. Each run must separately match train-series membership, `source_row_count`,
+organizer plane/fluid/fat flags, and every regular DICOM's keyed relative identity, byte size, and raw
+digest to authenticated `manifest-v2`, with zero unexplained DICOM issue and zero unresolved
+recoverable transfer-syntax, ordering, or geometry blocker.
+
+A separate version-1 comparator must require byte-exact equality of the canonical deterministic
+manifests and exact equality of declared deterministic aggregate metrics. Timing and resource
+fields may differ only where excluded by the frozen comparison contract; no tolerance may be
+invented after a mismatch. Complete private runtime, decode, preprocessing, cache, disk,
+peak-memory, CPU-scaling, and throughput evidence is still required.
+
+`qa-cohort-selection-v2` runs only after the full pass. Its bound private plan must cover at least
+100 reviewable studies, every materially represented available stratum, and every eligible
+diagnostic series in each selected study. The exact canonical checks are:
+
+1. `slice_order`
+2. `anatomical_orientation`
+3. `laterality_preservation`
+4. `no_unintended_mirroring`
+5. `intensity_polarity`
+6. `anatomy_not_clipped`
+7. `sequence_slot_assignment`
+8. `preprocessing_appearance`
+9. `duplicate_missing_abnormal_handling`
+
+The human records only `PASS`, `BLOCK`, or `NOT_APPLICABLE`; every check must be terminal and any
+`BLOCK` prevents exit. `NOT_APPLICABLE` is permitted only for
+`duplicate_missing_abnormal_handling`, and every check must have at least one `PASS`. Each plan row
+binds organizer/physical plane, assigned slot, retention reasons, the six-slot missing mask, and
+ordinal sibling slot/terminal/model-eligibility/retention/quality-block context. The plan, review
+identity, cohort hash, artifact hashes, rows, decisions, pixels, paths, and case details remain inside
+Kaggle under
+`private-dicom-qa-human-review-v1`.
+
+The safe private UI template must be copied and edited in Chrome into a distinct private review
+session version 1, with `START` as the first operation before artifact access. The pinned private
+finalizer consumes the completed session directly and authenticates the exact source manifest,
+bundle, preprocessing configuration, runs, comparison, cohort, UI parent, and kernel versions;
+review artifacts resolve only under authenticated Run A. It may release only
+`human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
+release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
+A locally composed review attestation is neither required nor accepted. No such run, comparison,
+review, or finalizer evidence exists yet. No folds exist and no fold-feasibility claim is made.
 
 ## Shift and subgroup limits
 

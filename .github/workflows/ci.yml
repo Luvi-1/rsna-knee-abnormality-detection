@@ -33,8 +33,11 @@ jobs:
         run: uv run mypy src
       - name: Synthetic tests
         run: uv run pytest
-      - name: Competition contract
-        run: uv run python scripts/check_competition_contract.py docs/competition_contract/contract.yaml
+      - name: Competition contract schema
+        run: >-
+          uv run python -c "from pathlib import Path; from rsna_knee.competition_contract import
+          load_contract; load_contract(Path('docs/competition_contract/contract.yaml'));
+          print('competition_contract_schema=valid')"
       - name: Sensitive file guard
         run: uv run python scripts/check_no_sensitive_files.py
       - name: Secret scan

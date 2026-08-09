@@ -75,18 +75,19 @@ branch history must be rebuilt so the unsafe result commit is not reachable.
 
 The correct validation statement is: v1 passed only the validator and secret-check file set that
 existed at the time and is superseded. The v2 private audit, sanitized-output validator, guarded
-history/ref cleanup, and complete staged-tree local gates passed; GitHub-hosted CI remains pending.
+history/ref cleanup, and complete staged-tree local gates passed. GitHub-hosted CI then passed on
+release candidate `cc050a2`; every successor remains subject to the same exact-head gate.
 
 ## Remaining action
 
 Guarded cleanup verified that no active local or origin ref reaches the unsafe historical commit,
-and the complete staged candidate passed every final local gate. Obtain green remote CI on an
-unmerged cumulative pull request. No fold, model, prediction, ensemble, or submission work may
-begin from this postmortem alone.
+and the complete staged candidate passed every final local gate. Private pull request #10 remains
+open and unmerged; any successor to the green `cc050a2` candidate requires exact-head hosted CI.
+No fold, model, prediction, ensemble, or submission work may begin from this postmortem alone.
 
 - Owner: Codex.
 - Historical code commit: `75792aad08a3685d0c9ce92b5cab90307bf1336c`.
 - Historical audit: `audit-0001-manifest` (superseded).
 - Successor code commit: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`.
-- Successor audit: `audit-0002-manifest-remediation` (private execution complete; checkpoint gates
-  pending).
+- Successor audit: `audit-0002-manifest-remediation` (private execution plus checkpoint local and
+  hosted-CI gates complete; private pull request #10 remains unmerged).

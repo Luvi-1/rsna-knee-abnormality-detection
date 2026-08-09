@@ -203,7 +203,8 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   `protected_graph_closed: true`, `near_series_candidate_space_overflow: true`,
   `near_slice_study_pair_space_overflow: true`, and `near_slice_unresolved_study_pairs: zero`.
   Candidate/overflow evidence remained soft. No folds were assigned and feasibility was not
-  assessed. Final staged-tree gates passed; remote CI remains pending.
+  assessed. Final staged-tree gates and hosted CI passed for release candidate `cc050a2`; any
+  successor remains subject to the same exact-head gate.
 - Risks: under-classifying a true repeat as soft could permit leakage later; over-classifying hard
   evidence can still reduce fold flexibility.
 - Reversal condition: validated evidence promotes a specific soft relation to a versioned hard rule,
@@ -229,7 +230,8 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Current evidence: the full private v2 run generated exactly five approved files under
   `joint-complementary-k20-v1`; the schema-v2 validator accepted their canonical tokens and hashes.
   No patient metadata, pixels, private tables, raw identifiers, or raw reports were released.
-  Final staged-tree gates passed; remote CI remains pending.
+  Final staged-tree gates and hosted CI passed for release candidate `cc050a2`; any successor
+  remains subject to the same exact-head gate.
 - Risks: a future output field could create a new equation not represented in the complementary
   groups.
 - Reversal condition: replace only with an independently reviewed policy that proves at least the
@@ -255,7 +257,8 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   unsafe historical commit. The complete staged candidate then passed locked install/package,
   pytest 139/139, Ruff lint/format, strict mypy, all pre-commit hooks, exact staged secret/baseline
   comparison, sensitive-file and dependency audits, contract/config/submission checks, remote and
-  local full-output validation, and four canonical byte comparisons. Hosted CI remains pending.
+  local full-output validation, and four canonical byte comparisons. Hosted CI subsequently passed
+  for release candidate `cc050a2`; any successor remains subject to the same exact-head gate.
 - Risks: modifying or generating a file after the final run invalidates the result.
 - Reversal condition: a reproducible release system proves cryptographic identity between the
   checked file set and the pushed commit while enforcing the same gates.
@@ -281,9 +284,101 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   does not authorize preprocessing, fold construction, weak labels, training, prediction,
   ensembles, submission, merge, or public release.
 - Risks: hidden-test shift remains unevaluable; future folds still need class/support/leakage
-  validation; the cumulative branch still lacks private pull-request review and green
-  GitHub-hosted CI.
+  validation; private pull request #10 remains unmerged, and every successor to the green
+  `cc050a2` candidate still requires exact-head hosted CI.
 - Reversal condition: new input, loader, schema, grouping, label, or disclosure changes invalidate
   the pinned audit and require a new versioned private rerun.
 - Commit/experiment: `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`;
   `audit-0002-manifest-remediation`.
+
+## D-017 - Canonicalize the slice axis while preserving native in-plane anatomy
+
+- Date: 2026-08-09
+- Owner: Codex
+- Question: How should heterogeneous MRI orientation be made deterministic without silently
+  exchanging medial and lateral anatomy?
+- Alternatives: rotate and reflect every image into one display convention; preserve acquisition
+  order; or canonicalize physical slice direction while retaining native in-plane pixels.
+- Evidence: DICOM `ImageOrientationPatient` and `ImagePositionPatient` define patient-space
+  geometry. A universal in-plane reorientation can require a reflection, while no verified label
+  transformation currently authorizes a medial/lateral exchange.
+- Decision: `dicom-model-v1` orders slices by projection onto the IOP cross-product normal and
+  canonicalizes that normal to the positive dominant LPS axis. It preserves native row/column pixel
+  orientation, records the affine and every transformation, performs no horizontal flip, and blocks
+  model use when a regular affine is unproven. QA displays explicit patient-direction and laterality
+  legends outside the image pixels.
+- Risks: models still see native in-plane acquisition variation; visual QA must detect systematic
+  orientation or laterality errors before promotion.
+- Reversal condition: a separately validated patient-space reorientation proves pixel, affine,
+  laterality, and label-transform correctness across all observed acquisition geometries.
+- Commit/experiment: pending clean Chunk 5 commit; `preprocess-0001-dicom-pipeline`.
+
+## D-018 - Bind private visual review through an immutable two-stage workflow
+
+- Date: 2026-08-09
+- Owner: Codex
+- Question: How can a human review private QA images without exposing them to Codex or allowing an
+  unbound spreadsheet or mutable note to become promotion evidence?
+- Alternatives: download images for local review; bring a detailed completed ledger back locally;
+  record an informal checklist; or retain detailed review evidence in Kaggle and hand off only an
+  aggregate attestation.
+- Evidence: the review must cover at least 100 studies and heterogeneous acquisition strata while
+  private images, identifiers, case mappings, and artifact hashes remain inside Kaggle. Promotion
+  evidence must prove which exact artifacts were reviewed and prevent free-text disclosure.
+- Historical decision: the initial private QA kernel would produce ordinal-only QA artifacts and
+  private indexes, while a separate template would create rows and artifact hashes. A locally
+  transported aggregate attestation would then be repackaged as a private finalizer input.
+- Risks: manual review remains labor-intensive; an incomplete or blocked attestation correctly
+  prevents promotion; authenticated Kaggle execution and at least 100 reviews remain outstanding.
+- Reversal condition: replace only with a private workflow that provides equivalent immutable
+  artifact binding, coverage, disclosure control, and independent validation.
+- Commit/experiment: pending clean Chunk 5 commit; `preprocess-0001-dicom-pipeline`.
+- Status: **superseded before remote execution by D-019.** No dataset, kernel, review, or local
+  attestation was created under this design. Moving a human-composed aggregate across the Kaggle
+  boundary was unnecessary and weaker than consuming the completed private review session
+  directly.
+
+## D-019 - Require independent full-data replay and a Kaggle-resident review ledger
+
+- Date: 2026-08-09
+- Owner: Codex
+- Question: What execution and review chain can prove whole-input determinism and bind human
+  decisions to the exact artifacts without exporting private review state?
+- Alternatives: run only a 120-to-240-study QA cohort; process one cohort twice in one kernel;
+  export a human-composed aggregate for repackaging; or use distinct full runs and keep the completed
+  ledger inside the authenticated Kaggle kernel chain.
+- Evidence: the Chunk 5 exit gate requires two independent complete runs over the authorized
+  training set, exact comparison of deterministic outputs, post-run stratified review of at least
+  100 studies and all their eligible diagnostic series, and cryptographic binding to the exact
+  source manifest, preprocessing, cohort, and review kernel. `audit-0001-manifest` is superseded;
+  `audit-0002-manifest-remediation` / `manifest-v2` is the current private source root of trust.
+- Decision: build one immutable bundle and two distinct private version-1 full-run kernels, Run A
+  and Run B, with identical frozen inputs. Each authenticates the complete `manifest-v2` source
+  output, exactly reconciles train-series membership and organizer fields plus every regular DICOM's
+  keyed relative identity, size, and raw digest, and processes the entire authorized training set to
+  terminal accounting. A separate version-1 comparator requires exact equality of declared
+  deterministic outputs. Only after the full pass, `qa-cohort-selection-v2` creates the private
+  plan. Every row binds organizer/physical plane, assigned slot, retention, the six-slot missing
+  mask, and ordinal sibling disposition context. A safe version-1 UI template resolves artifacts
+  only under authenticated Run A and is copied and edited in Chrome into a distinct private
+  review-session version 1 whose first operation is `START`; detailed identities, artifacts, cohort
+  hashes, rows, and fixed decisions never leave Kaggle. The version-1 finalizer consumes the
+  completed session directly, authenticates the entire chain, requires at least 100 reviewed
+  studies, all represented material strata, all eligible diagnostic series, all nine checks
+  terminal, and zero `BLOCK`, then emits only `human_review_summary.json` and
+  `final_performance_report.json` as the two final allowlisted release-safe outputs with exact review
+  counts retained privately.
+- Current local evidence: the complete staged candidate had no unstaged or untracked residue and
+  passed locked offline sync/lock, isolated wheel build/install/import, Ruff lint/format, strict mypy
+  over 24 `src` files and seven trust-boundary files, full pytest 328/328, every pre-commit hook, exact
+  secret scan, sensitive-file and path/magic guards, dependency audit with no known vulnerabilities,
+  CLI/config/submission/contract-schema smoke checks, and Git diff check. An independent settled
+  red-team found no P0/P1. Every later edit requires the complete staged gate again; commit approval
+  and every private/remote gate remain outstanding.
+- Risks: two full runs consume more CPU; a partial or failed run blocks comparison; a human must
+  complete the private session; any changed bundle, input, preprocessing config, cohort, parent,
+  source, or kernel version invalidates the chain.
+- Reversal condition: replace only with a workflow that proves complete independent execution,
+  equal or stronger cryptographic identity, equivalent private human evidence, and the same
+  disclosure boundary.
+- Commit/experiment: pending clean Chunk 5 commit; `preprocess-0001-dicom-pipeline`.

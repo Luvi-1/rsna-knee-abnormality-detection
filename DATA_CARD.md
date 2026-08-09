@@ -2,8 +2,9 @@
 
 Status: the full private `manifest-v2` remediation audit completed in 10,092 seconds and its
 schema-v2 sanitized output passed validation. The historical `manifest-v1` audit is preserved for
-provenance but superseded for downstream use. Guarded history/ref cleanup and final complete
-staged-candidate local gates passed; the private PR and hosted CI remain open.
+provenance but superseded for downstream use. Guarded history/ref cleanup and the Checkpoint 1
+complete staged gates passed; hosted CI passed for candidate `cc050a2`, and private pull request
+#10 remains open and unmerged. Chunk 5 has not passed its own final gates.
 
 ## Source, scope, and license
 
@@ -41,7 +42,8 @@ hash provenance remains in `docs/experiments/audit-0001-manifest.md`.
 - Manifest: `manifest-v2` (full private audit complete).
 - Hard grouping: `protected-groups-v2` (full private recomputation complete).
 - Labels: `official-labels-v1`; missing labels remain unknown, not negative.
-- Preprocessing and folds: `unassigned`.
+- Preprocessing candidate: `dicom-model-v1` is locally implemented and synthetic-tested but is not
+  promoted; folds remain `unassigned`.
 
 The v2 private schema retains reconciled entity tables, DICOM issue and disposition evidence, hard
 protected components, separate soft candidate components, edge provenance, and private component
@@ -103,7 +105,51 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 
 ## Next evidence required
 
-Guarded cleanup verifies that no active local or origin ref reaches the unsafe historical commit,
-and the complete staged candidate passed all final local gates. Checkpoint 1 still requires the
-cumulative private pull request and green GitHub-hosted CI. Preprocessing, folds, weak labels,
-training, prediction, ensembles, and submission remain blocked.
+`dicom-model-v1` has local implementation evidence, but it is not promoted data readiness. The exact
+complete staged candidate had no unstaged or untracked residue and passed locked offline sync/lock;
+isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24 `src` files and
+seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret scan; sensitive-file
+and path/magic guards; dependency audit with no known vulnerabilities;
+CLI/config/submission/contract-schema smoke checks; and Git diff check. An independent settled
+red-team found no P0/P1. Every later edit requires the complete staged gate again, and all
+private/remote gates remain pending.
+
+The exact clean candidate must bind to the completed private
+`audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
+private Run A and Run B version-1 kernels must independently process the entire authorized training
+set from the same immutable bundle, configuration, competition input, and source-manifest input.
+Every run must exactly reconcile train-series membership, `source_row_count`, organizer
+plane/fluid/fat flags, and every regular DICOM's keyed relative identity, byte size, and raw digest
+against `manifest-v2`. Every discovered study, series, and file must also reach one explicit terminal
+state, and all case-level geometry, decode, slot, quality, transform, checksum, cache, failure, and
+performance evidence must remain in Kaggle.
+
+A separate private comparator must require exact equality of the declared deterministic manifests
+and deterministic aggregate metrics. Runtime and resource observations are measured but excluded
+from equality only because that exclusion is frozen before execution; every other mismatch requires
+investigation and an unexplained mismatch blocks Chunk 5.
+
+Only after the full pass may `qa-cohort-selection-v2` select the private review cohort. It must
+include at least 100 reviewable studies and every materially represented available acquisition,
+quality, geometry, resolution, spacing, duplicate/missing, and remediation stratum; every eligible
+diagnostic series in each selected study must be reviewed. The private plan, review identity,
+cohort hash, artifact hashes, rows, and fixed nine-check decisions remain inside Kaggle. Every row
+also binds the private organizer/physical plane, assigned slot, retention reasons, six-slot missing
+mask, and ordinal sibling slot/terminal/model-eligibility/retention/quality-block context.
+
+The authorized human uses Chrome Copy & Edit on the safe private UI template to create a distinct
+private review session, enters `START` before any artifact access, and records only `PASS`, `BLOCK`,
+or `NOT_APPLICABLE`. The pinned finalizer consumes that completed private session directly and
+authenticates the exact source manifest, bundle, preprocessing configuration, Run A/Run B,
+comparison, cohort, UI, parent, and kernel versions. No locally composed review attestation is an
+input. Review artifacts resolve only under the authenticated Run A slug root. Only
+`human_review_summary.json` and `final_performance_report.json` may be retrieved as the two final
+allowlisted release-safe outputs. They must prove identity binding, at least 100 studies, all
+represented strata, all eligible series, all nine checks terminal, and zero `BLOCK` using
+disclosure-controlled tokens while exact review counts, private identities, and private hashes
+remain inside Kaggle.
+
+Every private input and kernel must pass ready/private, offline, exact-source, exact-version, and
+exact-listing gates. Until the final sanitized determinism, performance, and human-review outputs
+validate, preprocessed artifacts are experimental and folds, weak labels, training, inference,
+prediction, ensembles, and submission remain blocked.

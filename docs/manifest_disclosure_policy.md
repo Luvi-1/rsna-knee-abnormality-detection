@@ -1,8 +1,9 @@
-# Manifest sanitized-output disclosure policy
+# Sanitized-output disclosure policy
 
 Policy: `joint-complementary-k20-v1`. The minimum publication cell remains 20.
-This policy applies at the trusted Kaggle runner boundary to `sanitized_summary.json`, all three
-audit Markdown files, and `sanitized_artifact_inventory.json` before any output is downloadable.
+This policy applies at the trusted Kaggle release boundary to `sanitized_summary.json`, all three
+audit Markdown files, `sanitized_artifact_inventory.json`, `human_review_summary.json`, and
+`final_performance_report.json` before any output is downloadable.
 
 ## Threat model
 
@@ -33,7 +34,7 @@ Every audit count, including totals and complements, is transformed centrally in
 - `zero`
 - `below_threshold_nonzero`, representing any integer from 1 through 19
 - `at_or_above_threshold`, used for an exact complement whenever its group contains a
-  below-threshold count
+  below-threshold count or for an explicitly declared capped top band
 - `range_L_U`, where `L` is a multiple of 20 and `U = L + 19`
 
 No exact audit count or percentage is allowed. If a linked total, pass/fail, included/excluded, or
@@ -43,6 +44,13 @@ Runtime seconds and the public policy constants are not population counts and re
 Fixed-width intervals protect counts outside rare complementary groups against snapshot
 differencing. The JSON summary is the canonical representation; Markdown files must be
 byte-for-byte canonical renderings of it, and the inventory must hash those exact renderings.
+
+For Chunk 5, exact human-review counts remain only in the private completion. The release-safe
+`reviewed_studies` field uses 20-wide ranges from 100 through 219; every value from 220 through the
+private maximum of 240 is coalesced to `at_or_above_threshold`. `eligible_series_reviewed` uses a
+20-wide range, `block_decisions` uses the standard count tokens and must be `zero` for exit, and
+`represented_strata` exposes only `all_material_covered`. `final_performance_report.json` must repeat
+the identical validated review tokens; it cannot expose a second, more precise representation.
 
 The trusted validator rejects schema v1, exact numeric audit counts, percentages, malformed or
 non-k=20 intervals, inconsistent complement intervals, cross-file differences, unexpected fields,

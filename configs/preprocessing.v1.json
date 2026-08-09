@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "preprocessing_version": "dicom-model-v1",
+  "lower_percentile": 1.0,
+  "upper_percentile": 99.0,
+  "normalization": "minmax",
+  "sample_count": 24,
+  "local_contrast_channel": false,
+  "local_contrast_window": 7,
+  "adjacent_slice_channels": false,
+  "difference_channel": false,
+  "resize_rows_columns": null,
+  "allow_instance_fallback_for_qa": false,
+  "horizontal_flip": false,
+  "through_plane_resampling": false
+}
