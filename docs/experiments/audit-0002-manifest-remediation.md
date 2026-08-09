@@ -1,8 +1,8 @@
 # AUDIT-0002 — Manifest remediation rerun contract
 
 Status: **private execution, schema-v2 output validation, guarded history/ref cleanup, and final
-staged local gates passed**. The private PR and hosted CI remain open, so the cumulative branch is
-not merge-ready.
+staged local gates passed**. Private pull request #10 is open and unmerged; hosted CI passed on
+release candidate `cc050a2`, and any successor remains subject to the same gate.
 
 ## Before run
 
@@ -139,6 +139,7 @@ strict mypy, all pre-commit hooks, exact staged secret/baseline comparison, the 
 guard, pip-audit with no vulnerabilities, contract/config/submission checks, remote and local full
 output validators, and four canonical byte comparisons.
 
-The checkpoint itself remains **in progress**. The exact locally checked commit must be pushed to
-one private cumulative pull request, and GitHub-hosted CI must be green. No merge, preprocessing,
-fold, weak-label, model, prediction, ensemble, or submission action is authorized.
+Private pull request #10 is open and unmerged. Hosted CI passed on release candidate
+`cc050a21ab3386b501170d224ef57ef990a3753b`; any later documentation commit must pass the same
+workflow before Checkpoint 1 closes. No merge, preprocessing, fold, weak-label, model, prediction,
+ensemble, or submission action is authorized.

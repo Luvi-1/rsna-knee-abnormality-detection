@@ -103,8 +103,8 @@ must repeat the field-level provenance verification before replacing its five ex
 
 ## Remaining gates
 
-These files are working-tree changes and are not yet committed, pushed as the new schema-v2
-release, remotely tested, or merge-ready. The active-reference history gate has passed. Before any
-merge-ready claim, the complete intended release must be staged and the full local gate set rerun
-without later file changes. The resulting pushed commit must pass GitHub-hosted CI, and the pull
-request must remain unmerged pending explicit approval.
+The schema-v2 release and governance files were committed and pushed in cumulative release
+candidate `cc050a21ab3386b501170d224ef57ef990a3753b`. Private pull request #10 is open and unmerged,
+and its hosted `quality` workflow passed on that exact candidate. This later documentation update
+must pass the same local and hosted gates after it is committed. The active-reference history gate
+remains passed, and merge remains pending explicit approval.

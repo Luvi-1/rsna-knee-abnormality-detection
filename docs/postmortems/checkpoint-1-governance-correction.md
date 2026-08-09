@@ -60,5 +60,7 @@ Guarded cleanup replaced the old feature ref with the clean history, deleted the
 branch, and verified that no active local or origin ref reaches the unsafe commit. The complete
 staged candidate then passed every final local gate, including 139/139 pytest and all configured
 static, secret, sensitive-file, dependency, contract, disclosure, and byte-identity checks. The
-correction is not fully closed: the private pull request and green GitHub-hosted CI are pending. No
-merge, fold, preprocessing, weak-label, model, prediction, ensemble, or submission action occurred.
+Private pull request #10 is now open and unmerged, and its hosted `quality` workflow passed on
+release candidate `cc050a21ab3386b501170d224ef57ef990a3753b`. Any successor must pass the same
+workflow before the correction closes. No merge, fold, preprocessing, weak-label, model,
+prediction, ensemble, or submission action occurred.

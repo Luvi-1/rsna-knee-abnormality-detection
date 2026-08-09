@@ -22,7 +22,8 @@ Correction/gate outcome:
 
 - The prior final secret-pass claim was made before the final tracked file set was included. Exact
   reviewed baseline entries and a detection regression now exist locally. The complete staged-tree,
-  cumulative-diff, history, and generated-artifact checks passed; remote CI remains pending.
+  cumulative-diff, history, and generated-artifact checks passed. Hosted CI passed on cumulative
+  release candidate `cc050a2`; later commits remain subject to the same gate.
 
 ## Chunk 2 - live competition contract
 
@@ -105,8 +106,8 @@ Why the original exit assessment is withdrawn:
 ## Checkpoint 1 - Chunks 1-4 remediation
 
 Status: private remediation execution, guarded history/ref cleanup, and complete staged-candidate
-local gates passed on `checkpoint/chunks-1-4-remediated`. Private PR and hosted CI remain pending;
-the branch is not merge-ready and not merged.
+local gates passed on `checkpoint/chunks-1-4-remediated`. Private pull request #10 is open and
+unmerged; hosted CI passed on release candidate `cc050a2`, and any successor must pass it again.
 
 Objective: make Chunks 1-4 truthful, privacy-safe, reproducible, privately revalidated, and remotely
 reviewable. Do not start Chunk 5.
@@ -130,11 +131,13 @@ Completed and validated so far:
   lint/format, strict mypy, pre-commit, secret/baseline comparison, sensitive-file guard,
   vulnerability audit, contract/config/submission checks, full-output validation, and four
   canonical byte comparisons.
+- Private pull request #10 is open and unmerged; its hosted `quality` workflow passed on release
+  candidate `cc050a21ab3386b501170d224ef57ef990a3753b`.
 
 Pending exit evidence:
 
-1. Open the cumulative private pull request from the exact locally checked commit and require green
-   GitHub-hosted CI. The pull request must remain unmerged.
+1. Require green GitHub-hosted CI for the exact final head of private pull request #10. The pull
+   request must remain unmerged.
 
 ## Recommended next chunk
 
