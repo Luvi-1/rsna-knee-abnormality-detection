@@ -1,4 +1,4 @@
-# Chunk 5 Run A source-manifest identity incident
+# Chunk 5 Run A source-manifest recovery incidents
 
 Status: **recovery open; Chunk 5 not passed**
 
@@ -6,17 +6,18 @@ Date: 2026-08-10
 
 ## Summary
 
-Predecessor implementation freeze `a5a44ac` and immutable bundle `7cf43...` authenticated far
-enough to launch private Run A. The run failed closed before DICOM preprocessing, QA generation, or
-benchmarking with the sanitized code `source_manifest_version_mismatch`. Run B was not started.
-The corrected replacement candidate passed its complete local gate, while the predecessor freeze
-and bundle remain superseded-pending; neither predecessor artifact is completion evidence.
+Implementation freeze `a5a44ac` and immutable bundle `7cf43...` reached private Run A and failed
+closed with `source_manifest_version_mismatch`. The corrected freeze `e6e5b35` and bundle
+`3a361...` passed the authenticated input gate, then Run A failed closed with
+`source_manifest_input_invalid`. Both attempts stopped before DICOM preprocessing, QA generation,
+or benchmarking. Run B was not started, and neither chain is completion evidence.
 
-Only the fixed sanitized failure code left the private environment. No pixel, report, patient-level
-metadata, identifier, path, private resource reference, detailed checksum, review row, or private
+One mode-0600 ignored Run A failure log was retrieved locally for diagnosis and remains inside the
+protected project boundary. Only fixed sanitized runner events were exposed outside that protected
+metadata boundary. No DICOM, pixel, report, patient identifier, review row, or private medical
 artifact was exported or added to this record.
 
-## Root cause
+## First root cause
 
 Chunk 4 has two legitimate identities with different purposes:
 
@@ -30,6 +31,19 @@ fail-closed error.
 
 This was an identity-contract defect in the consumer, not evidence of manifest-version drift,
 corrupt DICOM content, or a failed Chunk 4 audit.
+
+## Second root cause
+
+The authenticated Chunk 4 schema stores issue ownership in the shared `manifest_issue.entity_key`
+column. The Chunk 5 consumer's study-level UNION arm queried a nonexistent `study_key` column,
+which SQLite rejected and the privacy boundary correctly reduced to `source_manifest_input_invalid`.
+The same compatibility audit found that `protected_component` intentionally includes singleton
+rows; the unfiltered consumer query therefore mislabeled essentially every study as belonging to a
+protected duplicate group.
+
+This was a producer-consumer schema and semantics defect, not a damaged private artifact or DICOM
+failure. Reproduction against the real producer schema succeeded after changing the issue field to
+`entity_key` and positively allowing only `evidence_state='hard'` for protected duplicates.
 
 ## Impact
 
@@ -65,9 +79,16 @@ source identity schemas do not expand, and no private identity is released.
 
 These are local recovery and release-candidate checks, not the Chunk 5 exit gate.
 
+For the second incident, one real-schema regression proves both study-issue attribution and
+singleton exclusion. All 33 focused full-run tests plus scoped Ruff and strict mypy pass. The exact
+seven-file candidate also passed the complete 405-test release gate, including isolated build,
+typing, privacy, security, dependency, contract, and clean-tree checks. The final exact-set gate
+must be repeated after this evidence update before another freeze.
+
 ## Remaining gates
 
-1. Create a replacement clean implementation-freeze commit and immutable private bundle.
+1. Require the complete exact-set local gate over the final candidate bytes, then create a clean
+   implementation-freeze commit and immutable private bundle.
 2. Re-authenticate the private/offline/version-bound input chain.
 3. Retry full Run A and validate it completely before starting Run B.
 4. Complete independent Run B, deterministic comparison, benchmarks, private stratified human

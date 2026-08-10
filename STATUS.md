@@ -21,11 +21,11 @@ Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
 
 | State | Current evidence |
 |---|---|
-| Implemented | Core strict decode/geometry/preprocessing, the six-slot system plus additional/missing handling, private QA rendering, benchmark support, full-run orchestration, distinct Run A/Run B packaging, exact comparison, post-full-pass cohort planning, private review UI/session finalization, and disclosure-controlled validation are implemented. The two-file source-manifest identity correction is present only in the working tree. Freeze `a5a44ac` and bundle `7cf43...` are superseded-pending; no replacement freeze or bundle exists yet. |
-| Locally tested | **Complete replacement-candidate gate passed.** The exact 12-file staged candidate passed 404 tests, Ruff lint/format, source and strict trust-boundary mypy, isolated-wheel import, CLI smoke checks, pre-commit, exact tracked-file secret scanning, the sensitive-file guard, dependency audit, fresh competition-contract comparison, and clean staged-tree checks. The replacement freeze and remote evidence remain pending. |
-| Executed privately on Kaggle | **Run A attempted and failed early.** It stopped before DICOM preprocessing and visual-QA generation with the sanitized code `source_manifest_version_mismatch`. Run B was not started. No Chunk 5 execution evidence satisfies the exit gate. |
-| Remotely tested | The predecessor private inputs authenticated sufficiently to launch Run A, but the run failed closed when the consumer compared a governance audit ID with the producer execution-ID namespace. No deterministic comparison, benchmark acceptance, review plan, or human review exists. |
-| Merge-ready | **No.** A replacement freeze and immutable bundle, successful Run A and Run B, comparison, human review, final remote validation, push, and exact-head hosted CI remain pending. |
+| Implemented | Core strict decode/geometry/preprocessing, the six-slot system plus additional/missing handling, private QA rendering, benchmark support, full-run orchestration, distinct Run A/Run B packaging, exact comparison, post-full-pass cohort planning, private review UI/session finalization, and disclosure-controlled validation are implemented. The second source-manifest compatibility correction is present only in the working tree. Freezes `a5a44ac` and `e6e5b35` and bundles `7cf43...` and `3a361...` are superseded-pending. |
+| Locally tested | **Complete second replacement-candidate gate passed.** The exact seven-file staged candidate passed 405 tests, Ruff lint/format, source and strict trust-boundary mypy, isolated-wheel import, CLI smoke checks, pre-commit, exact tracked-file secret scanning, the sensitive-file guard, dependency audit, fresh contract-schema validation plus independent material-drift comparison, and clean staged-tree checks. The final exact-set gate must be repeated after this evidence update. |
+| Executed privately on Kaggle | **Two Run A attempts failed early and closed.** The first reported `source_manifest_version_mismatch`; the replacement reported `source_manifest_input_invalid`. Both stopped before DICOM preprocessing and visual-QA generation. Run B was not started. No Chunk 5 execution evidence satisfies the exit gate. |
+| Remotely tested | The `e6e5b35` private inputs passed the authenticated private/offline/version-1 input gate. Run A then failed because the consumer queried a nonexistent source-manifest column; no deterministic comparison, benchmark acceptance, review plan, or human review exists. |
+| Merge-ready | **No.** A newly gated freeze and immutable bundle, successful Run A and Run B, comparison, human review, final remote validation, push, and exact-head hosted CI remain pending. |
 | Merged into `main` | **No.** Merge is outside this checkpoint and requires explicit human approval. |
 
 ## Corrections to the prior status
@@ -69,10 +69,10 @@ Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
 
 ## Remaining checkpoint work
 
-1. Create a new exact clean implementation-freeze commit and immutable offline private bundle from
-   the fully gated 12-file staged candidate.
-   Freeze `a5a44ac` and bundle `7cf43...` remain superseded-pending and must not be reused as current
-   evidence. Bind the replacement
+1. Run the complete gate over the second source-manifest recovery candidate, then create a new exact
+   clean implementation-freeze commit and immutable offline private bundle.
+   Freezes `a5a44ac` and `e6e5b35` and bundles `7cf43...` and `3a361...` remain superseded-pending and
+   must not be reused as current evidence. Bind the replacement
    cryptographically to the completed `audit-0002-manifest-remediation` source-manifest kernel and
    its private `manifest-v2` outputs; reject the superseded audit.
 2. Authenticate private/offline/version-1 metadata, exact input versions, expected file listings,

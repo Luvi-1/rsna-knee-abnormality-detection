@@ -1,7 +1,7 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **Run A recovery in progress; complete replacement-candidate gate passed; private execution
-and visual review not complete; Chunk 5 not passed**.
+Status: **Run A recovery in progress; complete second replacement-candidate gate passed; private
+execution and visual review not complete; Chunk 5 not passed**.
 
 ## Objective
 
@@ -16,7 +16,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; predecessor freeze `a5a44ac` is superseded-pending and the replacement freeze is not yet created |
+| Code | `feat/chunk-5-dicom-pipeline`; freezes `a5a44ac` and `e6e5b35` are superseded-pending and the next freeze is not yet created |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -33,12 +33,12 @@ transformation, and produces model-ready tensors without starting ontology, fold
 
 ## Registry state
 
-The ignored private SQLite registry remains the authority for the experiment contract. Predecessor
-freeze `a5a44ac` and bundle `7cf43...` reached private Run A but are superseded-pending after that run
-failed early with the sanitized code `source_manifest_version_mismatch`. No successful run result or
-completion time may be recorded from that attempt. Run B, comparison, human review, and attestation
-remain `not_started`. The replacement freeze and bundle are pending after the complete local gate;
-record actual results only after authenticated successful execution.
+The ignored private SQLite registry remains the authority for the experiment contract. Freeze
+`a5a44ac` / bundle `7cf43...` failed with `source_manifest_version_mismatch`; replacement freeze
+`e6e5b35` / bundle `3a361...` passed input authentication and then failed with
+`source_manifest_input_invalid`. Both retry rows remain terminal failed and append-only. Run B,
+comparison, human review, and attestation remain `not_started`. The next freeze and bundle are
+pending a new complete local gate; record successful results only after authenticated execution.
 
 ## Frozen controls
 
@@ -100,12 +100,14 @@ record actual results only after authenticated successful execution.
 
 ## Current recovery evidence
 
-- The predecessor implementation freeze was `a5a44ac`, with immutable bundle identity recorded only
-  as the sanitized prefix `7cf43...`. Both are superseded-pending because source code changed after
-  the failed attempt; they cannot support a Chunk 5 pass.
-- Private Run A stopped before DICOM preprocessing, QA generation, and benchmarking with the fixed
-  sanitized code `source_manifest_version_mismatch`. Run B was not started. No private image,
-  identifier, path, report, detailed hash, or resource reference left Kaggle.
+- The first recovery used freeze `a5a44ac` / bundle `7cf43...`; the second used freeze `e6e5b35` /
+  bundle `3a361...`. Both are superseded-pending and cannot support a Chunk 5 pass.
+- The first Run A stopped with `source_manifest_version_mismatch`; the second input chain
+  authenticated and Run A stopped with `source_manifest_input_invalid`. Both failed before DICOM
+  preprocessing, QA generation, and benchmarking. Run B was not started. One mode-0600 ignored
+  failure log was retrieved locally for diagnosis; only fixed sanitized runner events were exposed
+  outside that protected metadata boundary. No DICOM, pixel, report, or patient identifier was
+  exported.
 - Root cause was a namespace conflation: the promoted governance audit ID and the source producer's
   execution ID were both represented by the name `audit_id`, and the consumer compared the database
   producer value with the governance constant.
@@ -114,8 +116,14 @@ record actual results only after authenticated successful execution.
   common owner, and exact derived source references. It passed 32 focused tests plus Ruff and strict
   mypy. The exact 12-file staged replacement candidate then passed the complete 404-test, isolated-
   wheel, typing, privacy, security, dependency, contract, and clean-tree gate.
-- A new clean freeze and immutable bundle, input authentication, and a fresh Run A retry remain
-  pending. Run B, comparison, visual review, finalization, push, and hosted CI remain pending.
+- The second root cause is an exact source-schema mismatch: the consumer queried nonexistent
+  `manifest_issue.study_key` instead of the producer's shared `entity_key`, and it also included
+  singleton protected components in the duplicate stratum. The two-line correction plus one
+  real-schema regression passes all 33 focused full-run tests, Ruff, and strict mypy.
+- The exact seven-file recovery candidate passed the complete 405-test build, typing, privacy,
+  security, dependency, contract, and clean-tree gate. The final exact-set rerun after this evidence
+  update, a clean freeze, immutable bundle, input authentication, and Run A retry remain pending.
+  Run B, comparison, visual review, finalization, push, and hosted CI remain pending.
 
 ## Private dataset pre-push gate
 
@@ -157,9 +165,10 @@ inside Kaggle and never enter repository documents or command output.
 
 ## After attempted Run A
 
-Recovery pending. Run A failed closed before preprocessing with the sanitized source-manifest
-identity error; Run B was not started. No successful runtime result, Run A/Run B comparison, QA image
-review, completed review session, human attestation, or finalizer result is claimed. The incident is
-recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record replacement identities and actual
-results only after the new freeze/bundle, authenticated retry, independent Run B, comparison, and
-review. Do not start ontology, folds, labels, training, inference, or submission.
+Recovery pending. Two Run A attempts failed closed before preprocessing: first on source identity,
+then on source-schema consumption. Run B was not started. No successful runtime result, Run A/Run B
+comparison, QA image review, completed review session, human attestation, or finalizer result is
+claimed. The incidents are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record new
+identities and actual results only after the next freeze/bundle, authenticated retry, independent
+Run B, comparison, and review. Do not start ontology, folds, labels, training, inference, or
+submission.

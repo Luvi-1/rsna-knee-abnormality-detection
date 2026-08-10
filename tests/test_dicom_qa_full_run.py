@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from rsna_knee.data import manifest as producer_manifest
 from rsna_knee.data import series_slots as slots
 
 ROOT = Path(__file__).parents[1]
@@ -402,6 +403,89 @@ def test_source_manifest_producer_identity_rejects_mismatch(
 
     with pytest.raises(runner.SafeRunError, match="source_manifest_version_mismatch"):
         runner._source_manifest_producer_identity(binding, metadata)
+
+
+def test_source_manifest_loader_uses_entity_key_and_excludes_protected_singletons(
+    tmp_path: Path,
+) -> None:
+    secret = b"s" * 32
+    code_commit = "a" * 40
+    bundle_sha256 = "b" * 64
+    schema_sha256 = "e" * 64
+    study_uid = "1.2.826.0.1.7101"
+    series_uid = "1.2.826.0.1.7201"
+    row = runner.SeriesRow(study_uid, series_uid, "present", "absent", "sagittal")
+    study_key = runner._source_manifest_study_key(secret, study_uid)
+    series_key = runner._source_manifest_series_key(secret, series_uid)
+    database_path = tmp_path / "private_manifest.sqlite3"
+    audit_key_path = tmp_path / "audit_key.bin"
+    audit_key_path.write_bytes(secret)
+
+    connection = sqlite3.connect(database_path)
+    connection.executescript(producer_manifest.PRIVATE_SCHEMA_SQL)
+    metadata = {
+        "audit_id": f"manifest-audit-{code_commit[:12]}",
+        "bundle_sha256": bundle_sha256,
+        "code_commit": code_commit,
+        "manifest_version": runner.SOURCE_MANIFEST_VERSION,
+        "schema_sha256": schema_sha256,
+        "five_levels_reconciled": "true",
+        **{
+            f"reconciliation:{name}": "pass"
+            for name in ("studies", "series", "files", "reports", "official_label_cells")
+        },
+        **{
+            f"table_sha256:{name}": "f" * 64
+            for name in runner.SOURCE_MANIFEST_TABLES - {"manifest_run"}
+        },
+    }
+    connection.executemany("INSERT INTO manifest_run VALUES(?,?)", metadata.items())
+    connection.execute(
+        """INSERT INTO study_manifest(
+                study_key,split,source_row_count,patient_key_evidence,series_count,
+                plane_availability,sequence_categories,total_slice_count,report_available,
+                label_status,known_label_count,positive_label_count,negative_label_count,
+                data_quality_flags,terminal_state
+            ) VALUES(?,'train',1,'study_uid',1,'sagittal','fluid_sensitive',0,0,
+                'unavailable',0,0,0,'[]','pass')""",
+        (study_key,),
+    )
+    connection.execute(
+        """INSERT INTO series_manifest(
+                series_key,study_key,source_row_count,plane,fluid_sensitive,fat_suppression,
+                slice_count,missing_tag_flags,quality_score,localizer_likelihood,
+                ordering_method,orientation_state,spacing_state,decode_state,terminal_state
+            ) VALUES(?,?,1,'sagittal','true','false',0,'[]',100,0,
+                'physical','consistent','consistent','decoded','pass')""",
+        (series_key, study_key),
+    )
+    connection.execute(
+        "INSERT INTO protected_component VALUES('hard-protected',?,?, 'singleton')",
+        ("c" * 64, study_key),
+    )
+    connection.execute(
+        """INSERT INTO manifest_issue VALUES(
+                'study',?,'pixel_decode_remediated','warning','none','remediated','v1',
+                'decoder','v1','remediated','v1','study','{}')""",
+        (study_key,),
+    )
+    connection.commit()
+    connection.close()
+
+    binding = replace(
+        _source_binding(code_commit=code_commit, bundle_sha256=bundle_sha256),
+        database_path=database_path,
+        audit_key_path=audit_key_path,
+        database_sha256=hashlib.sha256(database_path.read_bytes()).hexdigest(),
+        audit_key_sha256=hashlib.sha256(secret).hexdigest(),
+        schema_sha256=schema_sha256,
+    )
+    facts, _, reconciliation = runner._load_source_manifest_facts(binding, (row,))
+    try:
+        assert facts[study_uid]["remediated_decode_case"] == ("present",)
+        assert facts[study_uid]["protected_duplicate_group"] == ()
+    finally:
+        reconciliation.connection.close()
 
 
 def _source_reconciliation(competition_root: Path, rows: tuple[Any, ...]) -> Any:

@@ -405,12 +405,41 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Current evidence: the two-file correction in `kaggle/dicom_qa/run.py` and
   `tests/test_dicom_qa_full_run.py` passed 32 focused tests plus Ruff and strict mypy. The exact
   12-file staged replacement candidate then passed the complete 404-test, build, typing, privacy,
-  security, dependency, contract, and clean-tree gate. The replacement freeze, replacement bundle,
-  and Run A retry are pending. Run B was not started. Freeze `a5a44ac` and bundle `7cf43...` are
-  superseded-pending rather than current evidence.
+  security, dependency, contract, and clean-tree gate. Replacement freeze `e6e5b35` and bundle
+  `3a361...` passed input authentication, then Run A failed closed with
+  `source_manifest_input_invalid`. Run B was not started. Both recovery chains are superseded-pending
+  rather than completion evidence.
 - Risks: the runtime proof depends on the already authenticated immutable source bundle and pinned
   producer code; a changed source bundle, producer, reference derivation, or identity schema
   invalidates the proof and requires a fresh audit and full gate.
 - Reversal condition: replace only with a versioned identity schema that explicitly binds both
   namespaces with equal or stronger cryptographic and privacy guarantees.
-- Commit/experiment: replacement freeze pending; `preprocess-0001-dicom-pipeline`.
+- Commit/experiment: `e6e5b35` superseded-pending; `preprocess-0001-dicom-pipeline`.
+
+## D-021 - Consume the promoted source-manifest schema exactly
+
+- Date: 2026-08-10
+- Owner: Codex
+- Question: Which Chunk 4 fields define study-level issues and non-singleton protected duplicate
+  membership?
+- Alternatives: add private diagnostics; broaden the failure handler; infer study membership from
+  other tables; or query the authenticated producer schema directly.
+- Evidence: the `e6e5b35` input chain authenticated and Run A then failed closed with
+  `source_manifest_input_invalid`. Reproduction against the real producer schema showed that
+  `manifest_issue` stores every entity reference in `entity_key`, while the consumer queried a
+  nonexistent `study_key` column for study-level issues. The same review showed that
+  `protected_component` intentionally contains singleton rows, so an unfiltered query falsely
+  classified essentially every study as a duplicate group.
+- Decision: use `manifest_issue.entity_key` for study-level issues and admit only
+  `protected_component.evidence_state='hard'` to the protected-duplicate review stratum. Keep the
+  candidate-component query unchanged because the producer emits it only for actual candidate
+  edges. Cover both corrections with one real-schema regression.
+- Current evidence: all 33 focused full-run tests pass. The exact seven-file candidate also passed
+  the complete 405-test build, typing, privacy, security, dependency, contract, and clean-tree gate;
+  the final exact-set rerun after this governance update, new freeze/bundle, input authentication,
+  and Run A retry remain pending. Run B was not started.
+- Risks: any later source-schema change must fail closed and requires a new versioned contract and
+  regression; a generic error category alone is not sufficient evidence of compatibility.
+- Reversal condition: replace only with an equally strict versioned schema adapter that preserves
+  exact issue attribution and duplicate semantics.
+- Commit/experiment: next freeze pending; `preprocess-0001-dicom-pipeline`.

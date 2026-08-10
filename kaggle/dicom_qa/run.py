@@ -1871,14 +1871,16 @@ def _load_source_manifest_facts(
 
         protected = {
             str(item[0])
-            for item in connection.execute("SELECT DISTINCT study_key FROM protected_component")
+            for item in connection.execute(
+                "SELECT DISTINCT study_key FROM protected_component WHERE evidence_state='hard'"
+            )
         }
         candidates = {
             str(item[0])
             for item in connection.execute("SELECT DISTINCT study_key FROM candidate_component")
         }
         issue_rows = connection.execute(
-            """SELECT study_key,issue_code,resolution_status FROM manifest_issue
+            """SELECT entity_key,issue_code,resolution_status FROM manifest_issue
                 WHERE entity_level='study'
                 UNION ALL
                 SELECT series_manifest.study_key,manifest_issue.issue_code,
