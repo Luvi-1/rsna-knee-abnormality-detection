@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "retrieved_at_utc": "2026-08-09T03:00:03Z",
-  "retrieved_at_local": "2026-08-08T20:00:03-07:00",
+  "retrieved_at_utc": "2026-08-10T07:19:35Z",
+  "retrieved_at_local": "2026-08-10T00:19:35-07:00",
   "identity": {
     "competition_id": 154281,
     "slug": "rsna-knee-abnormality-detection",

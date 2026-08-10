@@ -1,7 +1,7 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **complete staged-candidate gate passed; private execution and visual review not
-complete; Chunk 5 not passed**.
+Status: **Run A recovery in progress; complete replacement-candidate gate passed; private execution
+and visual review not complete; Chunk 5 not passed**.
 
 ## Objective
 
@@ -16,7 +16,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; exact clean commit recorded before packaging |
+| Code | `feat/chunk-5-dicom-pipeline`; predecessor freeze `a5a44ac` is superseded-pending and the replacement freeze is not yet created |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -33,12 +33,12 @@ transformation, and produces model-ready tensors without starting ontology, fold
 
 ## Registry state
 
-The ignored private SQLite registry contains exactly one `planned` audit row for
-`preprocess-0001-dicom-pipeline`. Its code and authenticated input versions remain explicit pending
-values until the implementation-freeze commit and private input version are approved and verified.
-Run A, Run B, comparison, human review, and attestation remain `not_started`; no result or completion
-time is recorded. Replace the pending identities before packaging and record actual results only
-after authenticated execution.
+The ignored private SQLite registry remains the authority for the experiment contract. Predecessor
+freeze `a5a44ac` and bundle `7cf43...` reached private Run A but are superseded-pending after that run
+failed early with the sanitized code `source_manifest_version_mismatch`. No successful run result or
+completion time may be recorded from that attempt. Run B, comparison, human review, and attestation
+remain `not_started`. The replacement freeze and bundle are pending after the complete local gate;
+record actual results only after authenticated successful execution.
 
 ## Frozen controls
 
@@ -98,17 +98,24 @@ after authenticated execution.
    determinism plus `human_review_summary.json` and `final_performance_report.json`; exact review
    counts remain private.
 
-## Current local evidence
+## Current recovery evidence
 
-- The complete staged candidate had no unstaged or untracked residue and passed locked offline
-  sync/lock; isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24
-  `src` files and seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret
-  scan; sensitive-file and path/magic guards; dependency audit with no known vulnerabilities;
-  CLI/config/submission/contract-schema smoke checks; and Git diff check.
-- An independent settled red-team passed with no P0/P1.
-- Every later file change requires the complete staged gate again. Private Kaggle execution, runtime
-  measurements, immutable remote identities, human review, implementation-freeze commit approval,
-  commit, push, and hosted CI have not occurred.
+- The predecessor implementation freeze was `a5a44ac`, with immutable bundle identity recorded only
+  as the sanitized prefix `7cf43...`. Both are superseded-pending because source code changed after
+  the failed attempt; they cannot support a Chunk 5 pass.
+- Private Run A stopped before DICOM preprocessing, QA generation, and benchmarking with the fixed
+  sanitized code `source_manifest_version_mismatch`. Run B was not started. No private image,
+  identifier, path, report, detailed hash, or resource reference left Kaggle.
+- Root cause was a namespace conflation: the promoted governance audit ID and the source producer's
+  execution ID were both represented by the name `audit_id`, and the consumer compared the database
+  producer value with the governance constant.
+- The two-file correction preserves the outer governance identity while authenticating the producer
+  tuple through the already bound code commit, full source-bundle hash, producer-ID derivation,
+  common owner, and exact derived source references. It passed 32 focused tests plus Ruff and strict
+  mypy. The exact 12-file staged replacement candidate then passed the complete 404-test, isolated-
+  wheel, typing, privacy, security, dependency, contract, and clean-tree gate.
+- A new clean freeze and immutable bundle, input authentication, and a fresh Run A retry remain
+  pending. Run B, comparison, visual review, finalization, push, and hosted CI remain pending.
 
 ## Private dataset pre-push gate
 
@@ -148,11 +155,11 @@ inside Kaggle and never enter repository documents or command output.
   `dicom-model-v1` and all downstream work.
 - Any need to change labels, construct folds, train, infer, ensemble, or submit stops this chunk.
 
-## After run
+## After attempted Run A
 
-Pending. No private Chunk 5 dataset, kernel, runtime result, Run A/Run B comparison, QA image review,
-completed review session, human attestation, or finalizer result is claimed. Record exact
-code/config/dependency/source-manifest identities, cohort/review completion, deterministic replay,
-performance evidence, failures, decision, and the next authorized gate only after private execution
-and review. Do not create a postmortem unless an actual execution incident or completed experiment
-provides evidence to record.
+Recovery pending. Run A failed closed before preprocessing with the sanitized source-manifest
+identity error; Run B was not started. No successful runtime result, Run A/Run B comparison, QA image
+review, completed review session, human attestation, or finalizer result is claimed. The incident is
+recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record replacement identities and actual
+results only after the new freeze/bundle, authenticated retry, independent Run B, comparison, and
+review. Do not start ontology, folds, labels, training, inference, or submission.

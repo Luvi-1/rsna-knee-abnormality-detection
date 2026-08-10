@@ -394,6 +394,10 @@ class SelectionPlan:
 class SourceManifestBinding:
     database_path: Path
     audit_key_path: Path
+    producer_code_commit: str
+    kernel_ref: str
+    bundle_dataset_ref: str
+    bundle_sha256: str
     database_sha256: str
     audit_key_sha256: str
     schema_sha256: str
@@ -1502,6 +1506,8 @@ def _discover_source_manifest_binding(
         inventory_document.get("schema_version") != 1
         or inventory_document.get("artifact_type") != "private-artifact-inventory"
         or not isinstance(provenance, dict)
+        or not isinstance(provenance.get("git_commit"), str)
+        or HEX_40.fullmatch(str(provenance["git_commit"])) is None
         or provenance.get("manifest_schema_sha256") != schema_sha256
         or provenance.get("manifest_version") != SOURCE_MANIFEST_VERSION
         or not isinstance(artifacts, list)
@@ -1557,6 +1563,10 @@ def _discover_source_manifest_binding(
     return SourceManifestBinding(
         database_path=root / "private_manifest.sqlite3",
         audit_key_path=root / "audit_key.bin",
+        producer_code_commit=str(provenance["git_commit"]),
+        kernel_ref=str(source_config["kernel_ref"]),
+        bundle_dataset_ref=str(source_config["bundle_dataset_ref"]),
+        bundle_sha256=str(source_config["bundle_sha256"]),
         database_sha256=records["private_manifest.sqlite3"][1],
         audit_key_sha256=records["audit_key.bin"][1],
         schema_sha256=schema_sha256,
@@ -1570,6 +1580,37 @@ def _source_manifest_columns(connection: sqlite3.Connection, table: str) -> tupl
     except sqlite3.Error as error:
         raise SafeRunError("source_manifest_schema_invalid") from error
     return tuple(str(row[1]) for row in rows)
+
+
+def _source_manifest_producer_identity(
+    binding: SourceManifestBinding,
+    run_metadata: Mapping[str, object],
+) -> dict[str, str]:
+    code_commit = run_metadata.get("code_commit")
+    bundle_sha256 = run_metadata.get("bundle_sha256")
+    audit_id = run_metadata.get("audit_id")
+    owner, separator, _ = binding.kernel_ref.partition("/")
+    if (
+        not isinstance(code_commit, str)
+        or HEX_40.fullmatch(code_commit) is None
+        or code_commit != binding.producer_code_commit
+        or not isinstance(bundle_sha256, str)
+        or HEX_64.fullmatch(bundle_sha256) is None
+        or bundle_sha256 != binding.bundle_sha256
+        or audit_id != f"manifest-audit-{code_commit[:12]}"
+        or not separator
+        or binding.bundle_dataset_ref.partition("/")[0] != owner
+        or binding.kernel_ref
+        != f"{owner}/rsna-knee-manifest-audit-{code_commit[:7]}-{bundle_sha256[:12]}"
+        or binding.bundle_dataset_ref
+        != f"{owner}/rsna-knee-manifest-bundle-{code_commit[:7]}-{bundle_sha256[:12]}"
+    ):
+        raise SafeRunError("source_manifest_version_mismatch")
+    return {
+        "audit_id": str(audit_id),
+        "bundle_sha256": bundle_sha256,
+        "code_commit": code_commit,
+    }
 
 
 def _validate_source_manifest_series_population(
@@ -1784,9 +1825,9 @@ def _load_source_manifest_facts(
             for key, value in run_metadata.items()
             if key.startswith("reconciliation:")
         }
+        producer_identity = _source_manifest_producer_identity(binding, run_metadata)
         if (
             run_metadata.get("manifest_version") != SOURCE_MANIFEST_VERSION
-            or run_metadata.get("audit_id") != SOURCE_MANIFEST_AUDIT_ID
             or run_metadata.get("schema_sha256") != binding.schema_sha256
             or set(table_hashes) != SOURCE_MANIFEST_TABLES - {"manifest_run"}
             or any(HEX_64.fullmatch(value) is None for value in table_hashes.values())
@@ -1806,6 +1847,7 @@ def _load_source_manifest_facts(
                 {
                     "domain": "rsna-knee-official-input-snapshot-v1",
                     "manifest_version": SOURCE_MANIFEST_VERSION,
+                    "producer_identity": producer_identity,
                     "schema_sha256": binding.schema_sha256,
                     "table_hashes": dict(sorted(table_hashes.items())),
                     "reconciliation": dict(sorted(reconciliation.items())),

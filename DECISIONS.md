@@ -382,3 +382,35 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   equal or stronger cryptographic identity, equivalent private human evidence, and the same
   disclosure boundary.
 - Commit/experiment: pending clean Chunk 5 commit; `preprocess-0001-dicom-pipeline`.
+
+## D-020 - Separate source-manifest governance and producer execution identities
+
+- Date: 2026-08-10
+- Owner: Codex
+- Question: Which identity should authenticate the private Chunk 4 database consumed by Chunk 5?
+- Alternatives: compare the database execution ID with the promoted governance audit ID; accept a
+  format-only producer ID; add a new public identity-schema field; or prove the producer identity
+  from the already bound code commit, full bundle hash, and exact derived private references.
+- Evidence: predecessor freeze `a5a44ac` and bundle `7cf43...` authenticated far enough to launch
+  private Run A, which then failed before preprocessing with the sanitized code
+  `source_manifest_version_mismatch`. The Chunk 4 database stores its producer execution ID in the
+  `audit_id` row, while `audit-0002-manifest-remediation` identifies the promoted governance record.
+  The consumer incorrectly treated those distinct namespaces as one value. The failure was
+  fail-closed; no private reference, hash, path, identifier, report, or pixel was exported.
+- Decision: retain `audit-0002-manifest-remediation` as the outer governance identity. Authenticate
+  the database producer identity separately using the existing immutable binding: exact lowercase
+  code commit, full source-bundle hash equality, the producer-ID derivation, a shared owner, and the
+  exact content-derived source kernel and dataset references. Bind that producer tuple into the
+  private source snapshot digest without changing the public/source identity schema.
+- Current evidence: the two-file correction in `kaggle/dicom_qa/run.py` and
+  `tests/test_dicom_qa_full_run.py` passed 32 focused tests plus Ruff and strict mypy. The exact
+  12-file staged replacement candidate then passed the complete 404-test, build, typing, privacy,
+  security, dependency, contract, and clean-tree gate. The replacement freeze, replacement bundle,
+  and Run A retry are pending. Run B was not started. Freeze `a5a44ac` and bundle `7cf43...` are
+  superseded-pending rather than current evidence.
+- Risks: the runtime proof depends on the already authenticated immutable source bundle and pinned
+  producer code; a changed source bundle, producer, reference derivation, or identity schema
+  invalidates the proof and requires a fresh audit and full gate.
+- Reversal condition: replace only with a versioned identity schema that explicitly binds both
+  namespaces with equal or stronger cryptographic and privacy guarantees.
+- Commit/experiment: replacement freeze pending; `preprocess-0001-dicom-pipeline`.

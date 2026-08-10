@@ -6,6 +6,7 @@ import json
 import math
 import sqlite3
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -304,6 +305,103 @@ def _source_identity() -> dict[str, str]:
         "source_manifest_artifact_sha256": "d" * 64,
         "official_input_snapshot_sha256": "e" * 64,
     }
+
+
+def _source_binding(
+    *,
+    owner: str = "test-owner",
+    code_commit: str = "a" * 40,
+    bundle_sha256: str = "b" * 64,
+) -> Any:
+    return runner.SourceManifestBinding(
+        database_path=Path("private_manifest.sqlite3"),
+        audit_key_path=Path("audit_key.bin"),
+        producer_code_commit=code_commit,
+        kernel_ref=(f"{owner}/rsna-knee-manifest-audit-{code_commit[:7]}-{bundle_sha256[:12]}"),
+        bundle_dataset_ref=(
+            f"{owner}/rsna-knee-manifest-bundle-{code_commit[:7]}-{bundle_sha256[:12]}"
+        ),
+        bundle_sha256=bundle_sha256,
+        database_sha256="c" * 64,
+        audit_key_sha256="d" * 64,
+        schema_sha256="e" * 64,
+        source_manifest_artifact_sha256="f" * 64,
+    )
+
+
+def test_source_manifest_producer_identity_is_distinct_from_governance_audit_id() -> None:
+    code_commit = "a" * 40
+    bundle_sha256 = "b" * 64
+    metadata = {
+        "audit_id": f"manifest-audit-{code_commit[:12]}",
+        "bundle_sha256": bundle_sha256,
+        "code_commit": code_commit,
+    }
+
+    assert (
+        runner._source_manifest_producer_identity(
+            _source_binding(code_commit=code_commit, bundle_sha256=bundle_sha256), metadata
+        )
+        == metadata
+    )
+    assert metadata["audit_id"] != runner.SOURCE_MANIFEST_AUDIT_ID
+
+
+@pytest.mark.parametrize(
+    ("binding_mutation", "metadata_mutation", "missing_key"),
+    [
+        ({}, {"code_commit": "A" * 40}, None),
+        ({}, {"code_commit": "a" * 39}, None),
+        ({}, {"code_commit": "g" * 40}, None),
+        ({}, {"code_commit": "a" * 39 + "c"}, None),
+        ({}, {}, "code_commit"),
+        ({}, {"bundle_sha256": "b" * 63 + "c"}, None),
+        ({}, {"bundle_sha256": "B" * 64}, None),
+        ({}, {}, "bundle_sha256"),
+        ({}, {"audit_id": runner.SOURCE_MANIFEST_AUDIT_ID}, None),
+        ({}, {"audit_id": "wrong-prefix-aaaaaaaaaaaa"}, None),
+        ({}, {}, "audit_id"),
+        ({"kernel_ref": "other-owner/rsna-knee-manifest-audit-aaaaaaa-bbbbbbbbbbbb"}, {}, None),
+        (
+            {"bundle_dataset_ref": "other-owner/rsna-knee-manifest-bundle-aaaaaaa-bbbbbbbbbbbb"},
+            {},
+            None,
+        ),
+        ({"kernel_ref": "test-owner/rsna-knee-manifest-bundle-aaaaaaa-bbbbbbbbbbbb"}, {}, None),
+        (
+            {"bundle_dataset_ref": "test-owner/rsna-knee-manifest-audit-aaaaaaa-bbbbbbbbbbbb"},
+            {},
+            None,
+        ),
+        ({"kernel_ref": "test-owner/rsna-knee-manifest-audit-ccccccc-bbbbbbbbbbbb"}, {}, None),
+        (
+            {"bundle_dataset_ref": "test-owner/rsna-knee-manifest-bundle-aaaaaaa-cccccccccccc"},
+            {},
+            None,
+        ),
+        ({"bundle_sha256": "b" * 63 + "c"}, {}, None),
+    ],
+)
+def test_source_manifest_producer_identity_rejects_mismatch(
+    binding_mutation: dict[str, str],
+    metadata_mutation: dict[str, str],
+    missing_key: str | None,
+) -> None:
+    code_commit = "a" * 40
+    bundle_sha256 = "b" * 64
+    binding = _source_binding(code_commit=code_commit, bundle_sha256=bundle_sha256)
+    binding = replace(binding, **binding_mutation)
+    metadata = {
+        "audit_id": f"manifest-audit-{code_commit[:12]}",
+        "bundle_sha256": bundle_sha256,
+        "code_commit": code_commit,
+        **metadata_mutation,
+    }
+    if missing_key is not None:
+        metadata.pop(missing_key)
+
+    with pytest.raises(runner.SafeRunError, match="source_manifest_version_mismatch"):
+        runner._source_manifest_producer_identity(binding, metadata)
 
 
 def _source_reconciliation(competition_root: Path, rows: tuple[Any, ...]) -> Any:

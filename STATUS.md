@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-09 (Chunk 5 local implementation checkpoint)
+Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
 
 ## Current checkpoint
 
@@ -8,7 +8,7 @@ Updated: 2026-08-09 (Chunk 5 local implementation checkpoint)
 - Objective: validate deterministic, physically grounded `dicom-model-v1` decoding,
   preprocessing, series-slot assignment, private visual QA, and runtime evidence without ontology,
   folds, labels, model training, prediction, ensemble, or submission work.
-- Exit gate: Chunk 5 is **not passed**. It requires approval for an implementation-freeze commit; an
+- Exit gate: Chunk 5 is **not passed**. It requires a newly gated implementation-freeze commit; an
   immutable private bundle bound to `audit-0002-manifest-remediation` / `manifest-v2`; two distinct
   complete private Kaggle executions over the entire authorized training set; exact deterministic
   comparison; and an authorized human review of at least 100 post-run stratified studies and every
@@ -21,11 +21,11 @@ Updated: 2026-08-09 (Chunk 5 local implementation checkpoint)
 
 | State | Current evidence |
 |---|---|
-| Implemented | Core strict decode/geometry/preprocessing, the six-slot system plus additional/missing handling, private QA rendering, benchmark support, full-run orchestration, distinct Run A/Run B packaging, exact comparison, post-full-pass cohort planning, private review UI/session finalization, and disclosure-controlled validation are settled. The staged evidence is local only; no immutable private bundle exists. |
-| Locally tested | **Complete staged-candidate gate passed.** The complete staged set had no unstaged or untracked residue and passed locked offline sync/lock; isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24 `src` files and seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret scan; sensitive-file and path/magic guards; dependency audit with no known vulnerabilities; CLI/config/submission/contract-schema smoke checks; and Git diff check. An independent settled red-team found no P0/P1. This is local evidence only; every later file change requires the complete staged gate again. |
-| Executed privately on Kaggle | **Not yet.** The earlier `audit-0002-manifest-remediation` is manifest evidence, not Chunk 5 preprocessing/visual-QA evidence. |
-| Remotely tested | **Not yet for Chunk 5.** No private dataset or kernel has been created or launched for this chunk. |
-| Merge-ready | **No.** Implementation-freeze commit approval, private execution, human review, final remote validation, push, and exact-head hosted CI remain pending. |
+| Implemented | Core strict decode/geometry/preprocessing, the six-slot system plus additional/missing handling, private QA rendering, benchmark support, full-run orchestration, distinct Run A/Run B packaging, exact comparison, post-full-pass cohort planning, private review UI/session finalization, and disclosure-controlled validation are implemented. The two-file source-manifest identity correction is present only in the working tree. Freeze `a5a44ac` and bundle `7cf43...` are superseded-pending; no replacement freeze or bundle exists yet. |
+| Locally tested | **Complete replacement-candidate gate passed.** The exact 12-file staged candidate passed 404 tests, Ruff lint/format, source and strict trust-boundary mypy, isolated-wheel import, CLI smoke checks, pre-commit, exact tracked-file secret scanning, the sensitive-file guard, dependency audit, fresh competition-contract comparison, and clean staged-tree checks. The replacement freeze and remote evidence remain pending. |
+| Executed privately on Kaggle | **Run A attempted and failed early.** It stopped before DICOM preprocessing and visual-QA generation with the sanitized code `source_manifest_version_mismatch`. Run B was not started. No Chunk 5 execution evidence satisfies the exit gate. |
+| Remotely tested | The predecessor private inputs authenticated sufficiently to launch Run A, but the run failed closed when the consumer compared a governance audit ID with the producer execution-ID namespace. No deterministic comparison, benchmark acceptance, review plan, or human review exists. |
+| Merge-ready | **No.** A replacement freeze and immutable bundle, successful Run A and Run B, comparison, human review, final remote validation, push, and exact-head hosted CI remain pending. |
 | Merged into `main` | **No.** Merge is outside this checkpoint and requires explicit human approval. |
 
 ## Corrections to the prior status
@@ -59,27 +59,30 @@ Updated: 2026-08-09 (Chunk 5 local implementation checkpoint)
   authenticated official Kaggle CLI/API fallback was used under the project tool order.
 - The live rules, data, evaluation, timeline, runtime, submission, external-asset, team, license,
   sharing, official discussion clarifications, and MIRA license were refreshed at
-  `2026-08-09T03:00:03Z`.
+  `2026-08-10T07:19:35Z`.
 - The material contract payload and official-source fingerprints showed **no material drift** from
   the prior canonical contract. The unresolved contradictions and conservative defaults remain in
   `docs/competition_contract/contract.yaml`.
-- Kaggle identity verification remains `incomplete_blocking`. A fresh authenticated read-only check
-  at `2026-08-09T02:44:40Z` confirmed zero submissions. No team action, rules action, public
+- Kaggle identity verification remains `incomplete_blocking`. The authenticated read-only refresh
+  at `2026-08-10T07:19:35Z` confirmed zero submissions. No team action, rules action, public
   release, or model action occurred.
 
 ## Remaining checkpoint work
 
-1. Obtain explicit approval for the local implementation-freeze commit, then freeze the exact clean
-   commit and build one immutable offline private bundle. Bind it
+1. Create a new exact clean implementation-freeze commit and immutable offline private bundle from
+   the fully gated 12-file staged candidate.
+   Freeze `a5a44ac` and bundle `7cf43...` remain superseded-pending and must not be reused as current
+   evidence. Bind the replacement
    cryptographically to the completed `audit-0002-manifest-remediation` source-manifest kernel and
    its private `manifest-v2` outputs; reject the superseded audit.
 2. Authenticate private/offline/version-1 metadata, exact input versions, expected file listings,
    hashes, and version-2 absence before each execution.
-3. Run distinct full private Run A and Run B kernels over the entire authorized training set. Every
-   discovered study, series, and file must reconcile to an explicit terminal state; record complete
-   private performance and disposition evidence. Each run must also exactly reconcile train-series
-   membership, `source_row_count`, organizer plane/fluid/fat flags, and every regular DICOM's keyed
-   relative identity, byte size, and raw digest against authenticated `manifest-v2`.
+3. Retry full private Run A from the replacement bundle and validate it completely before starting
+   Run B. Then run the distinct full private Run B kernel over the entire authorized training set.
+   Every discovered study, series, and file must reconcile to an explicit terminal state; record
+   complete private performance and disposition evidence. Each run must also exactly reconcile
+   train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every regular
+   DICOM's keyed relative identity, byte size, and raw digest against authenticated `manifest-v2`.
 4. Run the separate comparator and require exact equality for every declared deterministic
    artifact and metric. Investigate every mismatch; no unexplained mismatch may pass.
 5. Select `qa-cohort-selection-v2` only after the full pass, covering every materially represented

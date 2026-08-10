@@ -1,5 +1,23 @@
 # Competition Contract Change Log
 
+## 2026-08-10T07:19:35Z
+
+Chunk 5 recovery refresh before the replacement freeze, private bundle, and Run A retry:
+
+- The authenticated official API returned exactly one entered competition match, the unchanged
+  2026-10-22T23:59:00Z deadline, five submissions currently available, and zero submissions.
+- All nine official competition-page content fingerprints and the incorporated MIRA PDF
+  fingerprint still match the immediately previous snapshot and canonical contract exactly.
+- The five official host clarification topics remain available.
+- Rules, data interface, evaluation, timeline, runtime, submission/team limits, external-asset
+  requirements, sharing restrictions, licensing, and winner obligations have no material drift.
+- Identity verification remains unavailable from the API, so the last directly observed
+  incomplete state continues to block submissions and prize eligibility, not the authorized
+  private Chunk 5 preprocessing/QA compute.
+- The replacement private Run A/Run B and human-QA preparation remain allowed under the existing
+  privacy and fail-closed DICOM controls. No rules acceptance, submission, team action, data
+  preview, compute launch, publication, or remote mutation occurred during this refresh.
+
 ## 2026-08-09T03:00:03Z
 
 Chunk 5 preflight before deterministic DICOM preprocessing implementation and private QA:
