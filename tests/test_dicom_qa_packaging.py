@@ -697,7 +697,7 @@ def test_private_reconstruction_ledger_is_complete_and_excludes_tensor_values() 
 
 def _remote_records(runner: Any) -> list[dict[str, object]]:
     records = [
-        {"name": f"{runner.OUTPUT_DIRECTORY}/{name}", "bytes": 100}
+        {"name": f"{runner.OUTPUT_DIRECTORY}/{name}", "size": 896}
         for name in (*runner.PRIVATE_OUTPUT_POLICY, *runner.DOWNLOADABLE_OUTPUT_POLICY)
     ]
     suffixes = (
@@ -716,7 +716,7 @@ def _remote_records(runner: Any) -> list[dict[str, object]]:
                         f"{runner.OUTPUT_DIRECTORY}/{runner.PRIVATE_REVIEW_DIRECTORY}/"
                         f"case_{case:06d}_series_000_{suffix}"
                     ),
-                    "bytes": 100,
+                    "size": 896,
                 }
             )
     return records
@@ -733,7 +733,7 @@ def test_paginated_remote_listing_checks_visible_private_review_without_download
 
     validator.validate_remote_listing((first, second), run_config, runner)
 
-    records.append({"name": "dicom-qa-output/private-review/raw.dcm", "bytes": 1})
+    records.append({"name": "dicom-qa-output/private-review/raw.dcm", "size": 896})
     second = json.dumps(records[300:]).encode()
     with pytest.raises(validator.OutputValidationError, match="remote_review_name_invalid"):
         validator.validate_remote_listing((first, second), run_config, runner)
@@ -1198,6 +1198,52 @@ def test_duplicate_json_keys_and_noncanonical_policy_are_rejected() -> None:
         )
     with pytest.raises(validator.OutputValidationError, match="remote_listing_invalid"):
         validator._listing_page(b'[{"name":"safe.json","name":"private.dcm","size":1}]')
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {},
+        {"size": None},
+        {"size": -1},
+        {"size": 0},
+        {"size": "896"},
+        {"size": "8x96"},
+        {"size": "896 XB"},
+        {"size": "1 KB"},
+        {"size": 896.0},
+        {"size": float("nan")},
+        {"size": float("inf")},
+        {"size": True},
+        {"size": 896, "unit": "KB"},
+        {"size": 896, "sizeUnit": "KiB"},
+        {"bytes": 896},
+        {"totalBytes": 896},
+        {"size": 896, "bytes": 32},
+    ],
+)
+def test_kernel_listing_size_rejects_ambiguous_or_non_integer_values(
+    record: dict[str, object],
+) -> None:
+    record = {"name": "safe.json", **record}
+    with pytest.raises(validator.OutputValidationError, match="remote_size"):
+        validator._kernel_listing_records((json.dumps([record]).encode(),))
+
+
+def test_kernel_listing_rejects_mixed_size_schemas() -> None:
+    records = [
+        {"name": "first.json", "size": 896},
+        {"name": "second.json", "bytes": 32},
+    ]
+    with pytest.raises(validator.OutputValidationError, match="remote_size"):
+        validator._kernel_listing_records((json.dumps(records).encode(),))
+
+
+@pytest.mark.parametrize("value", (1 << 63, 10**100))
+def test_kernel_listing_rejects_wrong_or_overflow_numeric_size(value: int) -> None:
+    record = {"name": "safe.json", "size": value}
+    with pytest.raises(validator.OutputValidationError, match="remote_size_invalid"):
+        validator._kernel_listing_records((json.dumps([record]).encode(),))
 
 
 def test_authenticated_listing_handles_real_cli_pagination_prefix(
@@ -1735,8 +1781,20 @@ def test_unversioned_kernel_source_rejects_missing_stale_or_conflicting_source(
         )
 
 
-def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "valid",
+        "wrong_source_hash",
+        "wrong_version",
+        "wrong_identity",
+        "public",
+        "internet_enabled",
+        "incomplete_status",
+    ),
+)
+def test_real_size_listing_never_compensates_for_wrong_authentication_factor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
 ) -> None:
     bundle, result = _assembled(tmp_path)
     run_config = json.loads((bundle / "dataset/run-config.json").read_text())
@@ -1745,6 +1803,21 @@ def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
     source = (bundle / "kernel-a/run.py").read_bytes()
     ref = result["run_a_ref"]
     metadata.update({"id_no": 1729, "keywords": [], "docker_image": ""})
+    api_payload = _kernel_api_payload(ref)
+    pulled_source = source
+    status = "KernelWorkerStatus.COMPLETE"
+    if mutation == "wrong_source_hash":
+        pulled_source += b"\n"
+    elif mutation == "wrong_version":
+        api_payload["current_version_number"] = 2
+    elif mutation == "wrong_identity":
+        api_payload["ref"] = "test-owner/other-kernel"
+    elif mutation == "public":
+        api_payload["is_private"] = False
+    elif mutation == "internet_enabled":
+        api_payload["enable_internet"] = True
+    elif mutation == "incomplete_status":
+        status = "KernelWorkerStatus.RUNNING"
     api_calls: list[list[str]] = []
     cli_calls: list[tuple[str, ...]] = []
 
@@ -1752,7 +1825,7 @@ def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
         api_calls.append(arguments)
         return SimpleNamespace(
             returncode=0,
-            stdout=validator._canonical_json_bytes(_kernel_api_payload(ref)),
+            stdout=validator._canonical_json_bytes(api_payload),
             stderr=b"",
         )
 
@@ -1760,11 +1833,11 @@ def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
         cli_calls.append(arguments)
         if arguments[:2] == ("kernels", "status"):
             assert arguments[2] == ref
-            return f'{ref} has status "KernelWorkerStatus.COMPLETE"\n'.encode()
+            return f'{ref} has status "{status}"\n'.encode()
         if arguments[:2] == ("kernels", "pull"):
             assert arguments[2] == ref
             target = Path(arguments[arguments.index("--path") + 1])
-            target.write_bytes(source)
+            target.write_bytes(pulled_source)
             (target.parent / "kernel-metadata.json").write_text(json.dumps(metadata))
             return b"source_pulled\n"
         raise AssertionError("unexpected CLI command")
@@ -1774,19 +1847,28 @@ def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
     )
     monkeypatch.setattr(validator.subprocess, "run", fake_run)
     monkeypatch.setattr(validator, "_run_kaggle_cli", fake_cli)
-    monkeypatch.setattr(validator, "_authenticated_listing", lambda *_args: (b"[]",))
-    monkeypatch.setattr(validator, "validate_remote_listing", lambda *_args: None)
+    monkeypatch.setattr(
+        validator,
+        "_authenticated_listing",
+        lambda *_args: (json.dumps(_remote_records(_runner())).encode(),),
+    )
     monkeypatch.setattr(validator, "_retrieve_safe_qa_output", lambda *_args: None)
 
-    validator._authenticate_qa_run(
-        ref=ref,
-        dataset_ref=result["dataset_ref"],
-        source_manifest_ref=result["source_manifest_kernel_ref"],
-        competition_slug=packager.COMPETITION_SLUG,
-        run_config=run_config,
-        runner=_runner(),
-        manifest=manifest,
-    )
+    arguments = {
+        "ref": ref,
+        "dataset_ref": result["dataset_ref"],
+        "source_manifest_ref": result["source_manifest_kernel_ref"],
+        "competition_slug": packager.COMPETITION_SLUG,
+        "run_config": run_config,
+        "runner": _runner(),
+        "manifest": manifest,
+    }
+    if mutation == "valid":
+        validator._authenticate_qa_run(**arguments)
+    else:
+        with pytest.raises(validator.OutputValidationError):
+            validator._authenticate_qa_run(**arguments)
+        return
 
     assert len(api_calls) == 2
     assert all(all(ref not in argument for argument in call) for call in api_calls)
@@ -1798,10 +1880,10 @@ def test_observed_api_v1_unversioned_source_and_cli_enum_authenticate_together(
     "records",
     [
         [],
-        [{"name": "unexpected.json", "bytes": 1}],
+        [{"name": "unexpected.json", "size": 896}],
         [
-            {"name": "private_review_plan.json", "bytes": 100},
-            {"name": "unexpected.json", "bytes": 1},
+            {"name": "private_review_plan.json", "size": 896},
+            {"name": "unexpected.json", "size": 896},
         ],
     ],
 )
@@ -1823,13 +1905,13 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
     records = [
         {
             "name": f"{comparator.OUTPUT_DIRECTORY}/{comparator.PRIVATE_OUTPUT}",
-            "bytes": 100,
+            "size": 896,
         },
         {
             "name": f"{comparator.OUTPUT_DIRECTORY}/{comparator.SANITIZED_OUTPUT}",
-            "bytes": 100,
+            "size": 896,
         },
-        {"name": "rsna-knee-dqa-cmp.log", "bytes": 100},
+        {"name": "rsna-knee-dqa-cmp.log", "size": 896},
     ]
     validator._validate_comparison_listing((json.dumps(records).encode(),), runner, comparator)
     summary = packager._canonical_json_bytes(
@@ -1848,7 +1930,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
     )
     validator._validate_comparison_summary(summary)
 
-    records.append({"name": "unexpected.json", "bytes": 1})
+    records.append({"name": "unexpected.json", "size": 896})
     with pytest.raises(validator.OutputValidationError, match="remote_name_not_allowed"):
         validator._validate_comparison_listing((json.dumps(records).encode(),), runner, comparator)
     for field in (
@@ -2122,29 +2204,34 @@ def test_workflow_identity_rejects_manifest_cohort_or_contract_drift(
         validator._validated_workflow_identity(altered, manifest, finalizer)
 
 
-def test_source_manifest_and_review_session_listings_are_exact(tmp_path: Path) -> None:
+def test_kernel_listing_size_is_strictly_parsed_as_an_opaque_metric(tmp_path: Path) -> None:
     bundle, result = _assembled(tmp_path)
     run_config = json.loads((bundle / "dataset/run-config.json").read_text())
     source = run_config["input_identity"]["source_manifest"]
     private = {
         record["path"]: record.get("exact_bytes", 100) for record in source["private_output_policy"]
     }
-    records = [{"name": name, "bytes": size} for name, size in private.items()] + [
-        {"name": name, "bytes": 100} for name in validator.SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS
+    # The observed CLI 2.2.4 value is an opaque kernel-listing metric: a
+    # contractually 32-byte key reports 896, so it must not be compared as bytes.
+    records = [{"name": name, "size": 896} for name in private] + [
+        {"name": name, "size": 896} for name in validator.SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS
     ]
+    parsed = validator._kernel_listing_records((json.dumps(records).encode(),))
+    assert [size for _record, size in parsed] == [896] * len(records)
     validator._validate_source_manifest_listing((json.dumps(records).encode(),), source)
-    records.append({"name": "audit-output/unexpected.json", "bytes": 1})
+
+    records.append({"name": "audit-output/unexpected.json", "size": 896})
     with pytest.raises(validator.OutputValidationError, match="remote_name_not_allowed"):
         validator._validate_source_manifest_listing((json.dumps(records).encode(),), source)
 
     session_records = [
-        {"name": validator.REVIEW_SESSION_LEDGER, "bytes": 100},
-        {"name": "rsna-knee-dqa-review.log", "bytes": 100},
+        {"name": validator.REVIEW_SESSION_LEDGER, "size": 896},
+        {"name": "rsna-knee-dqa-review.log", "size": 896},
     ]
     validator._validate_review_session_listing((json.dumps(session_records).encode(),))
     with pytest.raises(validator.OutputValidationError, match="remote_required_output_missing"):
         validator._validate_review_session_listing((b"[]",))
-    session_records.append({"name": "private_review_plan.json", "bytes": 1})
+    session_records.append({"name": "private_review_plan.json", "size": 896})
     with pytest.raises(validator.OutputValidationError, match="remote_name_not_allowed"):
         validator._validate_review_session_listing((json.dumps(session_records).encode(),))
 
@@ -2206,7 +2293,7 @@ def test_review_session_authentication_pulls_source_only_before_and_after(
 
     def listing(_ref: str, _version: int) -> tuple[bytes, ...]:
         events.append("listing")
-        return (json.dumps([{"name": validator.REVIEW_SESSION_LEDGER, "bytes": 100}]).encode(),)
+        return (json.dumps([{"name": validator.REVIEW_SESSION_LEDGER, "size": 896}]).encode(),)
 
     def source_pull(*_args: object, **_kwargs: object) -> dict[str, object]:
         events.append("pull")
@@ -2466,11 +2553,11 @@ def test_finalizer_listing_requires_final_performance_artifact() -> None:
     records = [
         {
             "name": f"{finalizer.OUTPUT_DIRECTORY}/{finalizer.SANITIZED_SUMMARY}",
-            "bytes": 100,
+            "size": 896,
         },
         {
             "name": f"{finalizer.OUTPUT_DIRECTORY}/{finalizer.PRIVATE_COMPLETION}",
-            "bytes": 100,
+            "size": 896,
         },
     ]
     with pytest.raises(validator.OutputValidationError, match="remote_required_output_missing"):
@@ -2479,7 +2566,7 @@ def test_finalizer_listing_requires_final_performance_artifact() -> None:
     records.append(
         {
             "name": f"{finalizer.OUTPUT_DIRECTORY}/{finalizer.SANITIZED_PERFORMANCE}",
-            "bytes": 100,
+            "size": 896,
         }
     )
     validator._validate_review_listing((json.dumps(records).encode(),), finalizer)

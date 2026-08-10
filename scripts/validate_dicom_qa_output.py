@@ -21,6 +21,7 @@ from typing import Any, Final, cast
 
 MAX_POLICY_BYTES: Final = 2 * 1024 * 1024
 MAX_REMOTE_RECORDS: Final = 20_100
+MAX_KERNEL_LISTING_SIZE: Final = (1 << 63) - 1
 MAX_DATASET_CONTENT_FILES: Final = 512
 MAX_DATASET_CONTENT_BYTES: Final = 128 * 1024 * 1024
 MAX_DATASET_CONTENT_SECONDS: Final = 900.0
@@ -447,6 +448,26 @@ def _remote_bytes(record: Mapping[str, Any]) -> int:
     return value
 
 
+def _kernel_listing_records(
+    pages: Sequence[bytes],
+) -> list[tuple[dict[str, Any], int]]:
+    records = _listing_records(pages)
+    parsed: list[tuple[dict[str, Any], int]] = []
+    for record in records:
+        fields = [key for key in ("totalBytes", "bytes", "size") if key in record]
+        if fields != ["size"]:
+            raise OutputValidationError("remote_size_unavailable")
+        if any(key in record for key in ("unit", "units", "sizeUnit", "size_unit")):
+            raise OutputValidationError("remote_size_invalid")
+        value = record["size"]
+        if type(value) is not int or not 0 < value <= MAX_KERNEL_LISTING_SIZE:
+            raise OutputValidationError("remote_size_invalid")
+        parsed.append((record, value))
+    # Kaggle CLI 2.2.4 kernel listings expose `size` as an opaque metric, not
+    # logical bytes. Pinned producers/consumers enforce actual lengths and hashes.
+    return parsed
+
+
 def _canonical_remote_name(name: str, runner: ModuleType) -> str:
     prefix = f"{runner.OUTPUT_DIRECTORY}/"
     if name.startswith(prefix):
@@ -459,9 +480,9 @@ def _canonical_remote_name(name: str, runner: ModuleType) -> str:
 
 
 def validate_remote_listing(
-    pages: Sequence[bytes], run_config: Mapping[str, Any], runner: ModuleType
+    pages: Sequence[bytes], _run_config: Mapping[str, Any], runner: ModuleType
 ) -> None:
-    records = _listing_records(pages)
+    records = _kernel_listing_records(pages)
     prefix = f"{runner.OUTPUT_DIRECTORY}/"
     required_fixed = {
         *(prefix + name for name in runner.PRIVATE_OUTPUT_POLICY),
@@ -469,9 +490,7 @@ def validate_remote_listing(
     }
     observed: set[str] = set()
     review_groups: dict[str, set[str]] = defaultdict(set)
-    review_total = 0
     log_count = 0
-    total = 0
     required_suffixes = {
         "contact.png",
         "histogram.png",
@@ -480,41 +499,26 @@ def validate_remote_listing(
         "review.json",
         "metadata.json",
     }
-    for record in records:
+    for record, _size in records:
         raw_name = _safe_remote_name(record.get("name"))
         name = _canonical_remote_name(raw_name, runner)
-        size = _remote_bytes(record)
         if name in observed:
             raise OutputValidationError("remote_duplicate_name")
         observed.add(name)
-        total += size
         if name in required_fixed:
-            basename = name.removeprefix(prefix)
-            maximum = (
-                runner.PRIVATE_OUTPUT_POLICY[basename]
-                if basename in runner.PRIVATE_OUTPUT_POLICY
-                else runner.DOWNLOADABLE_OUTPUT_POLICY[basename][1]
-            )
-            if size > maximum:
-                raise OutputValidationError("remote_size_invalid")
             continue
         review_prefix = f"{prefix}{runner.PRIVATE_REVIEW_DIRECTORY}/"
         if name.startswith(review_prefix):
             basename = name.removeprefix(review_prefix)
             if re.fullmatch(runner.PRIVATE_REVIEW_PATTERN, basename) is None:
                 raise OutputValidationError("remote_review_name_invalid")
-            if size > runner.PRIVATE_REVIEW_MAX_FILE_BYTES:
-                raise OutputValidationError("remote_size_invalid")
             match = re.fullmatch(r"(case_([0-9]{6})_series_([0-9]{3}))_(.+)", basename)
             if match is None or int(match.group(2)) >= runner.MAX_TARGET_STUDIES:
                 raise OutputValidationError("remote_review_name_invalid")
             review_groups[match.group(1)].add(match.group(4))
-            review_total += size
             continue
         if "/" not in raw_name and re.fullmatch(runner.SESSION_LOG_PATTERN, raw_name):
             log_count += 1
-            if size > 2 * 1024 * 1024:
-                raise OutputValidationError("remote_size_invalid")
             continue
         raise OutputValidationError("remote_name_not_allowed")
     if not required_fixed.issubset(observed) or log_count > 1:
@@ -525,43 +529,33 @@ def validate_remote_listing(
         or any(not required_suffixes.issubset(suffixes) for suffixes in review_groups.values())
         or sum(len(suffixes) for suffixes in review_groups.values())
         > runner.PRIVATE_REVIEW_MAX_FILES
-        or review_total > runner.PRIVATE_REVIEW_MAX_TOTAL_BYTES
-        or total > run_config["output_policy"]["max_remote_bytes"]
     ):
         raise OutputValidationError("remote_review_output_incomplete")
 
 
 def _validate_source_manifest_listing(pages: Sequence[bytes], identity: Mapping[str, Any]) -> None:
     expected_private = _source_manifest_output_policy(identity)
-    expected = {
-        **{name: maximum for name, (maximum, _exact) in expected_private.items()},
-        **SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS,
-    }
+    expected = set(expected_private) | set(SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS)
     observed: set[str] = set()
     log_count = 0
-    for record in _listing_records(pages):
+    records = _kernel_listing_records(pages)
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
-        size = _remote_bytes(record)
         if name.startswith("audit-output/"):
             canonical = name
         elif f"audit-output/{name}" in expected:
             canonical = f"audit-output/{name}"
         elif "/" not in name and SAFE_LOG_PATTERN.fullmatch(name):
             log_count += 1
-            if size > 2 * 1024**2:
-                raise OutputValidationError("remote_size_invalid")
             continue
         else:
             raise OutputValidationError("remote_name_not_allowed")
         if canonical not in expected:
             raise OutputValidationError("remote_name_not_allowed")
-        if canonical in observed or size > expected[canonical]:
-            raise OutputValidationError("remote_size_invalid")
-        exact = expected_private.get(canonical, (0, None))[1]
-        if exact is not None and size != exact:
+        if canonical in observed:
             raise OutputValidationError("remote_size_invalid")
         observed.add(canonical)
-    if observed != set(expected) or log_count > 1:
+    if observed != expected or log_count > 1:
         raise OutputValidationError("remote_required_output_missing")
 
 
@@ -1723,21 +1717,18 @@ def validate_local_output(
 def _validate_template_listing(
     pages: Sequence[bytes], runner: ModuleType, finalizer: ModuleType
 ) -> None:
-    records = _listing_records(pages)
+    records = _kernel_listing_records(pages)
     expected = f"{finalizer.TEMPLATE_OUTPUT_DIRECTORY}/{finalizer.REVIEW_PLAN_BASENAME}"
     observed_plan = False
     log_count = 0
-    for record in records:
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
-        size = _remote_bytes(record)
         if name in {expected, str(finalizer.REVIEW_PLAN_BASENAME)}:
-            if observed_plan or size > finalizer.MAX_LEDGER_BYTES:
+            if observed_plan:
                 raise OutputValidationError("remote_size_invalid")
             observed_plan = True
         elif "/" not in name and re.fullmatch(runner.SESSION_LOG_PATTERN, name):
             log_count += 1
-            if size > 2 * 1024 * 1024:
-                raise OutputValidationError("remote_size_invalid")
         else:
             raise OutputValidationError("remote_name_not_allowed")
     if not observed_plan or log_count > 1:
@@ -1745,31 +1736,28 @@ def _validate_template_listing(
 
 
 def _validate_optional_log_only_listing(pages: Sequence[bytes]) -> None:
-    records = _listing_records(pages)
+    records = _kernel_listing_records(pages)
     if len(records) > 1:
         raise OutputValidationError("remote_size_invalid")
-    for record in records:
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
-        size = _remote_bytes(record)
         if "/" in name or SAFE_LOG_PATTERN.fullmatch(name) is None:
             raise OutputValidationError("remote_name_not_allowed")
-        if size > 2 * 1024**2:
-            raise OutputValidationError("remote_size_invalid")
 
 
 def _validate_review_session_listing(pages: Sequence[bytes]) -> None:
+    records = _kernel_listing_records(pages)
     ledger_seen = False
     log_count = 0
-    for record in _listing_records(pages):
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
-        size = _remote_bytes(record)
         if name == REVIEW_SESSION_LEDGER:
-            if ledger_seen or size > REVIEW_SESSION_MAX_LEDGER_BYTES:
+            if ledger_seen:
                 raise OutputValidationError("remote_size_invalid")
             ledger_seen = True
         elif "/" not in name and SAFE_LOG_PATTERN.fullmatch(name):
             log_count += 1
-            if log_count > 1 or size > 2 * 1024**2:
+            if log_count > 1:
                 raise OutputValidationError("remote_size_invalid")
         else:
             raise OutputValidationError("remote_name_not_allowed")
@@ -1780,7 +1768,7 @@ def _validate_review_session_listing(pages: Sequence[bytes]) -> None:
 def _validate_comparison_listing(
     pages: Sequence[bytes], runner: ModuleType, comparator: ModuleType
 ) -> None:
-    records = _listing_records(pages)
+    records = _kernel_listing_records(pages)
     prefix = f"{comparator.OUTPUT_DIRECTORY}/"
     required = {
         prefix + comparator.PRIVATE_OUTPUT: 64 * 1024,
@@ -1788,21 +1776,18 @@ def _validate_comparison_listing(
     }
     observed: set[str] = set()
     log_count = 0
-    for record in records:
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
-        size = _remote_bytes(record)
         if name in required:
             canonical = name
         elif name in (comparator.PRIVATE_OUTPUT, comparator.SANITIZED_OUTPUT):
             canonical = prefix + name
         elif "/" not in name and re.fullmatch(runner.SESSION_LOG_PATTERN, name):
             log_count += 1
-            if size > 2 * 1024 * 1024:
-                raise OutputValidationError("remote_size_invalid")
             continue
         else:
             raise OutputValidationError("remote_name_not_allowed")
-        if canonical in observed or size > required[canonical]:
+        if canonical in observed:
             raise OutputValidationError("remote_size_invalid")
         observed.add(canonical)
     if observed != set(required) or log_count > 1:
@@ -1865,7 +1850,7 @@ def _retrieve_comparison_summary(ref: str, comparator: ModuleType) -> None:
 
 
 def _validate_review_listing(pages: Sequence[bytes], finalizer: ModuleType) -> None:
-    records = _listing_records(pages)
+    records = _kernel_listing_records(pages)
     prefix = f"{finalizer.OUTPUT_DIRECTORY}/"
     required = {
         prefix + finalizer.SANITIZED_SUMMARY: finalizer.MAX_SUMMARY_BYTES,
@@ -1874,7 +1859,7 @@ def _validate_review_listing(pages: Sequence[bytes], finalizer: ModuleType) -> N
     }
     observed: set[str] = set()
     log_count = 0
-    for record in records:
+    for record, _size in records:
         name = _safe_remote_name(record.get("name"))
         if name in required:
             canonical = name
@@ -1886,12 +1871,10 @@ def _validate_review_listing(pages: Sequence[bytes], finalizer: ModuleType) -> N
             canonical = prefix + name
         elif "/" not in name and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,99}\.log", name):
             log_count += 1
-            if _remote_bytes(record) > 2 * 1024 * 1024:
-                raise OutputValidationError("remote_size_invalid")
             continue
         else:
             raise OutputValidationError("remote_name_not_allowed")
-        if canonical in observed or _remote_bytes(record) > required[canonical]:
+        if canonical in observed:
             raise OutputValidationError("remote_size_invalid")
         observed.add(canonical)
     if observed != set(required) or log_count > 1:
