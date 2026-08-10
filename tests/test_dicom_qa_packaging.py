@@ -235,7 +235,7 @@ def _bundle_inputs(tmp_path: Path) -> dict[str, Any]:
         json.dumps(
             {
                 "identity": {"slug": packager.COMPETITION_SLUG},
-                "runtime": {"internet_enabled": False},
+                "runtime": {"internet_enabled": False, "cpu_limit_seconds": 32_400},
             }
         )
     )
@@ -325,9 +325,14 @@ def test_bundle_is_deterministic_private_offline_and_identity_bound(tmp_path: Pa
     assert run_config["runtime"] == {
         "internet": False,
         "accelerator": "cpu",
-        "self_deadline_seconds": 21_600,
-        "outer_kill_seconds": 23_400,
+        "self_deadline_seconds": 27_000,
+        "outer_kill_seconds": 28_800,
     }
+    competition_limit = json.loads((first / "dataset/competition-contract.json").read_text())[
+        "runtime"
+    ]["cpu_limit_seconds"]
+    assert packager.OUTER_KILL_SECONDS - packager.SELF_DEADLINE_SECONDS >= 1_800
+    assert competition_limit - 3_600 >= packager.OUTER_KILL_SECONDS
     assert "orientation_obliquity_profile" in run_config["selection"]["strata"]
     assert "slice_count_profile" in run_config["selection"]["strata"]
     preflight_path = first / "dataset/synthetic-preflight.json"
@@ -1146,6 +1151,31 @@ def test_local_validator_accepts_only_three_sanitized_files(tmp_path: Path) -> N
 
     validator.validate_local_output(output, run_config, runner, manifest)
 
+    session_log = output / "session.log"
+    session_log.write_bytes(
+        b"".join(
+            packager._canonical_json_bytes(event)
+            for event in [
+                {"event": "dicom_qa_started"},
+                *validator._expected_progress_events(runner),
+                {"event": "dicom_qa_complete"},
+            ]
+        )
+    )
+    validator.validate_local_output(output, run_config, runner, manifest)
+    session_log.write_bytes(
+        b"".join(
+            packager._canonical_json_bytes(event)
+            for event in [
+                {"event": "dicom_qa_started"},
+                {"event": "dicom_qa_complete"},
+            ]
+        )
+    )
+    with pytest.raises(validator.OutputValidationError, match="log_completion_invalid"):
+        validator.validate_local_output(output, run_config, runner, manifest)
+    session_log.unlink()
+
     (output / "private_case_index.json").write_text("{}")
     with pytest.raises(validator.OutputValidationError, match="local_output_allowlist_invalid"):
         validator.validate_local_output(output, run_config, runner, manifest)
@@ -1179,14 +1209,67 @@ def test_fd_level_suppression_and_sensitive_download_rejection(
     runner = _runner()
     runner._decoder_preflight()
     with runner._silence_process_output():
+        runner._safe_event("dicom_qa_progress", phase="full_pass", code="q1")
         print("private-marker")
         os.write(1, b"native-private-marker")
         os.write(2, b"native-private-marker")
     stdout, stderr = capfd.readouterr()
-    assert "private-marker" not in stdout + stderr
+    assert stdout == '{"code":"q1","event":"dicom_qa_progress","phase":"full_pass"}\n'
+    assert stderr == ""
 
     with pytest.raises(runner.SafeRunError, match="downloadable_privacy_invalid"):
         runner._scan_downloadable(b"1.2.840.10008.1.2.4.90", "unused-canary")
+
+
+def test_progress_log_requires_an_exact_safe_prefix(tmp_path: Path) -> None:
+    runner = _runner()
+    run_config = {"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}}
+    expected = validator._expected_progress_events(runner)
+    root = tmp_path / "failure"
+    root.mkdir()
+    log = root / "session.log"
+
+    def write(events: list[dict[str, str]]) -> None:
+        log.write_bytes(b"".join(packager._canonical_json_bytes(event) for event in events))
+
+    final = {
+        "event": "dicom_qa_failed",
+        "phase": "processing",
+        "code": "self_deadline_exceeded",
+    }
+    write([{"event": "dicom_qa_started"}, *expected[:4], final])
+    assert validator.validate_failure_log(root, run_config, runner) == (
+        "processing",
+        "self_deadline_exceeded",
+    )
+
+    stdout = b"".join(
+        packager._canonical_json_bytes(event)
+        for event in [{"event": "dicom_qa_started"}, *expected[:4], final]
+    ).decode("ascii")
+    wrapper = [
+        {"stream_name": "stderr", "time": 1, "data": "platform warning\n"},
+        {"stream_name": "stdout", "time": 2, "data": stdout},
+    ]
+    log.write_text(json.dumps(wrapper))
+    assert validator.validate_failure_log(root, run_config, runner) == (
+        "processing",
+        "self_deadline_exceeded",
+    )
+    wrapper[0]["data"] = run_config["privacy"]["canary"]
+    log.write_text(json.dumps(wrapper))
+    with pytest.raises(validator.OutputValidationError, match="log_privacy_invalid"):
+        validator.validate_failure_log(root, run_config, runner)
+
+    invalid_progress = (
+        expected[1:4],
+        [expected[1], expected[0]],
+        [*expected, expected[-1]],
+    )
+    for events in invalid_progress:
+        write([{"event": "dicom_qa_started"}, *events, final])
+        with pytest.raises(validator.OutputValidationError, match="failure_log_completion_invalid"):
+            validator.validate_failure_log(root, run_config, runner)
 
 
 def test_duplicate_json_keys_and_noncanonical_policy_are_rejected() -> None:

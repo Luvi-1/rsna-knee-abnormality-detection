@@ -14,6 +14,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
+from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from io import BytesIO
 from math import acos, degrees, isfinite
@@ -837,6 +838,7 @@ def _output_checksum(tensor: ModelTensor, metadata: object) -> str:
     return digest.hexdigest()
 
 
+@lru_cache(maxsize=1)
 def _runtime_library_versions() -> tuple[tuple[str, str], ...]:
     package_names = (
         "numpy",

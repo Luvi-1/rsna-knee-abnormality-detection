@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
+Updated: 2026-08-10 (Chunk 5 Run A performance-recovery checkpoint)
 
 ## Current checkpoint
 
@@ -21,10 +21,10 @@ Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
 
 | State | Current evidence |
 |---|---|
-| Implemented | Core strict decode/geometry/preprocessing, the six-slot system plus additional/missing handling, private QA rendering, benchmark support, full-run orchestration, distinct Run A/Run B packaging, exact comparison, post-full-pass cohort planning, private review UI/session finalization, and disclosure-controlled validation are implemented. The second source-manifest compatibility correction is present only in the working tree. Freezes `a5a44ac` and `e6e5b35` and bundles `7cf43...` and `3a361...` are superseded-pending. |
-| Locally tested | **Complete second replacement-candidate gate passed.** The exact seven-file staged candidate passed 405 tests, Ruff lint/format, source and strict trust-boundary mypy, isolated-wheel import, CLI smoke checks, pre-commit, exact tracked-file secret scanning, the sensitive-file guard, dependency audit, fresh contract-schema validation plus independent material-drift comparison, and clean staged-tree checks. The final exact-set gate must be repeated after this evidence update. |
-| Executed privately on Kaggle | **Two Run A attempts failed early and closed.** The first reported `source_manifest_version_mismatch`; the replacement reported `source_manifest_input_invalid`. Both stopped before DICOM preprocessing and visual-QA generation. Run B was not started. No Chunk 5 execution evidence satisfies the exit gate. |
-| Remotely tested | The `e6e5b35` private inputs passed the authenticated private/offline/version-1 input gate. Run A then failed because the consumer queried a nonexistent source-manifest column; no deterministic comparison, benchmark acceptance, review plan, or human review exists. |
+| Implemented | Core strict decode/geometry/preprocessing, six-slot assignment, private QA, benchmarks, full-run orchestration, distinct Run A/Run B packaging, exact comparison, cohort planning, private review finalization, and disclosure-controlled validation are implemented. The working-tree performance recovery streams the canonical NPY checksum during its single ephemeral write, caches invariant package-version provenance once per process, emits only a fixed safe phase sequence, runs an authenticated source-manifest-stratified fail-fast throughput projection before the full pass, and bounds execution at 27,000 seconds self / 28,800 seconds outer under the 32,400-second competition ceiling. Freezes `a5a44ac`, `e6e5b35`, and `60df41c` and bundles `7cf43...`, `3a361...`, and `3dc575...` are superseded-pending. |
+| Locally tested | The source-schema correction's exact seven-file candidate passed the complete 405-test gate before freeze `60df41c`. The later performance-recovery working tree has focused regression evidence only. Its complete exact-file gate, clean freeze, immutable bundle, and authenticated private retry are pending; the prior gate does not cover these new bytes. |
+| Executed privately on Kaggle | **Three Run A attempts are terminal failed.** The first reported `source_manifest_version_mismatch`; the second reported `source_manifest_input_invalid`; retry `r3` authenticated its inputs, entered processing, and failed closed with `self_deadline_exceeded` at 21,664 seconds. Run B was not started. No incomplete run satisfies the Chunk 5 exit gate. |
+| Remotely tested | Freeze `60df41c` / bundle `3dc575...` passed the authenticated private/offline/version-1 input gate. Run A `r3` then exhausted the old 21,600-second self-deadline during processing; no completed full-pass evidence, deterministic comparison, accepted benchmark, review plan, or human review exists. |
 | Merge-ready | **No.** A newly gated freeze and immutable bundle, successful Run A and Run B, comparison, human review, final remote validation, push, and exact-head hosted CI remain pending. |
 | Merged into `main` | **No.** Merge is outside this checkpoint and requires explicit human approval. |
 
@@ -69,16 +69,18 @@ Updated: 2026-08-10 (Chunk 5 Run A recovery checkpoint)
 
 ## Remaining checkpoint work
 
-1. Run the complete gate over the second source-manifest recovery candidate, then create a new exact
+1. Run the complete gate over the performance-recovery candidate, then create a new exact
    clean implementation-freeze commit and immutable offline private bundle.
-   Freezes `a5a44ac` and `e6e5b35` and bundles `7cf43...` and `3a361...` remain superseded-pending and
-   must not be reused as current evidence. Bind the replacement
+   Freezes `a5a44ac`, `e6e5b35`, and `60df41c` and bundles `7cf43...`, `3a361...`, and `3dc575...`
+   remain superseded-pending and must not be reused as current evidence. Bind the replacement
    cryptographically to the completed `audit-0002-manifest-remediation` source-manifest kernel and
    its private `manifest-v2` outputs; reject the superseded audit.
 2. Authenticate private/offline/version-1 metadata, exact input versions, expected file listings,
    hashes, and version-2 absence before each execution.
-3. Retry full private Run A from the replacement bundle and validate it completely before starting
-   Run B. Then run the distinct full private Run B kernel over the entire authorized training set.
+3. Retry full private Run A from the replacement bundle. Require the authenticated stratified
+   throughput sample to fit the projected full pass plus the 3,600-second post-pass reserve, then
+   validate the complete run before starting Run B. Then run the distinct full private Run B kernel
+   over the entire authorized training set.
    Every discovered study, series, and file must reconcile to an explicit terminal state; record
    complete private performance and disposition evidence. Each run must also exactly reconcile
    train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every regular

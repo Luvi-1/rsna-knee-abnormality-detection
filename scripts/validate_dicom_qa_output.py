@@ -1572,10 +1572,10 @@ def _validate_qa_exit_gate(summary: Mapping[str, Any]) -> None:
         raise OutputValidationError("dicom_integrity_exit_gate_failed")
 
 
-def _validated_log_events(payload: bytes, runner: ModuleType) -> list[dict[str, str]]:
+def _validated_log_events(payload: bytes, runner: ModuleType, canary: str) -> list[dict[str, str]]:
     try:
         text = payload.decode("utf-8")
-        runner._scan_downloadable(payload, "RSNA_PRIVATE_CANARY_NOT_PRESENT")
+        runner._scan_downloadable(payload, canary)
     except Exception as error:
         raise OutputValidationError("log_privacy_invalid") from error
     try:
@@ -1598,8 +1598,6 @@ def _validated_log_events(payload: bytes, runner: ModuleType) -> list[dict[str, 
                 raise OutputValidationError("log_schema_invalid")
             if record["stream_name"] == "stdout":
                 lines.extend(line for line in record["data"].splitlines() if line)
-            elif record["data"].strip():
-                raise OutputValidationError("log_schema_invalid")
     else:
         lines = text.splitlines()
     events: list[dict[str, str]] = []
@@ -1621,7 +1619,26 @@ def _validated_log_events(payload: bytes, runner: ModuleType) -> list[dict[str, 
     return events
 
 
-def validate_failure_log(root: Path, runner: ModuleType) -> tuple[str, str]:
+def _expected_progress_events(runner: ModuleType) -> list[dict[str, str]]:
+    sequence = getattr(runner, "PROGRESS_EVENT_SEQUENCE", None)
+    if not isinstance(sequence, tuple) or any(
+        not isinstance(item, tuple)
+        or len(item) != 2
+        or any(
+            not isinstance(value, str) or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value) is None
+            for value in item
+        )
+        for item in sequence
+    ):
+        raise OutputValidationError("log_schema_invalid")
+    return [
+        {"event": "dicom_qa_progress", "phase": phase, "code": code} for phase, code in sequence
+    ]
+
+
+def validate_failure_log(
+    root: Path, run_config: Mapping[str, Any], runner: ModuleType
+) -> tuple[str, str]:
     try:
         entries = list(root.iterdir())
     except OSError as error:
@@ -1634,17 +1651,22 @@ def validate_failure_log(root: Path, runner: ModuleType) -> tuple[str, str]:
     ):
         raise OutputValidationError("failure_log_layout_invalid")
     events = _validated_log_events(
-        _read_bounded(entries[0], 2 * 1024 * 1024, "failure_log_size_invalid"), runner
+        _read_bounded(entries[0], 2 * 1024 * 1024, "failure_log_size_invalid"),
+        runner,
+        str(run_config["privacy"]["canary"]),
     )
+    progress = events[1:-1]
+    expected_progress = _expected_progress_events(runner)
     if (
-        len(events) != 2
+        len(events) < 2
         or events[0] != {"event": "dicom_qa_started"}
-        or set(events[1]) != {"event", "phase", "code"}
-        or events[1]["event"] != "dicom_qa_failed"
-        or events[1]["phase"] not in FAILURE_PHASES
+        or set(events[-1]) != {"event", "phase", "code"}
+        or events[-1]["event"] != "dicom_qa_failed"
+        or events[-1]["phase"] not in FAILURE_PHASES
+        or progress != expected_progress[: len(progress)]
     ):
         raise OutputValidationError("failure_log_completion_invalid")
-    return events[1]["phase"], events[1]["code"]
+    return events[-1]["phase"], events[-1]["code"]
 
 
 def validate_local_output(
@@ -1708,8 +1730,14 @@ def validate_local_output(
         raise OutputValidationError("local_output_validation_failed") from error
     for log in logs:
         if _validated_log_events(
-            _read_bounded(log, 2 * 1024 * 1024, "log_size_invalid"), runner
-        ) != [{"event": "dicom_qa_started"}, {"event": "dicom_qa_complete"}]:
+            _read_bounded(log, 2 * 1024 * 1024, "log_size_invalid"),
+            runner,
+            str(run_config["privacy"]["canary"]),
+        ) != [
+            {"event": "dicom_qa_started"},
+            *_expected_progress_events(runner),
+            {"event": "dicom_qa_complete"},
+        ]:
             raise OutputValidationError("log_completion_invalid")
     return cast(dict[str, Any], summary)
 
@@ -1931,7 +1959,9 @@ def _retrieve_review_summary(
         )
         for log in logs:
             events = _validated_log_events(
-                _read_bounded(log, 2 * 1024 * 1024, "log_size_invalid"), runner
+                _read_bounded(log, 2 * 1024 * 1024, "log_size_invalid"),
+                runner,
+                str(run_config["privacy"]["canary"]),
             )
             if events != [
                 {"event": "dicom_qa_review_started"},
@@ -2500,7 +2530,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.workflow_stage == "final":
                 suffix += " determinism=pass human_review=pass"
         elif args.failure_log_dir is not None:
-            failure = validate_failure_log(args.failure_log_dir, runner)
+            failure = validate_failure_log(args.failure_log_dir, run_config, runner)
             mode = "failure"
         else:
             validate_local_output(args.local_dir, run_config, runner, manifest)

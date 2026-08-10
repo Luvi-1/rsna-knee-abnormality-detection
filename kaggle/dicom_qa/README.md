@@ -144,11 +144,19 @@ Push each directory once, in this order, and never repush it as version 2:
 Use the following helper for each named directory. Its protected log is deleted by the existing
 trap and must never be pasted into chat or committed.
 
+The 28,800-second outer timeout preserves 30 minutes after the runner's 27,000-second fail-closed
+self deadline and remains one hour below the verified 32,400-second competition ceiling.
+Before the full pass, the same immutable Run A/B kernel executes the existing source-manifest
+stratified private sample through the production series, cache, and source-reconciliation path. It
+fails with a fixed safe category instead of starting the full pass when the conservative projected
+runtime plus the post-pass reserve cannot fit; it emits no sample membership, counts, paths, or
+identifiers.
+
 ```bash
 push_kernel_v1() {
   local directory="$1"
   KAGGLE_API_TOKEN="$token_value" kaggle kernels push \
-    --path "$bundle_root/$directory" --timeout 23400 \
+    --path "$bundle_root/$directory" --timeout 28800 \
     >"$remote_audit_root/${directory}.push.log" 2>&1
 }
 

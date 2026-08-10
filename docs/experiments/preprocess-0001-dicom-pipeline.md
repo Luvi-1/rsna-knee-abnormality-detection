@@ -1,7 +1,7 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **Run A recovery in progress; complete second replacement-candidate gate passed; private
-execution and visual review not complete; Chunk 5 not passed**.
+Status: **Run A performance recovery in progress; current candidate has focused local evidence
+only; private execution and visual review not complete; Chunk 5 not passed**.
 
 ## Objective
 
@@ -16,7 +16,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; freezes `a5a44ac` and `e6e5b35` are superseded-pending and the next freeze is not yet created |
+| Code | `feat/chunk-5-dicom-pipeline`; freezes `a5a44ac`, `e6e5b35`, and `60df41c` are superseded-pending and the next freeze is not yet created |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -26,7 +26,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | Loss | Not applicable; no labels, optimization, or model exist |
 | Augmentation | None |
 | Seed | `20260809` |
-| Compute estimate | Approval-gated private Kaggle CPU: two complete full-data runs, each bounded by a 21,600-second self-deadline and 23,400-second outer kill, plus representative 1/2/4/8-worker profiles where available; no accelerator or paid external service |
+| Compute estimate | Approval-gated private Kaggle CPU: two complete full-data runs, each admitted only after an authenticated stratified production-path throughput projection and bounded by a 27,000-second self-deadline and 28,800-second outer kill under the verified 32,400-second ceiling, plus representative 1/2/4/8-worker profiles where available; no accelerator or paid external service |
 | Expected information gain | Determine whether the full authorized input can be decoded and transformed with complete terminal accounting, exact independent replay, no systematic anatomical error in stratified human review, and a measured preprocessing contribution compatible with the current runtime ceiling |
 | Internet | Disabled |
 | Training/inference/submission | Forbidden in this run |
@@ -36,9 +36,11 @@ transformation, and produces model-ready tensors without starting ontology, fold
 The ignored private SQLite registry remains the authority for the experiment contract. Freeze
 `a5a44ac` / bundle `7cf43...` failed with `source_manifest_version_mismatch`; replacement freeze
 `e6e5b35` / bundle `3a361...` passed input authentication and then failed with
-`source_manifest_input_invalid`. Both retry rows remain terminal failed and append-only. Run B,
-comparison, human review, and attestation remain `not_started`. The next freeze and bundle are
-pending a new complete local gate; record successful results only after authenticated execution.
+`source_manifest_input_invalid`; freeze `60df41c` / bundle `3dc575...` passed input authentication
+and Run A `r3` later failed with `self_deadline_exceeded`. All three rows remain terminal failed and
+append-only. Run B, comparison, human review, and attestation remain `not_started`. The next freeze
+and bundle are pending a new complete local gate; record successful results only after authenticated
+execution.
 
 ## Frozen controls
 
@@ -62,8 +64,12 @@ pending a new complete local gate; record successful results only after authenti
 
 1. Freeze one clean, dependency-locked, offline bundle and authenticate its cryptographic binding
    to the completed `audit-0002-manifest-remediation` / `manifest-v2` private source outputs.
-2. Execute distinct private Run A and Run B version-1 kernels. Each starts from source, independently
-   processes the entire authorized training set, and records every discovered study, series, and
+2. Before each full pass, execute at most 120 studies from the existing authenticated priority-1
+   stratified source-manifest sample through the production series, cache, and source-reconciliation
+   path. Admit the full pass only when the sample elapsed time plus the larger series- or file-scaled
+   projection plus a 3,600-second post-pass reserve fits the remaining budget. Then execute distinct
+   private Run A and Run B version-1 kernels. Each independently processes the entire authorized
+   training set and records every discovered study, series, and
    DICOM in exactly one terminal state together with private decode, order, slot, quality,
    normalization, sampling, transform, checksum, cache, and failure evidence. Each run also exactly
    reconciles train-series membership, `source_row_count`, and organizer `plane`, `fluid_sensitive`,
@@ -104,10 +110,10 @@ pending a new complete local gate; record successful results only after authenti
   bundle `3a361...`. Both are superseded-pending and cannot support a Chunk 5 pass.
 - The first Run A stopped with `source_manifest_version_mismatch`; the second input chain
   authenticated and Run A stopped with `source_manifest_input_invalid`. Both failed before DICOM
-  preprocessing, QA generation, and benchmarking. Run B was not started. One mode-0600 ignored
-  failure log was retrieved locally for diagnosis; only fixed sanitized runner events were exposed
-  outside that protected metadata boundary. No DICOM, pixel, report, or patient identifier was
-  exported.
+  preprocessing, QA generation, and benchmarking. Run B was not started. Mode-0600 ignored failure
+  logs were retrieved only under exact allowlists for diagnosis; only fixed sanitized runner events
+  were exposed outside that protected metadata boundary. No DICOM, pixel, report, or patient
+  identifier was exported.
 - Root cause was a namespace conflation: the promoted governance audit ID and the source producer's
   execution ID were both represented by the name `audit_id`, and the consumer compared the database
   producer value with the governance constant.
@@ -121,9 +127,22 @@ pending a new complete local gate; record successful results only after authenti
   singleton protected components in the duplicate stratum. The two-line correction plus one
   real-schema regression passes all 33 focused full-run tests, Ruff, and strict mypy.
 - The exact seven-file recovery candidate passed the complete 405-test build, typing, privacy,
-  security, dependency, contract, and clean-tree gate. The final exact-set rerun after this evidence
-  update, a clean freeze, immutable bundle, input authentication, and Run A retry remain pending.
-  Run B, comparison, visual review, finalization, push, and hosted CI remain pending.
+  security, dependency, contract, and clean-tree gate and produced freeze `60df41c` / bundle
+  `3dc575...`. That input chain authenticated and Run A `r3` passed both earlier source-manifest
+  boundaries, then failed closed with `self_deadline_exceeded` at 21,664 seconds during processing.
+  Run B was not started. No completed full-pass, deterministic, benchmark, review-plan, or human-
+  review evidence was produced.
+- The performance-recovery candidate removes two semantics-neutral repeated costs: it computes the
+  canonical NPY checksum during the single ephemeral cache write instead of forcing durability and
+  rereading the file, and it caches invariant installed-package versions once per process. It adds
+  only fixed safe phase/quarter progress events, the authenticated stratified production-path
+  projection described above, and 27,000-second self / 28,800-second outer limits. The outer limit
+  remains 3,600 seconds below the verified competition ceiling and the outer handler retains 1,800
+  seconds after the runner deadline.
+- The performance-recovery working tree has focused regression evidence only. Its complete exact-
+  set gate, clean freeze, immutable bundle, input authentication, and Run A retry remain pending.
+  Run B, comparison, visual review, finalization, push, and hosted CI remain pending. The projection
+  is an admission control, not evidence that either full run will finish.
 
 ## Private dataset pre-push gate
 
@@ -145,6 +164,9 @@ inside Kaggle and never enter repository documents or command output.
   raw-digest population, and match each other for every declared deterministic artifact and
   aggregate.
 - The performance report is complete and stays within the approved Kaggle runtime/memory limits.
+- Both runs pass the authenticated throughput admission control, the complete safe progress
+  sequence, the self-deadline, and the outer competition-margin gate; projection alone is not
+  runtime acceptance.
 - At least 100 private studies have complete visual-review rows with no systematic ordering,
   orientation, inversion, laterality, clipping, or aspect error; every represented material stratum
   and every eligible series for each reviewed study is covered.
@@ -165,10 +187,11 @@ inside Kaggle and never enter repository documents or command output.
 
 ## After attempted Run A
 
-Recovery pending. Two Run A attempts failed closed before preprocessing: first on source identity,
-then on source-schema consumption. Run B was not started. No successful runtime result, Run A/Run B
-comparison, QA image review, completed review session, human attestation, or finalizer result is
-claimed. The incidents are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record new
-identities and actual results only after the next freeze/bundle, authenticated retry, independent
+Recovery pending. Three Run A attempts failed closed: first on source identity, then on source-
+schema consumption, and finally at the old processing self-deadline after authenticated input and
+source-manifest checks. Run B was not started. No successful runtime result, Run A/Run B comparison,
+QA image review, completed review session, human attestation, or finalizer result is claimed. The
+incidents are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record new identities and
+actual results only after the next complete gate, freeze/bundle, authenticated retry, independent
 Run B, comparison, and review. Do not start ontology, folds, labels, training, inference, or
 submission.

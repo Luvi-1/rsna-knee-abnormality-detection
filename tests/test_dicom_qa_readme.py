@@ -39,6 +39,7 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     _load("package_manifest_bundle", MANIFEST_PACKAGER)
     packager = _load("_readme_packager", PACKAGER)
     validator = _load("_readme_validator", VALIDATOR)
+    assert f'--path "$bundle_root/$directory" --timeout {packager.OUTER_KILL_SECONDS}' in text
 
     obsolete = (
         "--remote-kernel-version",

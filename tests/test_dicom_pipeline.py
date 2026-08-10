@@ -796,6 +796,35 @@ def test_physical_sampling_channels_resize_and_versioned_provenance(tmp_path: Pa
     assert not output.tensor.flags.writeable
 
 
+def test_runtime_library_versions_are_cached_in_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _series(tmp_path, (0.0, 1.0))
+    calls: dict[str, int] = {}
+    original_version = pipeline_module.version
+
+    def counted_version(package_name: str) -> str:
+        calls[package_name] = calls.get(package_name, 0) + 1
+        return original_version(package_name)
+
+    pipeline_module._runtime_library_versions.cache_clear()
+    try:
+        monkeypatch.setattr(pipeline_module, "version", counted_version)
+        first = dicom_to_model(paths, PreprocessingConfig(), VERSIONS)
+        repeated = dicom_to_model(paths, PreprocessingConfig(), VERSIONS)
+    finally:
+        pipeline_module._runtime_library_versions.cache_clear()
+
+    assert calls == {
+        "numpy": 1,
+        "pydicom": 1,
+        "pylibjpeg": 1,
+        "pylibjpeg-libjpeg": 1,
+        "pylibjpeg-openjpeg": 1,
+    }
+    assert first.provenance == repeated.provenance
+
+
 def test_output_is_deterministic_across_repeated_and_reordered_inputs(tmp_path: Path) -> None:
     paths = _series(tmp_path, (0.0, 1.0, 2.0, 3.0))
     config = PreprocessingConfig(sample_count=3, lower_percentile=5.0, upper_percentile=95.0)

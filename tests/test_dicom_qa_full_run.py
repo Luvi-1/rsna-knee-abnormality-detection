@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import math
 import sqlite3
@@ -11,6 +12,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 
 from rsna_knee.data import manifest as producer_manifest
@@ -45,6 +47,39 @@ def _comparator() -> ModuleType:
 
 
 comparator = _comparator()
+
+
+def test_cache_tensor_hashes_canonical_npy_without_fsync_or_readback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tensor = np.arange(3 * 5 * 7, dtype=np.float32).reshape(3, 5, 7)
+    canonical = io.BytesIO()
+    np.save(canonical, tensor, allow_pickle=False)
+    expected = canonical.getvalue()
+    real_fdopen = runner.os.fdopen
+    modes: list[str] = []
+
+    def checked_fdopen(descriptor: int, mode: str) -> Any:
+        modes.append(mode)
+        assert "r" not in mode and "+" not in mode
+        return real_fdopen(descriptor, mode)
+
+    monkeypatch.setattr(runner.os, "fdopen", checked_fdopen)
+    monkeypatch.setattr(
+        runner.os,
+        "fsync",
+        lambda _descriptor: pytest.fail("ephemeral tensor cache must not force durability"),
+    )
+
+    path, size, sha256, _seconds = runner._cache_tensor(
+        SimpleNamespace(tensor=tensor), cache_root=tmp_path
+    )
+
+    assert modes == ["wb"]
+    assert path.read_bytes() == expected
+    assert size == len(expected)
+    assert sha256 == hashlib.sha256(expected).hexdigest()
+    assert np.array_equal(np.load(path, allow_pickle=False), tensor)
 
 
 def _rows_and_files(root: Path) -> tuple[tuple[Any, ...], dict[str, str]]:
@@ -414,9 +449,21 @@ def test_source_manifest_loader_uses_entity_key_and_excludes_protected_singleton
     schema_sha256 = "e" * 64
     study_uid = "1.2.826.0.1.7101"
     series_uid = "1.2.826.0.1.7201"
+    low_priority_study_uid = "1.2.826.0.1.7102"
+    low_priority_series_uid = "1.2.826.0.1.7202"
     row = runner.SeriesRow(study_uid, series_uid, "present", "absent", "sagittal")
+    low_priority_row = runner.SeriesRow(
+        low_priority_study_uid,
+        low_priority_series_uid,
+        "present",
+        "absent",
+        "sagittal",
+    )
     study_key = runner._source_manifest_study_key(secret, study_uid)
     series_key = runner._source_manifest_series_key(secret, series_uid)
+    low_priority_study_key = runner._source_manifest_study_key(secret, low_priority_study_uid)
+    low_priority_series_key = runner._source_manifest_series_key(secret, low_priority_series_uid)
+    nontrain_study_key = runner._source_manifest_study_key(secret, "1.2.826.0.1.7103")
     database_path = tmp_path / "private_manifest.sqlite3"
     audit_key_path = tmp_path / "audit_key.bin"
     audit_key_path.write_bytes(secret)
@@ -469,6 +516,37 @@ def test_source_manifest_loader_uses_entity_key_and_excludes_protected_singleton
                 'decoder','v1','remediated','v1','study','{}')""",
         (study_key,),
     )
+    connection.execute(
+        "INSERT INTO qa_sample VALUES('quality',?,?, 'deterministic_stratified_review',1)",
+        ("d" * 64, study_key),
+    )
+    distractors = ((low_priority_study_key, "train", 2, 1), (nontrain_study_key, "test", 1, 0))
+    connection.executemany(
+        """INSERT INTO study_manifest(
+                study_key,split,source_row_count,patient_key_evidence,series_count,
+                plane_availability,sequence_categories,total_slice_count,report_available,
+                label_status,known_label_count,positive_label_count,negative_label_count,
+                data_quality_flags,terminal_state
+            ) VALUES(?,?,1,'study_uid',?,'missing','missing',0,0,
+                'unavailable',0,0,0,'[]','pass')""",
+        ((key, split, series_count) for key, split, _priority, series_count in distractors),
+    )
+    connection.execute(
+        """INSERT INTO series_manifest(
+                series_key,study_key,source_row_count,plane,fluid_sensitive,fat_suppression,
+                slice_count,missing_tag_flags,quality_score,localizer_likelihood,
+                ordering_method,orientation_state,spacing_state,decode_state,terminal_state
+            ) VALUES(?,?,1,'sagittal','true','false',0,'[]',100,0,
+                'physical','consistent','consistent','decoded','pass')""",
+        (low_priority_series_key, low_priority_study_key),
+    )
+    connection.executemany(
+        "INSERT INTO qa_sample VALUES('quality',?,?, 'deterministic_stratified_review',?)",
+        (
+            ("0" * 63 + str(priority), key, priority)
+            for key, _split, priority, _series_count in distractors
+        ),
+    )
     connection.commit()
     connection.close()
 
@@ -480,10 +558,11 @@ def test_source_manifest_loader_uses_entity_key_and_excludes_protected_singleton
         audit_key_sha256=hashlib.sha256(secret).hexdigest(),
         schema_sha256=schema_sha256,
     )
-    facts, _, reconciliation = runner._load_source_manifest_facts(binding, (row,))
+    facts, _, reconciliation = runner._load_source_manifest_facts(binding, (row, low_priority_row))
     try:
         assert facts[study_uid]["remediated_decode_case"] == ("present",)
         assert facts[study_uid]["protected_duplicate_group"] == ()
+        assert reconciliation.performance_sample_study_uids == (study_uid,)
     finally:
         reconciliation.connection.close()
 
@@ -557,7 +636,13 @@ def _source_reconciliation(competition_root: Path, rows: tuple[Any, ...]) -> Any
                 ),
             )
             files += 1
-    return runner.SourceManifestReconciliation(connection, secret, len(rows), files)
+    return runner.SourceManifestReconciliation(
+        connection,
+        secret,
+        len(rows),
+        files,
+        tuple(sorted({row.study_uid for row in rows})),
+    )
 
 
 def _run_full(
@@ -566,6 +651,7 @@ def _run_full(
     rows: tuple[Any, ...],
     manifest_path: Path,
     source_available: bool,
+    progress: list[str] | None = None,
 ) -> tuple[dict[str, Any], tuple[Any, ...], Any]:
     reconciliation = _source_reconciliation(competition_root, rows) if source_available else None
     try:
@@ -589,6 +675,7 @@ def _run_full(
             selection_target=3,
             selection_maximum=5,
             selection_minimum_eligible=3,
+            progress=progress.append if progress is not None else None,
         )
     finally:
         if reconciliation is not None:
@@ -598,6 +685,41 @@ def _run_full(
 
 def _manifest_records(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="ascii").splitlines()]
+
+
+def test_performance_smoke_projects_full_pass_and_fails_before_budget_burn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    competition = tmp_path / "competition"
+    rows, requested_states = _rows_and_files(competition)
+    monkeypatch.setattr(runner, "_full_series_state", _fake_series_state_factory(requested_states))
+    times = iter((0.0, 100.0, 200.0, 300.0))
+    monkeypatch.setattr(runner.time, "perf_counter", lambda: next(times))
+    base = _source_reconciliation(competition, rows)
+    reconciliation = replace(
+        base,
+        expected_series_count=base.expected_series_count * 2,
+        expected_file_count=base.expected_file_count * 2,
+    )
+    arguments = {
+        "competition_root": competition,
+        "rows": rows,
+        "reconciliation": reconciliation,
+        "pipeline_module": SimpleNamespace(),
+        "slots_module": slots,
+        "config": SimpleNamespace(),
+        "versions": SimpleNamespace(),
+        "workers": 3,
+        "cache_parent": tmp_path,
+        "deadline_at": None,
+    }
+    try:
+        runner._run_performance_smoke(**arguments, budget_seconds=3_901.0)
+        with pytest.raises(runner.SafeRunError, match="throughput_projection_exceeds_budget"):
+            runner._run_performance_smoke(**arguments, budget_seconds=3_899.0)
+    finally:
+        base.connection.close()
+    assert not list(tmp_path.glob(".performance-smoke-cache-*"))
 
 
 def _all_keys(value: object) -> set[str]:
@@ -853,12 +975,14 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
     monkeypatch.setattr(runner, "_full_series_state", _fake_series_state_factory(requested_states))
     first_path = tmp_path / "first.jsonl"
     second_path = tmp_path / "second.jsonl"
+    progress: list[str] = []
 
     first_metrics, first_representatives, first_selection = _run_full(
         competition_root=competition,
         rows=rows,
         manifest_path=first_path,
         source_available=True,
+        progress=progress,
     )
     second_metrics, second_representatives, second_selection = _run_full(
         competition_root=competition,
@@ -873,6 +997,7 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
     assert first_metrics["manifest_sha256"] == second_metrics["manifest_sha256"]
     assert first_metrics["qa_cohort_selection"] == second_metrics["qa_cohort_selection"]
     assert first_selection == second_selection
+    assert progress == ["q1", "q2", "q3"]
     assert [(item.profile, item.slice_count) for item in first_representatives] == [
         ("small", 1),
         ("median", 2),

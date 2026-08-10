@@ -434,12 +434,51 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   `protected_component.evidence_state='hard'` to the protected-duplicate review stratum. Keep the
   candidate-component query unchanged because the producer emits it only for actual candidate
   edges. Cover both corrections with one real-schema regression.
-- Current evidence: all 33 focused full-run tests pass. The exact seven-file candidate also passed
-  the complete 405-test build, typing, privacy, security, dependency, contract, and clean-tree gate;
-  the final exact-set rerun after this governance update, new freeze/bundle, input authentication,
-  and Run A retry remain pending. Run B was not started.
+- Current evidence: all 33 focused full-run tests passed. The exact seven-file candidate also passed
+  the complete 405-test build, typing, privacy, security, dependency, contract, and clean-tree gate,
+  producing freeze `60df41c` / bundle `3dc575...`. Its inputs authenticated and Run A `r3` passed
+  the source-manifest boundary before later failing closed on its processing self-deadline. The
+  performance-recovery changes invalidate that prior release gate; a new complete exact-set gate,
+  freeze, bundle, authentication, and Run A retry remain pending. Run B was not started.
 - Risks: any later source-schema change must fail closed and requires a new versioned contract and
   regression; a generic error category alone is not sufficient evidence of compatibility.
 - Reversal condition: replace only with an equally strict versioned schema adapter that preserves
   exact issue attribution and duplicate semantics.
-- Commit/experiment: next freeze pending; `preprocess-0001-dicom-pipeline`.
+- Commit/experiment: `60df41c` superseded-pending; `preprocess-0001-dicom-pipeline`.
+
+## D-022 - Fail fast on measured throughput and retain a full runtime margin
+
+- Date: 2026-08-10
+- Owner: Codex
+- Question: How should Chunk 5 recover after a correctly authenticated full-data Run A attempt
+  exhausted its 21,600-second self-deadline during processing?
+- Alternatives: waive the deadline; reduce full-data or QA coverage; extend the timeout alone;
+  export detailed private profiling; or remove semantics-neutral hot-path work and admit the full
+  pass only after a bounded authenticated throughput projection.
+- Evidence: freeze `60df41c` / bundle `3dc575...` passed input authentication, then Run A `r3`
+  failed closed with `self_deadline_exceeded` at 21,664 seconds. Run B was not started. Source review
+  found two repeated costs that do not change model tensors or provenance: the ephemeral NPY cache
+  forced durability and reread every file solely to compute its checksum, and invariant installed-
+  package versions were resolved for every series. The old two-event safe log could not localize
+  progress within processing. No private identities, paths, counts, pixels, or detailed artifacts
+  were exported for this diagnosis.
+- Decision: write each canonical NPY once while streaming its SHA-256, without an ephemeral `fsync`
+  or checksum reread; cache invariant runtime-library versions once per process; and emit only the
+  fixed authenticated phase/quarter sequence. Before the full pass, process at most 120 studies
+  from the existing authenticated priority-1 stratified source-manifest sample through the same
+  series, cache, and source-reconciliation path. Fail closed when the sample elapsed time plus the
+  larger series- or file-scaled full-pass projection plus a 3,600-second post-pass reserve exceeds
+  the remaining budget. Set the self-deadline to 27,000 seconds and outer kill to 28,800 seconds,
+  preserving 1,800 seconds between them and 3,600 seconds below the verified 32,400-second ceiling.
+- Current evidence: the working-tree implementation has focused regression evidence only. The
+  complete exact-set local gate, new clean freeze, immutable bundle, authenticated Run A, Run B,
+  comparison, benchmarks, and human review remain pending. The projection is a fail-fast admission
+  control, not proof that either complete run fits.
+- Risks: the bounded sample may underrepresent a slower private tail, and post-pass replay or
+  benchmarks may still exhaust the reserve. Any projection failure, deadline failure, missing or
+  reordered safe event, output mismatch, or incomplete terminal accounting blocks promotion.
+- Reversal condition: replace only with a measured approach that retains full authorized-data and
+  review coverage, equal deterministic/privacy guarantees, and at least the same competition-
+  runtime margin.
+- Commit/experiment: `60df41c` superseded-pending; next freeze pending;
+  `preprocess-0001-dicom-pipeline`.

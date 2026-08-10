@@ -25,7 +25,7 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 from heapq import nsmallest
@@ -124,8 +124,23 @@ DOWNLOADABLE_OUTPUT_POLICY: Final = {
     "sanitized_artifact_inventory.json": ("aggregate_json", 128 * 1024),
 }
 SESSION_LOG_PATTERN: Final = r"[a-z0-9][a-z0-9_-]{0,99}\.log"
-SELF_DEADLINE_SECONDS: Final = 21_600
-OUTER_KILL_SECONDS: Final = 23_400
+SELF_DEADLINE_SECONDS: Final = 27_000
+OUTER_KILL_SECONDS: Final = 28_800
+POST_FULL_PASS_RESERVE_SECONDS: Final = 3_600
+PERFORMANCE_SMOKE_MAX_STUDIES: Final = 120
+PROGRESS_EVENT_SEQUENCE: Final = (
+    ("performance_smoke", "start"),
+    ("performance_smoke", "complete"),
+    ("full_pass", "start"),
+    ("full_pass", "q1"),
+    ("full_pass", "q2"),
+    ("full_pass", "q3"),
+    ("full_pass", "complete"),
+    ("cohort_replay", "start"),
+    ("cohort_replay", "complete"),
+    ("benchmark", "start"),
+    ("benchmark", "complete"),
+)
 TARGET_STUDIES: Final = 120
 MAX_TARGET_STUDIES: Final = 240
 MINIMUM_ELIGIBLE_STUDIES: Final = 100
@@ -292,6 +307,7 @@ THROUGHPUT_BUCKETS: Final = (
 SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,199}\Z")
 SAFE_SOURCE_PART = re.compile(r"[A-Za-z0-9._-]{1,100}\Z")
 SAFE_EVENT_VALUE = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
+_SAFE_EVENT_DESCRIPTOR: int | None = None
 HEX_40 = re.compile(r"[0-9a-f]{40}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 UID = re.compile(r"[0-9]+(?:\.[0-9]+)+\Z")
@@ -412,6 +428,7 @@ class SourceManifestReconciliation:
     secret: bytes = field(repr=False)
     expected_series_count: int
     expected_file_count: int
+    performance_sample_study_uids: tuple[str, ...] = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,7 +542,10 @@ def _safe_event(event: str, *, phase: str | None = None, code: str | None = None
         payload["code"] = code
     if any(not SAFE_EVENT_VALUE.fullmatch(value) for value in payload.values()):
         payload = {"event": "dicom_qa_failed", "phase": "output", "code": "internal_error"}
-    print(_canonical_json_bytes(payload).decode("ascii").rstrip(), flush=True)
+    os.write(
+        _SAFE_EVENT_DESCRIPTOR if _SAFE_EVENT_DESCRIPTOR is not None else 1,
+        _canonical_json_bytes(payload),
+    )
 
 
 def _flush_native_stdio() -> None:
@@ -543,9 +563,13 @@ def _flush_native_stdio() -> None:
 def _silence_process_output() -> Iterator[None]:
     """Suppress Python and native writes to stdout/stderr at the descriptor boundary."""
 
+    global _SAFE_EVENT_DESCRIPTOR
+
     _flush_native_stdio()
     saved = (os.dup(1), os.dup(2))
+    previous_safe_event_descriptor = _SAFE_EVENT_DESCRIPTOR
     null = os.open(os.devnull, os.O_WRONLY)
+    _SAFE_EVENT_DESCRIPTOR = saved[0]
     try:
         os.dup2(null, 1)
         os.dup2(null, 2)
@@ -555,6 +579,7 @@ def _silence_process_output() -> Iterator[None]:
         _flush_native_stdio()
         os.dup2(saved[0], 1)
         os.dup2(saved[1], 2)
+        _SAFE_EVENT_DESCRIPTOR = previous_safe_event_descriptor
         os.close(saved[0])
         os.close(saved[1])
         os.close(null)
@@ -1868,6 +1893,24 @@ def _load_source_manifest_facts(
             connection, secret, rows
         )
         expected_file_count = _source_manifest_expected_file_count(connection)
+        sample_keys = {
+            str(item[0])
+            for item in connection.execute(
+                """SELECT DISTINCT qa_sample.study_key FROM qa_sample
+                    JOIN study_manifest ON study_manifest.study_key=qa_sample.study_key
+                    WHERE qa_sample.priority=1 AND study_manifest.split='train'"""
+            )
+        }
+        if not sample_keys or not sample_keys <= set(requested_keys):
+            raise SafeRunError("source_manifest_population_mismatch")
+        performance_sample_study_uids = tuple(
+            sorted(
+                (requested_keys[key] for key in sample_keys),
+                key=lambda uid: hashlib.sha256(
+                    f"{SELECTION_SEED}:performance-smoke:{uid}".encode()
+                ).digest(),
+            )[:PERFORMANCE_SMOKE_MAX_STUDIES]
+        )
 
         protected = {
             str(item[0])
@@ -1956,6 +1999,7 @@ def _load_source_manifest_facts(
             secret=secret,
             expected_series_count=expected_series_count,
             expected_file_count=expected_file_count,
+            performance_sample_study_uids=performance_sample_study_uids,
         ),
     )
 
@@ -2764,16 +2808,22 @@ def _cache_tensor(
     started = time.perf_counter()
     descriptor, name = tempfile.mkstemp(prefix="series-cache-", suffix=".npy", dir=cache_root)
     path = Path(name)
+    digest = hashlib.sha256()
+    size = 0
+
+    class HashingWriter:
+        def write(self, payload: bytes) -> int:
+            nonlocal size
+            written = temporary.write(payload)
+            if written != len(payload):
+                raise OSError("short cache write")
+            digest.update(payload)
+            size += written
+            return written
+
     try:
-        with os.fdopen(descriptor, "w+b") as temporary:
-            np.save(temporary, result.tensor, allow_pickle=False)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            size = temporary.tell()
-            temporary.seek(0)
-            digest = hashlib.sha256()
-            for chunk in iter(lambda: temporary.read(1024 * 1024), b""):
-                digest.update(chunk)
+        with os.fdopen(descriptor, "wb") as temporary:
+            np.save(HashingWriter(), result.tensor, allow_pickle=False)
     except BaseException:
         path.unlink(missing_ok=True)
         raise
@@ -3300,6 +3350,83 @@ def _peak_rss_bytes() -> int:
     return peak if sys.platform == "darwin" else peak * 1024
 
 
+def _run_performance_smoke(
+    *,
+    competition_root: Path,
+    rows: Sequence[SeriesRow],
+    reconciliation: SourceManifestReconciliation,
+    pipeline_module: Any,
+    slots_module: Any,
+    config: Any,
+    versions: Any,
+    workers: int,
+    cache_parent: Path,
+    budget_seconds: float,
+    deadline_at: float | None,
+) -> None:
+    """Fail fast when an authenticated stratified sample cannot fit the full-pass budget."""
+
+    if not math.isfinite(budget_seconds) or budget_seconds <= POST_FULL_PASS_RESERVE_SECONDS:
+        raise SafeRunError("throughput_projection_exceeds_budget")
+    sample_uids = set(reconciliation.performance_sample_study_uids)
+    grouped: dict[str, list[SeriesRow]] = defaultdict(list)
+    for row in rows:
+        if row.study_uid in sample_uids:
+            grouped[row.study_uid].append(row)
+    if set(grouped) != sample_uids:
+        raise SafeRunError("performance_smoke_sample_invalid")
+
+    sample_series = sum(len(study_rows) for study_rows in grouped.values())
+    sample_files = 0
+    started = time.perf_counter()
+    cache_root = Path(tempfile.mkdtemp(prefix=".performance-smoke-cache-", dir=cache_parent))
+    try:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="dicom-smoke") as executor:
+            for study_uid in sorted(grouped):
+                _check_deadline(deadline_at)
+                futures = [
+                    executor.submit(
+                        _full_series_state,
+                        competition_root=competition_root,
+                        row=row,
+                        pipeline_module=pipeline_module,
+                        slots_module=slots_module,
+                        config=config,
+                        versions=versions,
+                        cache_root=cache_root,
+                        deadline_at=deadline_at,
+                    )
+                    for row in sorted(grouped[study_uid], key=lambda item: item.series_uid)
+                ]
+                for state in (future.result() for future in futures):
+                    raw_checksums = state.get("file_raw_checksums")
+                    if not isinstance(raw_checksums, tuple):
+                        raise SafeRunError("performance_smoke_sample_invalid")
+                    sample_files += _reconcile_source_manifest_series_files(
+                        reconciliation,
+                        competition_root=competition_root,
+                        row=cast(SeriesRow, state["row"]),
+                        paths=cast(Sequence[Path], state["paths"]),
+                        raw_checksums=cast(Sequence[str | None], raw_checksums),
+                        deadline_at=deadline_at,
+                    )
+                    cache_path = state.get("cache_path")
+                    if isinstance(cache_path, Path):
+                        cache_path.unlink(missing_ok=True)
+    finally:
+        shutil.rmtree(cache_root, ignore_errors=True)
+
+    elapsed = time.perf_counter() - started
+    if sample_series < 1 or sample_files < 1 or elapsed <= 0:
+        raise SafeRunError("performance_smoke_sample_invalid")
+    projected_full_pass_seconds = elapsed * max(
+        reconciliation.expected_series_count / sample_series,
+        reconciliation.expected_file_count / sample_files,
+    )
+    if elapsed + projected_full_pass_seconds + POST_FULL_PASS_RESERVE_SECONDS > budget_seconds:
+        raise SafeRunError("throughput_projection_exceeds_budget")
+
+
 def _run_full_dataset_pass(
     *,
     competition_root: Path,
@@ -3318,6 +3445,7 @@ def _run_full_dataset_pass(
     selection_target: int = TARGET_STUDIES,
     selection_maximum: int = MAX_TARGET_STUDIES,
     selection_minimum_eligible: int = MINIMUM_ELIGIBLE_STUDIES,
+    progress: Callable[[str], None] | None = None,
 ) -> tuple[
     dict[str, object],
     tuple[RepresentativeSeriesInput, ...],
@@ -3382,6 +3510,7 @@ def _run_full_dataset_pass(
     cpu_started = _cpu_seconds()
     peak_rss_started = _peak_rss_bytes()
     cache_root = Path(tempfile.mkdtemp(prefix=".full-run-cache-", dir=private_manifest_path.parent))
+    progress_quarter = 1
 
     def write_record(value: object) -> None:
         payload = _canonical_json_bytes(value)
@@ -3585,6 +3714,13 @@ def _run_full_dataset_pass(
                     cache_path = state.get("cache_path")
                     if isinstance(cache_path, Path):
                         cache_path.unlink(missing_ok=True)
+                while (
+                    progress is not None
+                    and progress_quarter <= 3
+                    and (study_ordinal + 1) * 4 >= len(grouped) * progress_quarter
+                ):
+                    progress(f"q{progress_quarter}")
+                    progress_quarter += 1
         if series_terminal != len(rows):
             raise SafeRunError("full_run_series_reconciliation_failed")
         if (
@@ -4754,6 +4890,27 @@ def _run_private_qa(
     private_run_started = time.perf_counter()
     private_run_cpu_started = _cpu_seconds()
     private_run_peak_rss_started = _peak_rss_bytes()
+    try:
+        _safe_event("dicom_qa_progress", phase="performance_smoke", code="start")
+        _run_performance_smoke(
+            competition_root=competition_root,
+            rows=rows,
+            reconciliation=source_manifest_reconciliation,
+            pipeline_module=pipeline,
+            slots_module=slots,
+            config=config,
+            versions=versions,
+            workers=workers,
+            cache_parent=output_root.parent,
+            budget_seconds=(
+                deadline_at - time.monotonic() if deadline_at is not None else SELF_DEADLINE_SECONDS
+            ),
+            deadline_at=deadline_at,
+        )
+    except BaseException:
+        source_manifest_reconciliation.connection.close()
+        raise
+    _safe_event("dicom_qa_progress", phase="performance_smoke", code="complete")
     staging_parent = Path(tempfile.mkdtemp(prefix=".dicom-qa-output-", dir=output_root.parent))
     first_render = staging_parent / "first-render"
     repeat_render = staging_parent / "repeat-render"
@@ -4771,6 +4928,7 @@ def _run_private_qa(
     qa_generation_seconds = 0.0
     try:
         full_manifest_staging = staging_parent / "private_full_run_manifest.jsonl"
+        _safe_event("dicom_qa_progress", phase="full_pass", code="start")
         (
             full_run_metrics,
             representative_inputs,
@@ -4791,7 +4949,9 @@ def _run_private_qa(
             source_manifest_facts=source_manifest_facts,
             source_manifest_identity=source_manifest_identity,
             source_manifest_reconciliation=source_manifest_reconciliation,
+            progress=lambda code: _safe_event("dicom_qa_progress", phase="full_pass", code=code),
         )
+        _safe_event("dicom_qa_progress", phase="full_pass", code="complete")
         source_manifest_reconciliation.connection.close()
         selected = selection_plan.studies
         selected_uids = {item.study_uid for item in selected}
@@ -4801,6 +4961,7 @@ def _run_private_qa(
                 selected_rows[row.study_uid].append(row)
         if set(selected_rows) != selected_uids:
             raise SafeRunError("selection_reconciliation_failed")
+        _safe_event("dicom_qa_progress", phase="cohort_replay", code="start")
         cohort_replay_started = time.perf_counter()
         for case_ordinal, selected_study in enumerate(selected):
             _check_deadline(deadline_at)
@@ -5068,7 +5229,9 @@ def _run_private_qa(
             raise SafeRunError("repeat_render_nondeterministic")
         if not representative_inputs or first_provenance is None:
             raise SafeRunError("benchmark_input_missing")
+        _safe_event("dicom_qa_progress", phase="cohort_replay", code="complete")
 
+        _safe_event("dicom_qa_progress", phase="benchmark", code="start")
         worker_ceiling = min(workers, os.cpu_count() or 1, 8)
         requested_worker_counts = REPRESENTATIVE_WORKER_COUNTS
         worker_counts = tuple(value for value in requested_worker_counts if value <= worker_ceiling)
@@ -5086,6 +5249,7 @@ def _run_private_qa(
             representative_reports.append((representative, report, _rounded_benchmark(report)))
         benchmark_report = representative_reports[summary_profile_index][1]
         benchmark = _rounded_benchmark(benchmark_report)
+        _safe_event("dicom_qa_progress", phase="benchmark", code="complete")
         timings = cast(dict[str, float], full_run_metrics["timings_seconds"])
         timings["qa_generation_seconds"] = qa_generation_seconds
         timings["selected_cohort_replay_seconds"] = cohort_replay_seconds
