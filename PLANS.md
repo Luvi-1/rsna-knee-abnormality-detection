@@ -146,11 +146,14 @@ unauthorized.
 
 ## Chunk 5 - deterministic DICOM-to-model pipeline
 
-Status: the local core and private orchestration are implemented. A complete staged candidate
-with no unstaged or untracked residue passed every configured local gate, and an independent settled
-red-team found no P0/P1. No Chunk 5 private dataset, kernel execution, human review, immutable
-identity, implementation-freeze commit approval, commit, or push exists. This work was explicitly
-authorized after the Chunks 1-4 checkpoint branch was established; pull request #10 remains unmerged.
+Status: Chunk 5 recovery is active and not passed. The fourth private Run A attempt completed its
+full-data pass but failed closed in the superseded capped joint-material selector; Run B was not
+started. Every earlier freeze and bundle is superseded. The exact 29-file staged candidate implements
+the D-023 two-stage design and passed the complete final local gate, including pytest 507/507 and
+independent end-to-end and source-graph red-teams. The new freeze, bundle, private executions, human
+review, commit, and push remain pending.
+This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
+request #10 remains unmerged.
 
 Objective: produce deterministic model tensors from heterogeneous MRI DICOM series with explicit
 decode failures, physical IOP/IPP ordering, modality and photometric transforms, strict geometry
@@ -171,15 +174,22 @@ Local evidence:
   reconciles train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every
   regular DICOM's keyed relative identity, byte size, and raw digest.
 - Distinct immutable Run A and Run B version-1 kernels use the same frozen bundle, configuration,
-  competition input, and source-manifest input but independently process the entire authorized
-  training set. Every discovered study, series, and file receives an explicit terminal disposition.
+  competition input, and source-manifest input. Each independently processes the entire authorized
+  training set and emits only the canonical full-pass manifest, deterministic metrics, and
+  deterministic cohort plan. Every discovered study, series, and file receives an explicit
+  terminal disposition.
+- Selector v3 has a minimum review target but no arbitrary study maximum. Its exact incremental
+  greedy selection continues until every required represented value quota is met across bounded
+  semantic registries, including bounded site-domain buckets, subject only to fail-closed physical
+  file, byte, time, and disk gates. It makes no legacy joint-material coverage claim. The only
+  public registry-coverage token is `all_required_represented_registry_values_satisfy_quotas`.
 - A separate comparator consumes both complete run outputs and requires byte-exact equality of the
-  declared deterministic manifests plus equality of deterministic aggregate metrics. Timing and
-  resource observations are recorded separately and are not allowed to mask a deterministic
-  mismatch.
-- `qa-cohort-selection-v2` runs only after the full pass. It deterministically selects at least 100
-  reviewable studies across every materially represented available stratum; every eligible
-  diagnostic series in each selected study is included.
+  canonical manifests and cohort plans plus exact equality of deterministic metrics. Timing and
+  resource observations are recorded separately and cannot mask a deterministic mismatch.
+- After exact comparison, the existing review-plan kernel authenticates a capacity certificate
+  bound to the freeze, bundle, manifest, both runs, cohort plan, and renderer. It then replays every
+  selected series, renders each twice, runs representative decode/preprocessing/resource benchmarks
+  once, and materializes the private review plan. No additional kernel or data reference is added.
 - The review plan, identity, cohort hash, artifact hashes, rows, and decisions stay inside Kaggle.
   A safe UI template is copied and edited in Chrome to create a distinct private review session;
   its first operation is an explicit `START` gate. The human records only the frozen nine checks as
@@ -191,30 +201,31 @@ Local evidence:
   preprocessing, source-manifest, and cohort identities. It derives completion from the private
   ledger and emits only `human_review_summary.json` and `final_performance_report.json` as the two
   final allowlisted release-safe outputs; exact review counts remain private.
-- The complete staged set, with no unstaged or untracked residue, passed locked offline
-  sync/lock; isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24
-  `src` files and seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret
-  scan; sensitive-file and path/magic guards; dependency audit with no known vulnerabilities;
-  CLI/config/submission/contract-schema smoke checks; and Git diff check.
-- An independent settled red-team passed with no P0/P1. This is local staged-candidate evidence, not
-  private Kaggle, human-review, final remote-validation, commit, push, or hosted-CI evidence. Every
-  later file change requires the complete exact-set gate again.
+- The exact 29-file staged D-023 candidate passed the complete final local gate: staged inventory
+  and clean-tree checks, locked offline build/install, isolated wheel install/import, MIME checks,
+  Ruff, strict typing, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
+  sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
+  source-graph red-teams found no remaining P0/P1.
 
 Exit evidence still required:
 
-1. Explicit implementation-freeze commit approval, then a clean implementation identity and
-   deterministic offline bundle, cryptographically bound to
+1. A clean implementation-freeze identity under the approval already granted, followed by a
+   deterministic offline bundle cryptographically bound to
    `audit-0002-manifest-remediation` / `manifest-v2`.
 2. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
    dataset and every version-1 kernel; version 2 must be absent.
-3. Successful independent full Run A and full Run B over the entire authorized training set, with
-   complete terminal accounting, exact `manifest-v2` series/file/size/raw-digest reconciliation,
-   and no unexplained DICOM or recoverable transfer-syntax blocker.
-4. Exact deterministic comparison and actual full-run decode, preprocessing, cache, peak-memory,
-   CPU-scaling, disk, throughput, and runtime evidence.
-5. A post-full-pass cohort of at least 100 completed private human-reviewed studies covering every
-   materially represented available stratum and all eligible diagnostic series, with all nine
-   checks terminal and zero `BLOCK`.
+3. A passing authenticated smoke with separate conservative full-pass and post-comparison
+   preparation estimates, followed by successful independent Run A and Run B over the entire
+   authorized training set, complete terminal accounting, exact `manifest-v2` series/file/size/raw-
+   digest reconciliation, deterministic cohort plans, and no unexplained DICOM or recoverable
+   transfer-syntax blocker.
+4. Byte-exact manifest and cohort-plan comparison, exact deterministic metrics, then a passing
+   identity-bound physical capacity gate and one review-plan execution that supplies selected-series
+   replay, double-render, decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput,
+   and runtime evidence.
+5. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
+   represented bounded-registry quota and including all eligible diagnostic series; all nine checks
+   must be terminal with zero `BLOCK`.
 6. Private finalization bound to the exact completed review-session identity and successful
    disclosure validation of the allowlisted sanitized aggregates.
 7. Truthful final governance, complete staged gates, committed and pushed synchronized branch, and

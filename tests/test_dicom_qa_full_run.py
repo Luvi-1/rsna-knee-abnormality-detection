@@ -7,15 +7,16 @@ import json
 import math
 import sqlite3
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
 
 from rsna_knee.data import manifest as producer_manifest
+from rsna_knee.data import qa_strata
 from rsna_knee.data import series_slots as slots
 
 ROOT = Path(__file__).parents[1]
@@ -327,7 +328,7 @@ def _source_facts(rows: tuple[Any, ...]) -> dict[str, dict[str, tuple[str, ...]]
             "protected_duplicate_group": (),
             "candidate_duplicate_group": (),
             "remediated_decode_case": (),
-            "source_manifest_quality_flag": (),
+            "source_manifest_quality_flag": ("none",),
             "source_manifest_terminal_state": ("pass",),
         }
         for row in rows
@@ -673,7 +674,6 @@ def _run_full(
             source_manifest_identity=_source_identity() if source_available else None,
             source_manifest_reconciliation=reconciliation,
             selection_target=3,
-            selection_maximum=5,
             selection_minimum_eligible=3,
             progress=progress.append if progress is not None else None,
         )
@@ -807,7 +807,7 @@ def test_source_manifest_rejects_added_removed_or_changed_file(
 
     def tracked_hash(path: Path) -> str:
         fallback_reads.append(path)
-        return original_hash(path)
+        return str(original_hash(path))
 
     monkeypatch.setattr(runner, "_sha256_file", tracked_hash)
     try:
@@ -942,11 +942,12 @@ def test_post_full_pass_selection_includes_represented_singleton_value() -> None
             study_uid=uid,
             stratum=("shared",) * 11,
             dimensions=(
-                ("plane", ("sagittal",)),
-                (
-                    "scanner_model",
-                    ("singleton_model" if uid == singleton_uid else "common_model",),
+                *(
+                    (rule.dimension, ("common",))
+                    for rule in qa_strata.QA_STRATUM_REGISTRY
+                    if rule.dimension != "scanner_model"
                 ),
+                ("scanner_model", ("singleton_model" if uid == singleton_uid else "common",)),
             ),
             eligible_series_uids=(f"{uid}.1",),
         )
@@ -961,10 +962,180 @@ def test_post_full_pass_selection_includes_represented_singleton_value() -> None
     assert first == second
     assert len(first.studies) == runner.TARGET_STUDIES
     assert singleton_uid in {study.study_uid for study in first.studies}
-    coverage = {(item.dimension, item.value): item for item in first.coverage}
+    assert first.coverage is not None
+    coverage = {(item["dimension"], item["value"]): item for item in first.coverage["rows"]}
     singleton = coverage[("scanner_model", "singleton_model")]
-    assert (singleton.population_studies, singleton.selected_studies) == (1, 1)
-    assert singleton.disposition == "represented_nonmaterial"
+    assert (singleton["population"], singleton["selected"], singleton["required_quota"]) == (
+        1,
+        1,
+        1,
+    )
+    assert singleton["reason"] == "mandatory_represented_singleton"
+
+
+def test_series_features_preserve_laterality_plane_conflict_and_individual_dicom_edges() -> None:
+    orientation = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+    metadata = SimpleNamespace(
+        bits_stored=16,
+        photometric_interpretation="MONOCHROME1",
+        rows=1024,
+        columns=1024,
+        slice_thickness=6.0,
+        spacing_between_slices=6.0,
+        image_orientation=orientation,
+    )
+    decoded = SimpleNamespace(
+        metadata=metadata,
+        transfer_syntax="1.2.840.10008.1.2.4.90",
+        laterality="R",
+    )
+    series_pass = runner.SeriesPass(
+        (decoded, decoded),
+        (),
+        (),
+        (),
+        SimpleNamespace(laterality="R"),
+        None,
+        0.0,
+        0.0,
+    )
+    quality = slots.SeriesQuality(
+        total_slices=2,
+        decoded_slices=2,
+        decode_failure_count=0,
+        duplicate_slices=1,
+        geometry_valid=True,
+        spacing_regular=True,
+        median_slice_spacing_mm=6.0,
+        spacing_coefficient_of_variation=0.0,
+        pixel_spacing_mm=(0.5, 0.5),
+        physical_coverage_mm=6.0,
+    )
+
+    features = runner._series_selection_features(
+        runner.SeriesRow("study", "series", "present", "present", "sagittal"),
+        series_pass,
+        quality,
+        "quality_blocked",
+        slots,
+    )
+
+    assert features["laterality"] == ("right",)
+    assert features["organizer_plane"] == ("sagittal",)
+    assert features["physical_plane"] == ("coronal",)
+    assert features["organizer_physical_plane_relation"] == ("conflict",)
+    assert features["photometric_interpretation"] == ("monochrome1",)
+    assert features["transfer_syntax"] == ("jpeg2000",)
+    assert features["slice_thickness_stratum"] == ("gt_5",)
+    assert features["slice_spacing_stratum"] == ("gt_5",)
+    assert features["resolution_extreme"] == ("gt_512",)
+    assert set(features["dicom_edge_case_subtype"]) == {
+        "photometric_monochrome1",
+        "quality_duplicate_slices",
+        "terminal_quality_blocked",
+        "transfer_jpeg2000",
+    }
+
+
+def test_study_features_bind_slots_abnormal_retention_and_explicit_missing_hardware() -> None:
+    states = (
+        {
+            "selection_features": {"terminal_state": ("model_eligible",)},
+            "record": {
+                "series_uid": "series-a",
+                "slot": "sagittal_structural",
+                "original_slot": "sagittal_structural",
+                "retention_reasons": [],
+                "model_eligible": True,
+                "terminal_state": "model_eligible",
+            },
+        },
+        {
+            "selection_features": {"terminal_state": ("quality_blocked",)},
+            "record": {
+                "series_uid": "series-b",
+                "slot": "additional_or_duplicate",
+                "original_slot": None,
+                "retention_reasons": ["unknown_plane"],
+                "model_eligible": False,
+                "terminal_state": "quality_blocked",
+            },
+        },
+        {
+            "selection_features": {"terminal_state": ("model_eligible",)},
+            "record": {
+                "series_uid": "series-c",
+                "slot": "additional_or_duplicate",
+                "original_slot": "sagittal_structural",
+                "retention_reasons": ["duplicate_slot"],
+                "model_eligible": True,
+                "terminal_state": "model_eligible",
+            },
+        },
+    )
+
+    study = runner._cohort_study("study", states, (False, True, False, False, False, False), None)
+    dimensions = dict(study.dimensions)
+
+    assert {rule.dimension for rule in qa_strata.QA_STRATUM_REGISTRY} <= set(dimensions)
+    assert dimensions["additional_diagnostic_series"] == ("present",)
+    assert dimensions["multiple_series_per_slot"] == ("present",)
+    assert dimensions["missing_diagnostic_slot"] == ("present",)
+    assert dimensions["retained_nonduplicate_abnormal_series"] == ("present",)
+    assert dimensions["duplicate_handling"] == ("duplicate_slot",)
+    assert dimensions["pipeline_case"] == ("recoverable",)
+    for dimension in (
+        "scanner_manufacturer",
+        "scanner_model",
+        "field_strength",
+        "site_domain_cluster",
+        "source_manifest_quality_flag",
+    ):
+        assert dimensions[dimension] == ("missing",)
+
+
+def test_multiple_series_per_slot_counts_quality_blocked_original_slots() -> None:
+    candidates = tuple(
+        slots.SeriesCandidate(
+            series_key=series_key,
+            tie_break_key=hashlib.sha256(series_key.encode("ascii")).hexdigest(),
+            organizer_plane="sagittal",
+            organizer_fluid_sensitive=False,
+            image_orientation_patient=None,
+            quality=_quality(files=2, terminal="decode_blocked"),
+        )
+        for series_key in ("blocked-a", "blocked-b")
+    )
+    assignment = slots.assign_series_slots(candidates)
+    slot_assignments = runner._slot_assignment_by_series(assignment)
+    states = tuple(
+        {
+            "selection_features": {"terminal_state": ("decode_blocked",)},
+            "record": {
+                "series_uid": candidate.series_key,
+                "slot": slot_assignments[candidate.series_key][0],
+                "original_slot": slot_assignments[candidate.series_key][1],
+                "retention_reasons": list(slot_assignments[candidate.series_key][2]),
+                "model_eligible": False,
+                "terminal_state": "decode_blocked",
+            },
+        }
+        for candidate in candidates
+    )
+
+    assert all(selection.primary is None for selection in assignment.primary_slots)
+    assert {
+        item.original_slot.value if item.original_slot is not None else None
+        for item in assignment.additional_or_duplicate
+    } == {"sagittal_structural"}
+    assert {
+        reason.value for item in assignment.additional_or_duplicate for reason in item.reasons
+    } == {"blocked_quality"}
+
+    study = runner._cohort_study("study", states, assignment.missing_mask, None)
+    dimensions = dict(study.dimensions)
+    assert dimensions["multiple_series_per_slot"] == ("present",)
+    assert dimensions["duplicate_handling"] == ("none",)
 
 
 def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled(
@@ -1026,11 +1197,12 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
         "dynamic_measurements": "excluded",
         "filename": "private_full_run_manifest.jsonl",
         "format": "canonical-json-lines-v1",
-        "maximum_bytes": runner.PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
+        "maximum_bytes": runner.RUN_PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
     }
     series_records = [series for study in study_records for series in study["series"]]
     assert len(series_records) == len(rows) == 6
     assert {record["series_uid"] for record in series_records} == {row.series_uid for row in rows}
+    assert all("original_slot" in record for record in series_records)
     assert footer["studies"] == 5
     assert footer["series"] == 6
     assert footer["files"] == 21
@@ -1133,20 +1305,7 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
     assert all(row.study_uid not in metrics_text for row in rows)
     assert all(row.series_uid not in metrics_text for row in rows)
 
-    by_study = {record["study_uid"]: record for record in study_records}
-    case_index_studies = [
-        {
-            "case_ordinal": ordinal,
-            "study_uid": selected.study_uid,
-            "selection_stratum": list(selected.stratum),
-            "series": by_study[selected.study_uid]["series"],
-        }
-        for ordinal, selected in enumerate(first_selection.studies)
-    ]
-    assert (
-        runner._case_index_cohort_sha256(case_index_studies)
-        == first_metrics["qa_cohort_selection"]["cohort_sha256"]
-    )
+    assert first_selection.cohort_sha256 == first_metrics["qa_cohort_selection"]["cohort_sha256"]
 
 
 def test_file_terminal_records_preserve_success_and_mixed_failure_ordinals() -> None:
@@ -1196,15 +1355,18 @@ def test_file_terminal_records_preserve_success_and_mixed_failure_ordinals() -> 
 
 
 def _source_blocked_state(root: Path, row: Any) -> dict[str, Any]:
-    return runner._full_series_state(
-        competition_root=root,
-        row=row,
-        pipeline_module=SimpleNamespace(),
-        slots_module=slots,
-        config=SimpleNamespace(),
-        versions=SimpleNamespace(),
-        cache_root=root,
-        deadline_at=None,
+    return cast(
+        dict[str, Any],
+        runner._full_series_state(
+            competition_root=root,
+            row=row,
+            pipeline_module=SimpleNamespace(),
+            slots_module=slots,
+            config=SimpleNamespace(),
+            versions=SimpleNamespace(),
+            cache_root=root,
+            deadline_at=None,
+        ),
     )
 
 
@@ -1262,7 +1424,7 @@ def test_full_run_without_authenticated_source_manifest_records_unavailable_gate
     rows, requested_states = _rows_and_files(competition)
     monkeypatch.setattr(runner, "_full_series_state", _fake_series_state_factory(requested_states))
 
-    metrics, _, _ = _run_full(
+    metrics, _, selection_plan = _run_full(
         competition_root=competition,
         rows=rows,
         manifest_path=tmp_path / "unavailable.jsonl",
@@ -1271,14 +1433,20 @@ def test_full_run_without_authenticated_source_manifest_records_unavailable_gate
 
     selection = metrics["qa_cohort_selection"]
     assert selection["source_manifest_gate"] == "unavailable_source_manifest"
+    source_dimensions = {
+        "scanner_manufacturer",
+        "scanner_model",
+        "field_strength",
+        "site_domain_cluster",
+        "source_manifest_quality_flag",
+    }
+    assert selection_plan.coverage is not None
     unavailable = [
-        item
-        for item in selection["coverage"]
-        if item["dimension"] in runner.SOURCE_MANIFEST_DIMENSIONS
+        item for item in selection_plan.coverage["rows"] if item["dimension"] in source_dimensions
     ]
-    assert {item["dimension"] for item in unavailable} == set(runner.SOURCE_MANIFEST_DIMENSIONS)
-    assert all(item["disposition"] == "unavailable_source_manifest" for item in unavailable)
-    assert all(item["source"] == "source_manifest_not_attached" for item in unavailable)
+    assert {item["dimension"] for item in unavailable} == source_dimensions
+    assert all(item["value"] == "missing" for item in unavailable)
+    assert all(item["quota_met"] is True for item in unavailable)
     assert _manifest_records(tmp_path / "unavailable.jsonl")[0]["provenance"][
         "source_manifest_identity"
     ] == {"status": "unavailable_source_manifest"}
@@ -1327,7 +1495,6 @@ def test_selected_replay_carries_preprocessing_and_source_blocks_without_renderi
             source_manifest_identity=_source_identity(),
             source_manifest_reconciliation=reconciliation,
             selection_target=1,
-            selection_maximum=1,
             selection_minimum_eligible=1,
         )
     finally:
@@ -1346,6 +1513,9 @@ def test_selected_replay_carries_preprocessing_and_source_blocks_without_renderi
             "source_failure": "series_file_invalid",
             "preprocessing_failure": None,
             "quality": SimpleNamespace(),
+            "slot": "additional_or_duplicate",
+            "original_slot": "axial_structural",
+            "retention_reasons": ("blocked_quality",),
         },
     )
 
@@ -1535,3 +1705,884 @@ def test_competition_cpu_limit_is_loaded_from_the_bound_contract(tmp_path: Path)
     )
     with pytest.raises(runner.SafeRunError, match="competition_contract_invalid"):
         runner._competition_cpu_limit_seconds(contract)
+
+
+def _registry_dimensions(
+    domain_bucket: str = "singleton",
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    values = {
+        "laterality": "left",
+        "organizer_plane": "axial",
+        "physical_plane": "axial",
+        "organizer_physical_plane_relation": "match",
+        "assigned_diagnostic_slot": "axial_structural",
+        "additional_diagnostic_series": "absent",
+        "multiple_series_per_slot": "absent",
+        "missing_diagnostic_slot": "absent",
+        "retained_nonduplicate_abnormal_series": "absent",
+        "duplicate_handling": "none",
+        "bit_depth_category": "le_16",
+        "photometric_interpretation": "monochrome2",
+        "transfer_syntax": "uncompressed_little_endian",
+        "slice_thickness_stratum": "le_3",
+        "slice_spacing_stratum": "le_1_5",
+        "resolution_extreme": "le_512",
+        "slice_count_extreme": "typical",
+        "scanner_manufacturer": "vendor",
+        "scanner_model": "model",
+        "field_strength": "le_3",
+        "site_domain_cluster": domain_bucket,
+        "source_manifest_quality_flag": "none",
+        "terminal_state": "model_eligible",
+        "pipeline_case": "clean",
+        "dicom_edge_case_subtype": "none",
+    }
+    assert set(values) == set(runner.REQUIRED_REVIEW_DIMENSIONS)
+    return tuple((dimension, (values[dimension],)) for dimension in sorted(values))
+
+
+def test_opaque_domain_keys_are_bounded_before_mandatory_selection() -> None:
+    raw_domains: list[object] = [None]
+    raw_domains.extend(f"opaque-{index}" for index in range(241))
+    raw_domains.extend(["rare"] * 3)
+    raw_domains.extend(["represented"] * 5)
+    raw_domains.extend(["common"] * 20)
+
+    buckets = runner._domain_cluster_buckets(raw_domains)
+
+    assert buckets[0] == "missing"
+    assert set(buckets[1:242]) == {"singleton"}
+    assert set(buckets) == {
+        "missing",
+        "singleton",
+        "rare_2_4",
+        "represented_5_19",
+        "represented_20_plus",
+    }
+    studies = tuple(
+        runner.CohortStudy(
+            study_uid=f"study-{index:04d}",
+            stratum=("diagnostic",),
+            dimensions=_registry_dimensions(bucket),
+            eligible_series_uids=(f"series-{index:04d}",),
+        )
+        for index, bucket in enumerate(buckets)
+    )
+    selection = runner._select_after_full_pass(
+        studies,
+        source_manifest_available=True,
+        target=100,
+        minimum_eligible=100,
+    )
+
+    assert len(selection.studies) == 100
+    assert selection.coverage is not None
+    domain_rows = [
+        item for item in selection.coverage["rows"] if item["dimension"] == "site_domain_cluster"
+    ]
+    assert {item["value"] for item in domain_rows} == set(buckets)
+    assert all(item["quota_met"] is True for item in domain_rows)
+
+
+def _review_run_config() -> dict[str, Any]:
+    return {
+        "code_commit": "a" * 40,
+        "bundle_sha256": "b" * 64,
+        "workers": 1,
+        "provenance": {
+            "runner_sha256": hashlib.sha256(
+                (ROOT / "kaggle" / "dicom_qa" / "run.py").read_bytes()
+            ).hexdigest(),
+            "performance_smoke_sha256": "c" * 64,
+            "performance_smoke_policy_sha256": "d" * 64,
+            "preprocessing_config_sha256": "e" * 64,
+            "preprocessing_version": "dicom-model-v1",
+            "review_finalizer_sha256": "f" * 64,
+        },
+        "privacy": {"canary": "private_canary_not_emitted"},
+        "anatomical_safety": {},
+    }
+
+
+def _private_comparison_payload(metrics: dict[str, Any], plan_sha256: str) -> bytes:
+    return cast(
+        bytes,
+        runner._canonical_json_bytes(
+            {
+                "schema_version": 1,
+                "artifact_type": "private-dicom-run-comparison",
+                "status": "pass",
+                "exact_manifest_byte_equality": True,
+                "cohort_plan_byte_equality": True,
+                "cohort_plan_sha256": plan_sha256,
+                "manifest_sha256": metrics["manifest_sha256"],
+                "studies": metrics["studies_processed"],
+                "series": metrics["series_processed"],
+                "files": metrics["files_processed"],
+                "terminal_counts": metrics["terminal_counts"],
+                "deterministic_metric_keys": [
+                    "studies_processed",
+                    "series_processed",
+                    "files_processed",
+                    "terminal_counts",
+                    "model_eligible_series",
+                    "logical_cache_bytes",
+                    "manifest_sha256",
+                    "qa_cohort_selection",
+                    "cohort_plan_sha256",
+                    "coverage_ledger_sha256",
+                ],
+                "expected_nondeterministic_fields": [
+                    "phase_timings",
+                    "wall_time",
+                    "cpu_time",
+                    "cpu_utilization",
+                    "throughput",
+                    "peak_memory",
+                ],
+                "unresolved_mismatches": 0,
+            },
+        ),
+    )
+
+
+def _performance_smoke_payload(run_config: dict[str, Any]) -> bytes:
+    provenance = run_config["provenance"]
+    return cast(
+        bytes,
+        runner._canonical_json_bytes(
+            {
+                "schema_version": 1,
+                "artifact_type": "dicom-qa-performance-smoke-sanitized-aggregate",
+                "status": "pass",
+                "full_run_started": False,
+                "provenance": {
+                    "git_commit": run_config["code_commit"],
+                    "bundle_sha256": run_config["bundle_sha256"],
+                    "runner_sha256": provenance["runner_sha256"],
+                    "smoke_entrypoint_sha256": provenance["performance_smoke_sha256"],
+                    "performance_smoke_policy_sha256": provenance[
+                        "performance_smoke_policy_sha256"
+                    ],
+                    "preprocessing_config_sha256": provenance["preprocessing_config_sha256"],
+                    "preprocessing_version": provenance["preprocessing_version"],
+                    "source_manifest_version": runner.SOURCE_MANIFEST_VERSION,
+                    "source_manifest_audit_id": runner.SOURCE_MANIFEST_AUDIT_ID,
+                    "input_binding_sha256": "1" * 64,
+                },
+                "runtime": {
+                    "private_kernel": True,
+                    "internet": False,
+                    "accelerator": "cpu",
+                    "self_deadline_seconds": 3_600,
+                    "full_pass_budget_seconds": runner.SELF_DEADLINE_SECONDS,
+                    "competition_cpu_limit_seconds": 32_400,
+                },
+                "performance": {
+                    "production_path_exercised": True,
+                    "authenticated_sample": True,
+                    "admission_status": "pass",
+                    "smoke_elapsed_seconds_ceiling": 60,
+                    "projected_full_run_seconds_ceiling": 600,
+                    "post_comparison_preparation_path_exercised": True,
+                    "qa_replay_render_seconds_per_series_ceiling": 1,
+                    "representative_benchmark_seconds_ceiling": 60,
+                    "review_artifacts_per_series_ceiling": 7,
+                    "review_artifact_bytes_per_series_power_of_two_mib_ceiling": 1,
+                },
+                "privacy": {
+                    "identifiers_emitted": False,
+                    "paths_emitted": False,
+                    "pixels_emitted": False,
+                    "reports_emitted": False,
+                    "private_resource_locators_emitted": False,
+                    "private_artifact_checksums_emitted": False,
+                },
+            },
+        ),
+    )
+
+
+def _stage_b_inputs(tmp_path: Path) -> SimpleNamespace:
+    run_config = _review_run_config()
+    quality = slots.SeriesQuality(
+        total_slices=20,
+        decoded_slices=20,
+        decode_failure_count=0,
+        duplicate_slices=0,
+        geometry_valid=True,
+        spacing_regular=True,
+        median_slice_spacing_mm=5.0,
+        spacing_coefficient_of_variation=0.0,
+        pixel_spacing_mm=(0.5, 0.5),
+        physical_coverage_mm=95.0,
+    )
+    assert not quality.blocked
+    provenance = {
+        "configuration_hash": "2" * 64,
+        "preprocessing_version": "dicom-model-v1",
+        "source_manifest_version": runner.SOURCE_MANIFEST_VERSION,
+        "dicom_library_versions": [
+            [name, "1.0"]
+            for name in (
+                "numpy",
+                "pydicom",
+                "pylibjpeg",
+                "pylibjpeg-libjpeg",
+                "pylibjpeg-openjpeg",
+            )
+        ],
+    }
+    reconstruction = {
+        "laterality": "L",
+        "transformation_ledger": {
+            "laterality_transform": "none",
+            "horizontal_flip_applied": False,
+        },
+        "provenance": provenance,
+    }
+    rows = tuple(
+        runner.SeriesRow(
+            f"1.2.826.0.1.{10_000 + index}",
+            f"1.2.826.0.2.{20_000 + index}",
+            "absent",
+            "absent",
+            "axial",
+        )
+        for index in range(100)
+    )
+    cohort_studies = tuple(
+        runner.CohortStudy(
+            study_uid=row.study_uid,
+            stratum=tuple(f"stratum-{value}" for value in range(11)),
+            dimensions=_registry_dimensions(),
+            eligible_series_uids=(row.series_uid,),
+        )
+        for row in rows
+    )
+    selection_plan = runner._select_after_full_pass(
+        cohort_studies,
+        source_manifest_available=True,
+        target=100,
+        minimum_eligible=100,
+    )
+    quality_payload = {
+        "blocked_reasons": [reason.value for reason in quality.blocked_reasons],
+        "components": runner.asdict(quality.components),
+    }
+    manifest_records: list[dict[str, Any]] = [
+        {
+            "schema_version": 1,
+            "artifact_type": "private-dicom-full-run-manifest",
+            "record_type": "header",
+            "provenance": {
+                "git_commit": run_config["code_commit"],
+                "bundle_sha256": run_config["bundle_sha256"],
+            },
+        }
+    ]
+    manifest_records.extend(
+        {
+            "record_type": "study",
+            "study_uid": row.study_uid,
+            "missing_series_mask": [False] * 6,
+            "series": [
+                {
+                    "series_uid": row.series_uid,
+                    "source": {
+                        "plane": row.plane,
+                        "fluid_sensitive": row.fluid_sensitive,
+                        "fat_suppression": row.fat_suppression,
+                    },
+                    "files": 1,
+                    "slot": "axial_structural",
+                    "original_slot": "axial_structural",
+                    "retention_reasons": [],
+                    "quality": quality_payload,
+                    "source_failure": None,
+                    "decode_failures": [],
+                    "ordering_failure": None,
+                    "preprocessing_failure": None,
+                    "terminal_state": "model_eligible",
+                    "model_output_reconstruction": reconstruction,
+                }
+            ],
+        }
+        for row in rows
+    )
+    manifest_records.append({"record_type": "footer"})
+    manifest_payload = b"".join(runner._canonical_json_bytes(record) for record in manifest_records)
+    manifest_path = tmp_path / "private_full_run_manifest.jsonl"
+    manifest_path.write_bytes(manifest_payload)
+    manifest_sha256 = hashlib.sha256(manifest_payload).hexdigest()
+    assert selection_plan.coverage is not None
+    coverage_sha256 = hashlib.sha256(
+        runner._canonical_json_bytes(selection_plan.coverage)
+    ).hexdigest()
+    metrics: dict[str, Any] = {
+        "schema_version": 1,
+        "artifact_type": "private-dicom-full-run-metrics",
+        "input_identity": _source_identity(),
+        "studies_processed": 100,
+        "series_processed": 100,
+        "files_processed": 100,
+        "terminal_counts": {"model_eligible": 100},
+        "model_eligible_series": 100,
+        "logical_cache_bytes": 1024,
+        "manifest_sha256": manifest_sha256,
+        "manifest_bytes": len(manifest_payload),
+        "qa_cohort_selection": {
+            "selected_studies": 100,
+            "eligible_series": 100,
+            "cohort_sha256": selection_plan.cohort_sha256,
+            "source_manifest_gate": "pass",
+            "coverage_ledger_sha256": coverage_sha256,
+            "cohort_plan_sha256": None,
+        },
+        "coverage_ledger_sha256": coverage_sha256,
+        "timings_seconds": {
+            "total_seconds": 100.0,
+            "decode_seconds": 20.0,
+            "ordering_seconds": 2.0,
+            "slot_assignment_seconds": 1.0,
+            "preprocessing_seconds": 20.0,
+            "cache_generation_seconds": 1.0,
+            "qa_generation_seconds": 0.0,
+        },
+        "full_dataset_wall_seconds": 100.0,
+        "total_wall_seconds": 100.0,
+        "process_cpu_seconds": 20.0,
+        "cpu_capacity_threads": 1,
+        "cpu_utilization_percent": 20.0,
+        "process_peak_rss_bytes": 1_200,
+        "process_peak_rss_increase_bytes": 200,
+        "peak_ephemeral_cache_bytes": 1024,
+        "peak_private_working_disk_bytes": len(manifest_payload),
+    }
+    representatives = tuple(
+        runner.RepresentativeSeriesInput(
+            profile=profile,
+            slice_count=1,
+            study_uid=rows[index].study_uid,
+            series_uid=rows[index].series_uid,
+            paths=(tmp_path / "slice.dcm",),
+        )
+        for profile, index in (("small", 0), ("median", 49), ("large", 99))
+    )
+    evidence = {
+        (row.study_uid, row.series_uid): {"terminal_state": "model_eligible"} for row in rows
+    }
+    plan_payload = runner._cohort_plan_payload(
+        run_config=run_config,
+        metrics=metrics,
+        rows=rows,
+        representatives=representatives,
+        selection_plan=selection_plan,
+        replay_evidence=evidence,
+    )
+    plan_sha256 = hashlib.sha256(plan_payload).hexdigest()
+    metrics["qa_cohort_selection"]["cohort_plan_sha256"] = plan_sha256
+    metrics["cohort_plan_sha256"] = plan_sha256
+    plan_path = tmp_path / "private_cohort_plan.json"
+    plan_path.write_bytes(plan_payload)
+    metrics_path = tmp_path / "private_full_run_metrics.json"
+    metrics_path.write_bytes(runner._canonical_json_bytes(metrics))
+    comparison_path = tmp_path / "private_run_comparison.json"
+    comparison_path.write_bytes(_private_comparison_payload(metrics, plan_sha256))
+    slice_path = tmp_path / "slice.dcm"
+    slice_path.write_bytes(b"synthetic")
+    return SimpleNamespace(
+        run_config=run_config,
+        rows=rows,
+        quality=quality,
+        reconstruction=reconstruction,
+        metrics=metrics,
+        manifest_path=manifest_path,
+        metrics_path=metrics_path,
+        plan_path=plan_path,
+        plan_payload=plan_payload,
+        comparison_path=comparison_path,
+        smoke_payload=_performance_smoke_payload(run_config),
+        slice_path=slice_path,
+    )
+
+
+def test_cohort_plan_is_canonical_bound_and_tamper_evident(tmp_path: Path) -> None:
+    fixture = _stage_b_inputs(tmp_path)
+
+    assert fixture.plan_payload == runner._canonical_json_bytes(json.loads(fixture.plan_payload))
+    assert len(fixture.plan_payload) <= runner.RUN_PRIVATE_OUTPUT_POLICY["private_cohort_plan.json"]
+    validated = runner._validated_cohort_plan(
+        fixture.plan_payload,
+        run_config=fixture.run_config,
+        metrics=fixture.metrics,
+    )
+    assert validated["selection"]["selected_studies"] == 100
+    assert "selection_census" not in validated
+
+    tampered = json.loads(fixture.plan_payload)
+    tampered["studies"][0]["selection_stratum"][0] = "changed"
+    with pytest.raises(runner.SafeRunError, match="private_cohort_plan_invalid"):
+        runner._validated_cohort_plan(
+            runner._canonical_json_bytes(tampered),
+            run_config=fixture.run_config,
+            metrics=fixture.metrics,
+        )
+
+
+def test_core_stage_emits_only_core_outputs_without_post_pass_qa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / runner.OUTPUT_DIRECTORY
+    run_config = {
+        "code_commit": "a" * 40,
+        "bundle_sha256": "b" * 64,
+        "workers": 1,
+        "input_identity": {"source_manifest": {}},
+    }
+
+    class Connection:
+        def close(self) -> None:
+            return None
+
+    reconciliation = SimpleNamespace(connection=Connection())
+    monkeypatch.setattr(runner, "_decoder_preflight", lambda: None)
+    monkeypatch.setattr(runner, "_read_series_rows", lambda _path: ())
+    monkeypatch.setattr(runner, "_discover_source_manifest_binding", lambda *_args: object())
+    monkeypatch.setattr(
+        runner,
+        "_load_source_manifest_facts",
+        lambda *_args: ({}, {}, reconciliation),
+    )
+    monkeypatch.setattr(runner, "_preprocessing_config", lambda *_args: object())
+
+    def fake_full_pass(**kwargs: Any) -> tuple[Any, ...]:
+        kwargs["private_manifest_path"].write_bytes(b"manifest\n")
+        return (
+            {
+                "qa_cohort_selection": {"coverage_ledger_sha256": "1" * 64},
+                "total_wall_seconds": 1.0,
+                "timings_seconds": {"total_seconds": 1.0},
+                "cpu_capacity_threads": 1,
+                "process_peak_rss_bytes": 1,
+            },
+            (),
+            None,
+            runner.SelectionPlan(()),
+            {},
+        )
+
+    monkeypatch.setattr(runner, "_run_full_dataset_pass", fake_full_pass)
+    monkeypatch.setattr(runner, "_cohort_plan_payload", lambda **_kwargs: b'{"plan":true}\n')
+    monkeypatch.setattr(runner, "_validated_cohort_plan", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(runner, "_core_summary_payload", lambda **_kwargs: b'{"summary":true}\n')
+    monkeypatch.setattr(
+        runner, "_core_inventory_payload", lambda **_kwargs: b'{"inventory":true}\n'
+    )
+    monkeypatch.setattr(runner, "_validate_run_summary", lambda *_args: {})
+    monkeypatch.setattr(runner, "_validate_run_inventory", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        runner,
+        "_run_preparation_smoke",
+        lambda **_kwargs: pytest.fail("Stage A must not run preparation smoke"),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_replay_render_series",
+        lambda **_kwargs: pytest.fail("Stage A must not replay or render"),
+    )
+
+    runner._run_private_core(
+        input_root=tmp_path,
+        competition_root=tmp_path,
+        output_root=output,
+        run_config=run_config,
+        preprocessing_config_path=tmp_path / "preprocessing.yaml",
+        inference_limit_seconds=32_400,
+    )
+
+    assert {item.name for item in output.iterdir()} == {
+        "private_full_run_manifest.jsonl",
+        "private_full_run_metrics.json",
+        "private_cohort_plan.json",
+        "sanitized_summary.json",
+        "sanitized_artifact_inventory.json",
+    }
+    assert not (output / "benchmark.md").exists()
+    assert not (output / runner.PRIVATE_REVIEW_DIRECTORY).exists()
+
+
+def test_preparation_refuses_plan_comparison_and_capacity_changes_before_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _stage_b_inputs(tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    rendered = False
+
+    def forbidden_render(**_kwargs: Any) -> Any:
+        nonlocal rendered
+        rendered = True
+        pytest.fail("capacity and identity gates must run before pixels")
+
+    monkeypatch.setattr(runner, "_replay_render_series", forbidden_render)
+    common = {
+        "competition_root": tmp_path,
+        "output_root": tmp_path / "review-output",
+        "staging_parent": staging,
+        "run_config": fixture.run_config,
+        "preprocessing_config_path": tmp_path / "preprocessing.yaml",
+        "full_manifest_path": fixture.manifest_path,
+        "full_metrics_path": fixture.metrics_path,
+        "comparison_proof_path": fixture.comparison_path,
+        "performance_smoke_summary_payload": fixture.smoke_payload,
+        "review_plan_ref": "owner/review-plan",
+        "review_plan_version": 1,
+        "inference_limit_seconds": 32_400,
+        "deadline_at": None,
+    }
+    changed_plan = json.loads(fixture.plan_payload)
+    changed_plan["studies"][0]["selection_stratum"][0] = "changed"
+    changed_plan_path = tmp_path / "changed-plan.json"
+    changed_plan_path.write_bytes(runner._canonical_json_bytes(changed_plan))
+    with pytest.raises(runner.SafeRunError, match="private_cohort_plan_invalid"):
+        runner.prepare_private_review(cohort_plan_path=changed_plan_path, **common)
+
+    changed_comparison = json.loads(fixture.comparison_path.read_bytes())
+    changed_comparison["manifest_sha256"] = "9" * 64
+    changed_comparison_path = tmp_path / "changed-comparison.json"
+    changed_comparison_path.write_bytes(runner._canonical_json_bytes(changed_comparison))
+    with pytest.raises(runner.SafeRunError, match="comparison_proof_invalid"):
+        runner.prepare_private_review(
+            cohort_plan_path=fixture.plan_path,
+            **{**common, "comparison_proof_path": changed_comparison_path},
+        )
+
+    with pytest.raises(runner.SafeRunError, match="qa_preparation_runtime_exceeds_budget"):
+        runner.prepare_private_review(
+            cohort_plan_path=fixture.plan_path,
+            **{
+                **common,
+                "deadline_at": runner.time.monotonic() + 1,
+            },
+        )
+    assert rendered is False
+
+
+def test_prepare_private_review_materializes_bound_outputs_and_combined_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rsna_knee.dicom import benchmark as benchmark_module
+    from rsna_knee.qa import preprocessing as qa_module
+
+    fixture = _stage_b_inputs(tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    output = tmp_path / "review-output"
+    monkeypatch.setattr(runner, "_decoder_preflight", lambda: None)
+    monkeypatch.setattr(runner, "_read_series_rows", lambda _path: fixture.rows)
+    monkeypatch.setattr(runner, "_preprocessing_config", lambda *_args: object())
+    monkeypatch.setattr(runner, "_series_files", lambda *_args: (fixture.slice_path,))
+    perf_values = iter((100.0, 105.0))
+    cpu_values = iter((10.0, 14.0))
+    rss_values = iter((1_000, 1_500))
+    monkeypatch.setattr(runner.time, "perf_counter", lambda: next(perf_values))
+    monkeypatch.setattr(runner, "_cpu_seconds", lambda: next(cpu_values))
+    monkeypatch.setattr(runner, "_peak_rss_bytes", lambda: next(rss_values))
+
+    artifact_suffixes = (
+        "contact.png",
+        "orthogonal.png",
+        "histogram.png",
+        "animation.gif",
+        "before_after.png",
+        "review.json",
+        "metadata.json",
+    )
+
+    def fake_replay(**kwargs: Any) -> tuple[Any, ...]:
+        assert kwargs["expected_model_reconstruction"] == fixture.reconstruction
+        case = kwargs["case_ordinal"]
+        series = kwargs["series_ordinal"]
+        records: list[dict[str, object]] = []
+        for suffix in artifact_suffixes:
+            basename = f"case_{case:06d}_series_{series:03d}_{suffix}"
+            payload = f"artifact-{case}-{series}-{suffix}".encode("ascii")
+            (kwargs["first_output_dir"] / basename).write_bytes(payload)
+            records.append(
+                {
+                    "basename": basename,
+                    "bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+            )
+        ordered = SimpleNamespace(
+            laterality="L",
+            slices=(
+                SimpleNamespace(
+                    metadata=SimpleNamespace(image_orientation=(1.0, 0.0, 0.0, 0.0, 1.0, 0.0))
+                ),
+            ),
+        )
+        return (
+            fixture.reconstruction,
+            fixture.reconstruction,
+            fixture.quality,
+            ordered,
+            tuple(records),
+            0.01,
+        )
+
+    monkeypatch.setattr(runner, "_replay_render_series", fake_replay)
+
+    def fake_benchmark(
+        _paths: tuple[Path, ...],
+        _config: object,
+        _versions: object,
+        *,
+        iterations: int,
+        worker_counts: tuple[int, ...],
+        offline_bundle_verified: bool,
+    ) -> Any:
+        assert worker_counts == (1,)
+        assert offline_bundle_verified is True
+        timing = benchmark_module.TimingSummary(0.01, 0.02, 0.03)
+        return benchmark_module.BenchmarkReport(
+            schema_version=1,
+            iterations=iterations,
+            slices_per_series=1,
+            decode_time=timing,
+            preprocessing_time=timing,
+            representative_tensor_cache_bytes=1024,
+            process_peak_rss_bytes=1024,
+            peak_rss_increase_bytes=0,
+            cpu_parallelism=(benchmark_module.WorkerTiming(1, 1, 1.0, 1.0, 1.0),),
+            kaggle_compatibility=benchmark_module.KaggleCompatibility(
+                python_version="3.11.0",
+                platform_system="Linux",
+                platform_machine="x86_64",
+                cpu_count=1,
+                numpy_version="1.0",
+                pydicom_version="1.0",
+                python_supported=True,
+                linux_runtime_observed=True,
+                offline_bundle_verified=True,
+                kaggle_runtime_verified=True,
+                accelerator="cpu",
+                horizontal_flip=False,
+                through_plane_resampling=False,
+            ),
+            deterministic_replay=True,
+        )
+
+    monkeypatch.setattr(benchmark_module, "benchmark_dicom_pipeline", fake_benchmark)
+
+    runner.prepare_private_review(
+        competition_root=tmp_path,
+        output_root=output,
+        staging_parent=staging,
+        run_config=fixture.run_config,
+        preprocessing_config_path=tmp_path / "preprocessing.yaml",
+        full_manifest_path=fixture.manifest_path,
+        full_metrics_path=fixture.metrics_path,
+        cohort_plan_path=fixture.plan_path,
+        comparison_proof_path=fixture.comparison_path,
+        performance_smoke_summary_payload=fixture.smoke_payload,
+        review_plan_ref="owner/review-plan",
+        review_plan_version=1,
+        inference_limit_seconds=32_400,
+        deadline_at=None,
+    )
+
+    assert {item.name for item in output.iterdir()} == {
+        "private_case_index.json",
+        "private_artifact_inventory.json",
+        "private-review",
+        "sanitized_summary.json",
+        "benchmark.md",
+        "sanitized_artifact_inventory.json",
+    }
+    assert len(tuple((output / "private-review").iterdir())) == 700
+    case = json.loads((output / "private_case_index.json").read_bytes())
+    inventory = json.loads((output / "private_artifact_inventory.json").read_bytes())
+    full_run = case["full_run"]
+    assert "selection_census" not in case
+    assert case["qa_cohort_selection"] == full_run["qa_cohort_selection"]
+    assert case["studies"][0]["registry_memberships"]
+    assert len(case["represented_review_strata"]) == 1
+    assert full_run["qa_preparation_process_cpu_seconds"] == 4.0
+    assert full_run["process_cpu_seconds"] == 24.0
+    assert full_run["process_peak_rss_bytes"] == 1_500
+    assert full_run["process_peak_rss_increase_bytes"] == 500
+    assert full_run["total_wall_seconds"] == 105.0
+    assert full_run["cpu_utilization_percent"] == pytest.approx(100 * 24 / 105)
+    capacity = case["capacity_certificate"]
+    assert capacity["provenance"] == {
+        "git_commit": fixture.run_config["code_commit"],
+        "bundle_sha256": fixture.run_config["bundle_sha256"],
+        "review_plan_ref": "owner/review-plan",
+        "review_plan_version": 1,
+        "performance_smoke_summary_sha256": hashlib.sha256(fixture.smoke_payload).hexdigest(),
+        "full_run_manifest_sha256": fixture.metrics["manifest_sha256"],
+        "cohort_plan_sha256": fixture.metrics["cohort_plan_sha256"],
+        "comparison_sha256": hashlib.sha256(fixture.comparison_path.read_bytes()).hexdigest(),
+        "qa_renderer_version": qa_module.RENDERER_VERSION,
+        "qa_stratum_registry_version": runner.QA_STRATUM_REGISTRY_VERSION,
+        "qa_stratum_registry_sha256": runner.QA_STRATUM_REGISTRY_SHA256,
+    }
+    assert (
+        inventory["provenance"]["private_case_index_sha256"]
+        == hashlib.sha256((output / "private_case_index.json").read_bytes()).hexdigest()
+    )
+
+
+def test_preparation_smoke_benchmarks_full_1_3_1_shape_when_profiles_dedupe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = runner.SeriesRow("1.2.3", "1.2.4", "absent", "absent", "axial")
+    path = tmp_path / "slice.dcm"
+    path.write_bytes(b"synthetic")
+    ordered = SimpleNamespace(model_eligible=True)
+    series_pass = SimpleNamespace(
+        decode_failures=(), order_failure=None, ordered=ordered, decoded=(object(),)
+    )
+    monkeypatch.setattr(runner, "_series_files", lambda *_args: (path,))
+    monkeypatch.setattr(runner, "_decode_order_pass", lambda *_args, **_kwargs: series_pass)
+    monkeypatch.setattr(runner, "_quality", lambda **_kwargs: SimpleNamespace(blocked=False))
+    monkeypatch.setattr(
+        runner,
+        "_replay_render_series",
+        lambda **_kwargs: ({}, {}, None, None, ({"bytes": 7},) * 7, 2.0),
+    )
+    benchmark_iterations: list[int] = []
+
+    class Benchmark:
+        @staticmethod
+        def benchmark_dicom_pipeline(
+            _paths: tuple[Path, ...],
+            _config: object,
+            _versions: object,
+            *,
+            iterations: int,
+            worker_counts: tuple[int, ...],
+            offline_bundle_verified: bool,
+        ) -> None:
+            del worker_counts, offline_bundle_verified
+            benchmark_iterations.append(iterations)
+
+    result = runner._run_preparation_smoke(
+        competition_root=tmp_path,
+        rows=(row,),
+        sample_study_uids=(row.study_uid,),
+        config=object(),
+        versions=object(),
+        pipeline_module=object(),
+        qa_module=object(),
+        slots_module=object(),
+        benchmark_module=Benchmark,
+        workers=1,
+        cache_parent=tmp_path,
+        deadline_at=None,
+    )
+
+    assert benchmark_iterations == [1, 3, 1]
+    assert result["qa_replay_render_seconds"] == 2.0
+    assert result["review_artifacts"] == 7
+
+
+def test_replay_render_deletes_repeat_directory_per_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    @dataclass(frozen=True)
+    class Config:
+        sample_count: int | None = 2
+
+    pixels = np.zeros((2, 2), dtype=np.float32)
+    ordered = SimpleNamespace(
+        model_eligible=True,
+        laterality="L",
+        slices=(
+            SimpleNamespace(pixels=pixels),
+            SimpleNamespace(pixels=pixels.copy()),
+        ),
+        geometry=SimpleNamespace(projected_positions_mm=(0.0, 1.0)),
+    )
+    series_pass = SimpleNamespace(
+        decode_failures=(), order_failure=None, ordered=ordered, decoded=(object(), object())
+    )
+    monkeypatch.setattr(runner, "_decode_order_pass", lambda *_args, **_kwargs: series_pass)
+    monkeypatch.setattr(runner, "_series_pass_record", lambda _result: {"same": True})
+    monkeypatch.setattr(runner, "_quality", lambda **_kwargs: SimpleNamespace(blocked=False))
+    monkeypatch.setattr(runner, "_qa_metadata", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        runner,
+        "_private_reconstruction_record",
+        lambda result: {"marker": result.marker},
+    )
+
+    class PipelineError(Exception):
+        pass
+
+    class Pipeline:
+        PipelineError: type[Exception]
+
+        @staticmethod
+        def preprocess_series(_ordered: object, config: Config, _versions: object) -> Any:
+            marker = "qa" if config.sample_count is None else "model"
+            return SimpleNamespace(
+                marker=marker,
+                tensor=np.zeros((2, 1, 2, 2), dtype=np.float32),
+                provenance=(marker,),
+            )
+
+        @staticmethod
+        def deterministic_slice_indices(_positions: object, _count: int) -> tuple[int, ...]:
+            return (0, 1)
+
+    Pipeline.PipelineError = PipelineError
+
+    class Qa:
+        CONTACT_MAX_SLICES = 2
+
+        @staticmethod
+        def render_private_qa(
+            _source: np.ndarray,
+            _processed: np.ndarray,
+            *,
+            metadata: object,
+            output_dir: Path,
+            contact_slice_indices: tuple[int, ...],
+        ) -> Any:
+            del metadata, contact_slice_indices
+            basename = "case_000000_series_000_contact.png"
+            payload = b"same-bytes"
+            (output_dir / basename).write_bytes(payload)
+            return SimpleNamespace(
+                artifacts=(
+                    SimpleNamespace(
+                        basename=basename,
+                        bytes=len(payload),
+                        sha256=hashlib.sha256(payload).hexdigest(),
+                    ),
+                )
+            )
+
+    output = tmp_path / "first"
+    output.mkdir()
+    runner._replay_render_series(
+        row=runner.SeriesRow("1.2.3", "1.2.4", "absent", "absent", "axial"),
+        paths=(tmp_path / "slice.dcm",),
+        case_ordinal=0,
+        series_ordinal=0,
+        config=Config(),
+        versions=object(),
+        pipeline_module=Pipeline,
+        qa_module=Qa,
+        slots_module=object(),
+        first_output_dir=output,
+        repeat_parent=tmp_path,
+        deadline_at=None,
+    )
+
+    assert (output / "case_000000_series_000_contact.png").is_file()
+    assert not list(tmp_path.glob(".qa-repeat-*"))

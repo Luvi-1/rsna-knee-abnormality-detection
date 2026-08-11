@@ -45,12 +45,48 @@ Fixed-width intervals protect counts outside rare complementary groups against s
 differencing. The JSON summary is the canonical representation; Markdown files must be
 byte-for-byte canonical renderings of it, and the inventory must hash those exact renderings.
 
+## Chunk 5 staged release surfaces
+
+Run A and Run B are core-only releases. Their private output allowlist is exactly
+`private_full_run_manifest.jsonl`, `private_full_run_metrics.json`, and
+`private_cohort_plan.json`. Their downloadable allowlist is exactly `sanitized_summary.json` and
+`sanitized_artifact_inventory.json`; the latter inventories only the canonical safe summary. The
+safe core summary may disclose fixed completion/integrity/coverage booleans, version labels,
+quantized throughput tokens, bounded runtime/resource measurements, and the public competition
+limit. It must not disclose cohort contents or hashes, case or stratum counts, a case index,
+artifact inventory, review rows, QA images, representative-case details, or post-comparison
+benchmark results.
+
+The comparator authenticates the private outputs but releases only the fixed schema-v1 aggregate
+with `status: pass`, `independent_runs_compared: true`,
+`exact_manifest_byte_equality: true`, `deterministic_metrics_equal: true`,
+`cohort_plan_byte_equality: true`, `unresolved_mismatches: zero`, and
+`private_case_details_downloaded: false`. It does not compare or disclose a QA artifact inventory,
+because no QA artifacts exist in either core run. It does not release cohort hashes, counts, rows,
+or timing/resource equality claims.
+
+The authenticated performance-smoke aggregate may additionally expose only a conservative
+whole-second per-series QA replay/render ceiling, a 60-second-quantized representative benchmark
+ceiling, the fixed seven-artifact-per-series policy constant, and a power-of-two MiB ceiling for
+per-series review artifacts. Those are resource-certificate bounds, not observed cohort counts or
+identities.
+
+The private review-plan stage owns selected-cohort replay, double rendering, private case and
+artifact inventories, `private-review/`, representative decode/preprocessing and CPU-scaling
+benchmarks, RAM/cache measurements, and `private_review_plan.json`. Its only downloadable files are
+the post-comparison `sanitized_summary.json`, canonical `benchmark.md`, and their
+`sanitized_artifact_inventory.json`. The trusted validator may retrieve those three safe files only
+after authenticating the exact private/offline version-1 source graph and private output listing.
+The UI and finalizer consume review-plan artifacts in place; they must never cause any private plan,
+case row, identifier, path, image, pixel, ledger, or artifact hash to cross the Kaggle boundary.
+
 For Chunk 5, exact human-review counts remain only in the private completion. The release-safe
-`reviewed_studies` field uses 20-wide ranges from 100 through 219; every value from 220 through the
-private maximum of 240 is coalesced to `at_or_above_threshold`. `eligible_series_reviewed` uses a
-20-wide range, `block_decisions` uses the standard count tokens and must be `zero` for exit, and
-`represented_strata` exposes only `all_material_covered`. `final_performance_report.json` must repeat
-the identical validated review tokens; it cannot expose a second, more precise representation.
+`reviewed_studies` and `eligible_series_reviewed` fields use 20-wide ranges; the selector has a
+minimum of 100 studies and no policy maximum. `block_decisions` uses the standard count tokens and
+must be `zero` for exit, and `represented_strata` exposes only
+`all_required_represented_registry_values_satisfy_quotas`.
+`final_performance_report.json` must repeat the identical validated review tokens; it cannot expose
+a second, more precise representation.
 
 The trusted validator rejects schema v1, exact numeric audit counts, percentages, malformed or
 non-k=20 intervals, inconsistent complement intervals, cross-file differences, unexpected fields,

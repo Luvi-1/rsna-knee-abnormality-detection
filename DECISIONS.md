@@ -382,6 +382,9 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   equal or stronger cryptographic identity, equivalent private human evidence, and the same
   disclosure boundary.
 - Commit/experiment: pending clean Chunk 5 commit; `preprocess-0001-dicom-pipeline`.
+- Status: **amended by D-023.** The independent-run identity chain, private UI, review ledger, and
+  finalizer boundary remain controlling. D-023 replaces the comparator payload, selector coverage,
+  and QA materialization portions; the historical joint-material claim is not current evidence.
 
 ## D-020 - Separate source-manifest governance and producer execution identities
 
@@ -482,3 +485,60 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   runtime margin.
 - Commit/experiment: `60df41c` superseded-pending; next freeze pending;
   `preprocess-0001-dicom-pipeline`.
+- Status: **superseded by D-023** for Chunk 5 execution staging and capacity admission. The
+  semantics-neutral cache optimizations and fixed safe progress events remain valid.
+
+## D-023 - Separate deterministic full passes from one capacity-gated QA materialization
+
+- Date: 2026-08-11
+- Owner: Luvi-1 and Codex
+- Question: How should Chunk 5 preserve independent full-data determinism while fitting private QA
+  replay, rendering, and benchmarks after the fourth Run A attempt completed the full pass but
+  failed its superseded cohort selector?
+- Alternatives: retain the monolithic Run A/Run B workflow; impose a fixed maximum cohort size;
+  weaken coverage; add another private kernel or data reference; or make Run A/Run B prove only the
+  deterministic full-pass outputs and let the existing review-plan kernel materialize QA once after
+  exact comparison and capacity admission.
+- Evidence: the fourth Run A attempt completed the full-data pass and then failed closed with
+  `material_strata_coverage_impossible`; Run B was not started. The superseded selector combined a
+  legacy joint-material coverage contract with an arbitrary cap, so the failure did not establish
+  that the full pass was nondeterministic or that a valid bounded-registry cohort was impossible.
+  The designated checkpoint reviewer classified the checkpoint `REMEDIATION REQUIRED` and advised
+  independent full-pass outputs plus lightweight deterministic plans, exact comparison of both
+  plans, one later replay/render/benchmark stage in the existing review-plan kernel, no arbitrary
+  cohort maximum, bounded semantic registry categories, an identity-bound capacity certificate,
+  and separate full-pass and QA-preparation smoke estimates.
+- Decision: Run A and Run B each perform exactly one complete full-data pass and produce a canonical
+  manifest, deterministic metrics, and a deterministic cohort plan. The comparator requires exact
+  manifest and cohort-plan bytes and exact deterministic metrics. Only after that comparison, the
+  existing version-1 review-plan kernel authenticates a capacity certificate bound to the freeze,
+  bundle, manifest, both runs, cohort plan, and renderer, then replays selected series, renders each
+  twice, runs the representative decode/preprocessing/resource benchmarks once, and materializes
+  the private review plan. No new kernel or private data reference is added. The safe UI, first-
+  operation `START` gate, nine fixed human checks, and finalizer boundary are unchanged.
+- Selection contract: selector v3 has a minimum review target but no arbitrary study maximum. It
+  uses exact deterministic incremental greedy selection until every required represented value
+  satisfies its quota in bounded semantic registries. Site-domain membership is exposed to the
+  selector only through `missing`, `singleton`, `rare_2_4`, `represented_5_19`, and
+  `represented_20_plus` buckets; no high-cardinality composite is a registry category. Physical
+  file, byte, time, and disk limits remain fail-closed admission gates. The only public registry-
+  coverage claim is `all_required_represented_registry_values_satisfy_quotas`; the legacy joint-
+  material census and coverage claim are removed.
+- Current evidence: the exact 29-file staged two-stage redesign and selector v3 candidate passed the
+  complete final local gate: staged inventory and clean-tree checks, locked offline reinstall/check,
+  isolated Python 3.11 wheel build/install/import, MIME checks, Ruff, strict mypy over 25 package and
+  nine trust-boundary files, pytest 507/507, CLI/config/submission/contract checks, all pre-commit
+  hooks, full candidate secret and sensitive-file checks, dependency audit with no known
+  vulnerabilities, fresh contract drift, and diff checks. Independent end-to-end and source-graph
+  red-teams found no remaining P0/P1. The clean freeze, immutable bundle, authenticated pre-run
+  smoke, Run A, validation, independent Run B,
+  exact comparison, QA materialization, human review, and final validation remain pending. All
+  earlier freezes and bundles are superseded and Run B has never started.
+- Risks: an eligible population can legitimately require more than the minimum review count; a
+  physical capacity gate can still block QA materialization; a mismatch in any of the three
+  deterministic outputs blocks the review stage; and sampled smoke estimates may miss a slower
+  tail. None permits reducing coverage after observing private results.
+- Reversal condition: replace only with a workflow that preserves two independent complete
+  full-data proofs, exact plan comparison, every required represented bounded-registry quota, the
+  same physical and privacy gates, and equally strong human-review binding.
+- Commit/experiment: new freeze pending; `preprocess-0001-dicom-pipeline`.

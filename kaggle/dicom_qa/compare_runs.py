@@ -16,13 +16,13 @@ from typing import Any, Final
 MAX_MANIFEST_BYTES: Final = 512 * 1024**2
 MAX_LINE_BYTES: Final = 16 * 1024**2
 MAX_METRICS_BYTES: Final = 2 * 1024**2
-MAX_CASE_INDEX_BYTES: Final = 32 * 1024**2
-MAX_ARTIFACT_INVENTORY_BYTES: Final = 32 * 1024**2
+MAX_COHORT_PLAN_BYTES: Final = 32 * 1024**2
 OUTPUT_DIRECTORY: Final = "dicom_qa_comparison"
 PRIVATE_OUTPUT: Final = "private_run_comparison.json"
 SANITIZED_OUTPUT: Final = "sanitized_determinism.json"
 SAFE_CODE: Final = re.compile(r"[a-z][a-z0-9_]{0,63}")
 SAFE_FAILURE_COMPONENT: Final = re.compile(r"[A-Za-z0-9_.-]{1,160}")
+UID: Final = re.compile(r"(?:[0-9]+\.)*[0-9]+\Z")
 FILE_RECORD_KEYS: Final = frozenset(
     {"file_ordinal", "decode_state", "terminal_state", "resolution_state", "disposition"}
 )
@@ -51,8 +51,7 @@ class ManifestSnapshot:
 class RunFiles:
     manifest: Path
     metrics: Path
-    case_index: Path
-    artifact_inventory: Path
+    cohort_plan: Path
 
 
 def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -373,8 +372,13 @@ def _read_canonical_object(path: Path, maximum: int, code: str) -> dict[str, Any
         raise RunComparisonError(code) from error
 
 
-def _case_index_projection(path: Path) -> bytes:
-    value = _read_canonical_object(path, MAX_CASE_INDEX_BYTES, "case_index_invalid")
+def _cohort_plan_payload(path: Path, snapshot: ManifestSnapshot) -> bytes:
+    value = _read_canonical_object(path, MAX_COHORT_PLAN_BYTES, "cohort_plan_invalid")
+    provenance = value.get("provenance")
+    selection = value.get("selection")
+    coverage = value.get("coverage")
+    representatives = value.get("representatives")
+    studies = value.get("studies")
     if (
         set(value)
         != {
@@ -382,57 +386,111 @@ def _case_index_projection(path: Path) -> bytes:
             "artifact_type",
             "status",
             "provenance",
-            "input_identity",
-            "qa_cohort_selection",
-            "selection_census",
-            "represented_review_strata",
+            "selection",
+            "coverage",
+            "representatives",
             "studies",
-            "benchmark",
-            "full_run",
         }
         or value.get("schema_version") != 1
-        or value.get("artifact_type") != "private-dicom-qa-case-index"
-        or value.get("status") != "pending_private_human_review"
-    ):
-        raise RunComparisonError("case_index_invalid")
-    return _canonical_line(
-        {key: item for key, item in value.items() if key not in {"benchmark", "full_run"}}
-    )
-
-
-def _artifact_inventory_projection(path: Path) -> bytes:
-    value = _read_canonical_object(path, MAX_ARTIFACT_INVENTORY_BYTES, "artifact_inventory_invalid")
-    provenance = value.get("provenance")
-    artifacts = value.get("artifacts")
-    if (
-        set(value) != {"schema_version", "artifact_type", "status", "provenance", "artifacts"}
-        or value.get("schema_version") != 1
-        or value.get("artifact_type") != "private-dicom-qa-artifact-inventory"
-        or value.get("status") != "pending_private_human_review"
+        or value.get("artifact_type") != "private-dicom-qa-cohort-plan"
+        or value.get("status") != "complete_pending_comparison"
         or not isinstance(provenance, dict)
         or set(provenance)
         != {
             "git_commit",
             "bundle_sha256",
             "runner_sha256",
-            "review_finalizer_sha256",
-            "private_case_index_sha256",
+            "source_manifest_identity",
+            "full_run_manifest_sha256",
+            "qa_cohort_selection_version",
+            "qa_stratum_registry_version",
+            "qa_stratum_registry_sha256",
         }
-        or not isinstance(artifacts, list)
-        or not artifacts
+        or provenance.get("full_run_manifest_sha256") != snapshot.sha256
+        or any(
+            not isinstance(provenance.get(key), str)
+            or re.fullmatch(r"[0-9a-f]{64}", str(provenance[key])) is None
+            for key in ("bundle_sha256", "runner_sha256", "qa_stratum_registry_sha256")
+        )
+        or not isinstance(provenance.get("git_commit"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", str(provenance["git_commit"])) is None
+        or not isinstance(provenance.get("source_manifest_identity"), dict)
+        or not isinstance(selection, dict)
+        or set(selection)
+        != {
+            "minimum_studies",
+            "selected_studies",
+            "eligible_series",
+            "cohort_sha256",
+        }
+        or any(
+            type(selection.get(key)) is not int or int(selection[key]) < 1
+            for key in ("minimum_studies", "selected_studies", "eligible_series")
+        )
+        or selection["minimum_studies"] < 100
+        or selection["selected_studies"] < selection["minimum_studies"]
+        or selection["eligible_series"] < selection["selected_studies"]
+        or not isinstance(selection.get("cohort_sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", str(selection["cohort_sha256"])) is None
+        or not isinstance(coverage, dict)
+        or set(coverage) != {"ledger", "ledger_sha256"}
+        or not isinstance(coverage.get("ledger"), dict)
+        or not isinstance(coverage.get("ledger_sha256"), str)
+        or coverage["ledger_sha256"]
+        != hashlib.sha256(_canonical_line(coverage["ledger"])).hexdigest()
+        or not isinstance(representatives, list)
+        or not representatives
+        or not isinstance(studies, list)
+        or len(studies) != selection["selected_studies"]
     ):
-        raise RunComparisonError("artifact_inventory_invalid")
-    return _canonical_line(
-        {
-            "schema_version": 1,
-            "artifact_type": value["artifact_type"],
-            "status": value["status"],
-            "provenance": {
-                key: item for key, item in provenance.items() if key != "private_case_index_sha256"
-            },
-            "artifacts": artifacts,
-        }
-    )
+        raise RunComparisonError("cohort_plan_invalid")
+    observed_studies: set[str] = set()
+    eligible_by_study: dict[str, set[str]] = {}
+    eligible_series = 0
+    for study in studies:
+        if (
+            not isinstance(study, dict)
+            or set(study)
+            != {
+                "study_uid",
+                "selection_stratum",
+                "memberships",
+                "eligible_series_uids",
+            }
+            or not isinstance(study.get("study_uid"), str)
+            or UID.fullmatch(study["study_uid"]) is None
+            or study["study_uid"] in observed_studies
+            or not isinstance(study.get("selection_stratum"), list)
+            or not isinstance(study.get("memberships"), list)
+            or not study["memberships"]
+            or not isinstance(study.get("eligible_series_uids"), list)
+            or not study["eligible_series_uids"]
+            or study["eligible_series_uids"] != sorted(set(study["eligible_series_uids"]))
+            or any(
+                not isinstance(item, str) or UID.fullmatch(item) is None
+                for item in study["eligible_series_uids"]
+            )
+        ):
+            raise RunComparisonError("cohort_plan_invalid")
+        observed_studies.add(study["study_uid"])
+        eligible_by_study[study["study_uid"]] = set(study["eligible_series_uids"])
+        eligible_series += len(study["eligible_series_uids"])
+    if eligible_series != selection["eligible_series"]:
+        raise RunComparisonError("cohort_plan_invalid")
+    for representative in representatives:
+        if (
+            not isinstance(representative, dict)
+            or set(representative) != {"profile", "slice_count", "study_uid", "series_uid"}
+            or representative.get("profile") not in {"small", "median", "large"}
+            or type(representative.get("slice_count")) is not int
+            or representative["slice_count"] < 1
+            or not isinstance(representative.get("study_uid"), str)
+            or not isinstance(representative.get("series_uid"), str)
+            or representative["series_uid"]
+            not in eligible_by_study.get(representative["study_uid"], set())
+        ):
+            raise RunComparisonError("cohort_plan_invalid")
+    return _canonical_line(value)
 
 
 def _discover_runs(input_root: Path) -> tuple[RunFiles, RunFiles]:
@@ -451,14 +509,13 @@ def _discover_runs(input_root: Path) -> tuple[RunFiles, RunFiles]:
         except (OSError, ValueError) as error:
             raise RunComparisonError("run_inputs_invalid") from error
         metrics = manifest.with_name("private_full_run_metrics.json")
-        case_index = manifest.with_name("private_case_index.json")
-        artifact_inventory = manifest.with_name("private_artifact_inventory.json")
+        cohort_plan = manifest.with_name("private_cohort_plan.json")
         if any(
             candidate.is_symlink() or not candidate.is_file()
-            for candidate in (manifest, metrics, case_index, artifact_inventory)
+            for candidate in (manifest, metrics, cohort_plan)
         ):
             raise RunComparisonError("run_inputs_invalid")
-        runs.append(RunFiles(manifest, metrics, case_index, artifact_inventory))
+        runs.append(RunFiles(manifest, metrics, cohort_plan))
     return runs[0], runs[1]
 
 
@@ -489,15 +546,22 @@ def compare_private_run_roots(input_root: Path, output_root: Path) -> None:
         "model_eligible_series",
         "logical_cache_bytes",
         "manifest_sha256",
+        "qa_cohort_selection",
+        "cohort_plan_sha256",
+        "coverage_ledger_sha256",
     )
     if any(metrics_a.get(key) != metrics_b.get(key) for key in deterministic_metric_keys):
         raise RunComparisonError("deterministic_metrics_mismatch")
-    if _case_index_projection(run_a.case_index) != _case_index_projection(run_b.case_index):
-        raise RunComparisonError("deterministic_case_index_mismatch")
-    if _artifact_inventory_projection(run_a.artifact_inventory) != _artifact_inventory_projection(
-        run_b.artifact_inventory
+    cohort_plan_a = _cohort_plan_payload(run_a.cohort_plan, snapshot)
+    cohort_plan_b = _cohort_plan_payload(run_b.cohort_plan, snapshot)
+    if cohort_plan_a != cohort_plan_b or not _files_equal(run_a.cohort_plan, run_b.cohort_plan):
+        raise RunComparisonError("deterministic_cohort_plan_mismatch")
+    cohort_plan_sha256 = hashlib.sha256(cohort_plan_a).hexdigest()
+    if any(
+        metrics.get("cohort_plan_sha256") != cohort_plan_sha256
+        for metrics in (metrics_a, metrics_b)
     ):
-        raise RunComparisonError("deterministic_artifact_inventory_mismatch")
+        raise RunComparisonError("deterministic_metrics_mismatch")
     if output_root.exists() or output_root.is_symlink():
         raise RunComparisonError("comparison_output_exists")
     staging = Path(tempfile.mkdtemp(prefix=f".{output_root.name}.", dir=output_root.parent))
@@ -509,8 +573,8 @@ def compare_private_run_roots(input_root: Path, output_root: Path) -> None:
                 "artifact_type": "private-dicom-run-comparison",
                 "status": "pass",
                 "exact_manifest_byte_equality": True,
-                "case_index_deterministic_projection_equal": True,
-                "qa_artifact_inventory_equal": True,
+                "cohort_plan_byte_equality": True,
+                "cohort_plan_sha256": cohort_plan_sha256,
                 "manifest_sha256": snapshot.sha256,
                 "studies": snapshot.studies,
                 "series": snapshot.series,
@@ -536,8 +600,7 @@ def compare_private_run_roots(input_root: Path, output_root: Path) -> None:
                 "independent_runs_compared": True,
                 "exact_manifest_byte_equality": True,
                 "deterministic_metrics_equal": True,
-                "case_index_deterministic_projection_equal": True,
-                "qa_artifact_inventory_equal": True,
+                "cohort_plan_byte_equality": True,
                 "unresolved_mismatches": "zero",
                 "private_case_details_downloaded": False,
             }

@@ -243,7 +243,13 @@ def test_manifest_parser_reconciles_partial_source_access_block(tmp_path: Path) 
     assert (snapshot.series, snapshot.files) == (2, 5)
 
 
-def _metrics(path: Path, snapshot: object, *, model_eligible: int = 1) -> None:
+def _metrics(
+    path: Path,
+    snapshot: object,
+    *,
+    cohort_plan_sha256: str,
+    model_eligible: int = 1,
+) -> None:
     path.write_bytes(
         _line(
             {
@@ -256,56 +262,70 @@ def _metrics(path: Path, snapshot: object, *, model_eligible: int = 1) -> None:
                 "model_eligible_series": model_eligible,
                 "logical_cache_bytes": 128,
                 "manifest_sha256": snapshot.sha256,
+                "qa_cohort_selection": {
+                    "selected_studies": 100,
+                    "eligible_series": 100,
+                    "cohort_sha256": "f" * 64,
+                },
+                "cohort_plan_sha256": cohort_plan_sha256,
+                "coverage_ledger_sha256": "e" * 64,
                 "total_wall_seconds": 1.0,
             }
         )
     )
 
 
-def _case_index_and_inventory(root: Path, *, study_marker: str = "same") -> None:
-    case_payload = _line(
+def _cohort_plan(root: Path, snapshot: object, *, study_marker: str = "same") -> str:
+    ledger = {
+        "all_required_represented_registry_values_satisfy_quotas": True,
+        "marker": study_marker,
+    }
+    payload = _line(
         {
             "schema_version": 1,
-            "artifact_type": "private-dicom-qa-case-index",
-            "status": "pending_private_human_review",
+            "artifact_type": "private-dicom-qa-cohort-plan",
+            "status": "complete_pending_comparison",
             "provenance": {
                 "git_commit": "a" * 40,
                 "bundle_sha256": "b" * 64,
+                "runner_sha256": "c" * 64,
+                "source_manifest_identity": {"status": "synthetic"},
+                "full_run_manifest_sha256": snapshot.sha256,
+                "qa_cohort_selection_version": "qa-cohort-selection-v3",
+                "qa_stratum_registry_version": "qa-stratum-registry-v1",
+                "qa_stratum_registry_sha256": "d" * 64,
             },
-            "input_identity": {"source": "synthetic"},
-            "qa_cohort_selection": {"cohort": "fixed"},
-            "selection_census": [],
-            "represented_review_strata": [],
-            "studies": [{"marker": study_marker}],
-            "benchmark": {"wall_seconds": 1.0},
-            "full_run": {"cpu_seconds": 1.0},
+            "selection": {
+                "minimum_studies": 100,
+                "selected_studies": 100,
+                "eligible_series": 100,
+                "cohort_sha256": "f" * 64,
+            },
+            "coverage": {
+                "ledger": ledger,
+                "ledger_sha256": hashlib.sha256(_line(ledger)).hexdigest(),
+            },
+            "representatives": [
+                {
+                    "profile": "median",
+                    "slice_count": 2,
+                    "study_uid": "1.2.826.0.1.1000",
+                    "series_uid": "1.2.826.0.2.2000",
+                }
+            ],
+            "studies": [
+                {
+                    "study_uid": f"1.2.826.0.1.{1000 + index}",
+                    "selection_stratum": [study_marker],
+                    "memberships": [["pipeline_case", "clean"]],
+                    "eligible_series_uids": [f"1.2.826.0.2.{2000 + index}"],
+                }
+                for index in range(100)
+            ],
         }
     )
-    (root / "private_case_index.json").write_bytes(case_payload)
-    (root / "private_artifact_inventory.json").write_bytes(
-        _line(
-            {
-                "schema_version": 1,
-                "artifact_type": "private-dicom-qa-artifact-inventory",
-                "status": "pending_private_human_review",
-                "provenance": {
-                    "git_commit": "a" * 40,
-                    "bundle_sha256": "b" * 64,
-                    "runner_sha256": "c" * 64,
-                    "review_finalizer_sha256": "d" * 64,
-                    "private_case_index_sha256": hashlib.sha256(case_payload).hexdigest(),
-                },
-                "artifacts": [
-                    {
-                        "kind": "contact_sheet",
-                        "basename": "case_000001_series_001_contact.png",
-                        "bytes": 1,
-                        "sha256": "e" * 64,
-                    }
-                ],
-            }
-        )
-    )
+    (root / "private_cohort_plan.json").write_bytes(payload)
+    return hashlib.sha256(payload).hexdigest()
 
 
 def test_private_comparator_discovers_two_runs_and_emits_only_fixed_aggregate(
@@ -319,8 +339,12 @@ def test_private_comparator_discovers_two_runs_and_emits_only_fixed_aggregate(
         manifest = root / "private_full_run_manifest.jsonl"
         _manifest(manifest)
         snapshot = module.inspect_manifest(manifest)
-        _metrics(root / "private_full_run_metrics.json", snapshot)
-        _case_index_and_inventory(root)
+        cohort_plan_sha256 = _cohort_plan(root, snapshot)
+        _metrics(
+            root / "private_full_run_metrics.json",
+            snapshot,
+            cohort_plan_sha256=cohort_plan_sha256,
+        )
 
     output = tmp_path / "working" / module.OUTPUT_DIRECTORY
     output.parent.mkdir()
@@ -338,25 +362,27 @@ def test_private_comparator_discovers_two_runs_and_emits_only_fixed_aggregate(
         "independent_runs_compared": True,
         "exact_manifest_byte_equality": True,
         "deterministic_metrics_equal": True,
-        "case_index_deterministic_projection_equal": True,
-        "qa_artifact_inventory_equal": True,
+        "cohort_plan_byte_equality": True,
         "unresolved_mismatches": "zero",
         "private_case_details_downloaded": False,
     }
-    assert "private-study" not in (output / module.SANITIZED_OUTPUT).read_text()
+    assert "1.2.826" not in (output / module.SANITIZED_OUTPUT).read_text()
 
     _metrics(
         input_root / "run-b" / "dicom_qa" / "private_full_run_metrics.json",
         module.inspect_manifest(
             input_root / "run-b" / "dicom_qa" / "private_full_run_manifest.jsonl"
         ),
+        cohort_plan_sha256=hashlib.sha256(
+            (input_root / "run-b" / "dicom_qa" / "private_cohort_plan.json").read_bytes()
+        ).hexdigest(),
         model_eligible=2,
     )
     with pytest.raises(module.RunComparisonError, match="deterministic_metrics_mismatch"):
         module.compare_private_run_roots(input_root, tmp_path / "second")
 
 
-def test_private_comparator_rejects_independent_qa_artifact_drift(tmp_path: Path) -> None:
+def test_private_comparator_rejects_independent_cohort_plan_drift(tmp_path: Path) -> None:
     module = _module(Path(__file__).parents[1])
     input_root = tmp_path / "input"
     for name in ("run-a", "run-b"):
@@ -364,8 +390,22 @@ def test_private_comparator_rejects_independent_qa_artifact_drift(tmp_path: Path
         root.mkdir(parents=True)
         manifest = root / "private_full_run_manifest.jsonl"
         _manifest(manifest)
-        _metrics(root / "private_full_run_metrics.json", module.inspect_manifest(manifest))
-        _case_index_and_inventory(root, study_marker=name)
+        snapshot = module.inspect_manifest(manifest)
+        cohort_plan_sha256 = _cohort_plan(root, snapshot, study_marker=name)
+        _metrics(
+            root / "private_full_run_metrics.json",
+            snapshot,
+            cohort_plan_sha256=cohort_plan_sha256,
+        )
+    run_a_plan_sha256 = hashlib.sha256(
+        (input_root / "run-a" / "dicom_qa" / "private_cohort_plan.json").read_bytes()
+    ).hexdigest()
+    run_b_manifest = input_root / "run-b" / "dicom_qa" / "private_full_run_manifest.jsonl"
+    _metrics(
+        input_root / "run-b" / "dicom_qa" / "private_full_run_metrics.json",
+        module.inspect_manifest(run_b_manifest),
+        cohort_plan_sha256=run_a_plan_sha256,
+    )
 
-    with pytest.raises(module.RunComparisonError, match="deterministic_case_index_mismatch"):
+    with pytest.raises(module.RunComparisonError, match="deterministic_cohort_plan_mismatch"):
         module.compare_private_run_roots(input_root, tmp_path / "output")

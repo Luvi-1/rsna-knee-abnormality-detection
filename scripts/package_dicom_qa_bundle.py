@@ -70,11 +70,9 @@ COMPETITION_SLUG: Final = "rsna-knee-abnormality-detection"
 RUN_CONFIG_BUNDLE_PLACEHOLDER: Final = "0" * 64
 MAX_BUNDLE_BYTES: Final = 128 * 1024 * 1024
 OUTPUT_DIRECTORY: Final = "dicom-qa-output"
-TARGET_STUDIES: Final = 120
-MAX_TARGET_STUDIES: Final = 240
+TARGET_STUDIES: Final = 100
 MINIMUM_ELIGIBLE_STUDIES: Final = 100
-MATERIAL_STRATUM_MIN_STUDIES: Final = 2
-MATERIAL_STRATUM_SAMPLE_QUOTA: Final = 2
+REPRESENTED_VALUE_QUOTA: Final = 2
 SELECTION_SEED: Final = 20260809
 SELF_DEADLINE_SECONDS: Final = 27_000
 OUTER_KILL_SECONDS: Final = 28_800
@@ -82,24 +80,46 @@ SOURCE_MANIFEST_VERSION: Final = "manifest-v2"
 SOURCE_MANIFEST_AUDIT_ID: Final = "audit-0002-manifest-remediation"
 SOURCE_MANIFEST_KERNEL_VERSION: Final = 1
 QA_KERNEL_VERSION: Final = 1
-QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v2"
+QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v3"
+QA_STRATUM_REGISTRY_VERSION: Final = "qa-stratum-registry-v1"
+QA_STRATUM_REGISTRY_SHA256: Final = (
+    "13829b49acec7ed2a3cb83cc862caaf3"  # pragma: allowlist secret
+    "251ecbab9f1b11eca4061c0c9ae5acf3"  # pragma: allowlist secret
+)
+REQUIRED_REVIEW_DIMENSIONS: Final = (
+    "laterality",
+    "organizer_plane",
+    "physical_plane",
+    "organizer_physical_plane_relation",
+    "assigned_diagnostic_slot",
+    "additional_diagnostic_series",
+    "multiple_series_per_slot",
+    "missing_diagnostic_slot",
+    "retained_nonduplicate_abnormal_series",
+    "duplicate_handling",
+    "bit_depth_category",
+    "photometric_interpretation",
+    "transfer_syntax",
+    "slice_thickness_stratum",
+    "slice_spacing_stratum",
+    "resolution_extreme",
+    "slice_count_extreme",
+    "scanner_manufacturer",
+    "scanner_model",
+    "field_strength",
+    "site_domain_cluster",
+    "source_manifest_quality_flag",
+    "terminal_state",
+    "pipeline_case",
+    "dicom_edge_case_subtype",
+)
 REQUIRED_RUNTIME_PACKAGES: Final = {
     "pillow": "12.3.0",
     "pylibjpeg": "2.1.0",
     "pylibjpeg-libjpeg": "2.4.0",
     "pylibjpeg-openjpeg": "2.5.0",
 }
-PRIVATE_OUTPUTS: Final = (
-    {
-        "path": f"{OUTPUT_DIRECTORY}/private_case_index.json",
-        "kind": "private_remote_only",
-        "max_bytes": 32 * 1024**2,
-    },
-    {
-        "path": f"{OUTPUT_DIRECTORY}/private_artifact_inventory.json",
-        "kind": "private_remote_only",
-        "max_bytes": 32 * 1024**2,
-    },
+RUN_PRIVATE_OUTPUTS: Final = (
     {
         "path": f"{OUTPUT_DIRECTORY}/private_full_run_manifest.jsonl",
         "kind": "private_remote_only",
@@ -110,8 +130,37 @@ PRIVATE_OUTPUTS: Final = (
         "kind": "private_remote_only",
         "max_bytes": 2 * 1024**2,
     },
+    {
+        "path": f"{OUTPUT_DIRECTORY}/private_cohort_plan.json",
+        "kind": "private_remote_only",
+        "max_bytes": 32 * 1024**2,
+    },
 )
-PRIVATE_PATTERN_OUTPUTS: Final = (
+RUN_DOWNLOADABLE_OUTPUTS: Final = (
+    {
+        "path": f"{OUTPUT_DIRECTORY}/sanitized_summary.json",
+        "kind": "aggregate_json",
+        "max_bytes": 256 * 1024,
+    },
+    {
+        "path": f"{OUTPUT_DIRECTORY}/sanitized_artifact_inventory.json",
+        "kind": "aggregate_json",
+        "max_bytes": 128 * 1024,
+    },
+)
+REVIEW_PRIVATE_OUTPUTS: Final = (
+    {
+        "path": f"{OUTPUT_DIRECTORY}/private_case_index.json",
+        "kind": "private_remote_only",
+        "max_bytes": 32 * 1024**2,
+    },
+    {
+        "path": f"{OUTPUT_DIRECTORY}/private_artifact_inventory.json",
+        "kind": "private_remote_only",
+        "max_bytes": 32 * 1024**2,
+    },
+)
+REVIEW_PRIVATE_PATTERN_OUTPUTS: Final = (
     {
         "prefix": f"{OUTPUT_DIRECTORY}/private-review/",
         "basename_pattern": (
@@ -125,7 +174,7 @@ PRIVATE_PATTERN_OUTPUTS: Final = (
         "max_total_bytes": 8 * 1024**3,
     },
 )
-DOWNLOADABLE_OUTPUTS: Final = (
+REVIEW_DOWNLOADABLE_OUTPUTS: Final = (
     {
         "path": f"{OUTPUT_DIRECTORY}/sanitized_summary.json",
         "kind": "aggregate_json",
@@ -163,10 +212,12 @@ REVIEW_CHECKS: Final = (
     "duplicate_missing_abnormal_handling",
 )
 REVIEW_STATUSES: Final = ("PASS", "BLOCK", "NOT_APPLICABLE")
-REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v1"
+REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v2"
+REVIEW_INSTRUCTIONS_VERSION: Final = "private-dicom-qa-review-instructions-v2"
 REQUIRED_PROJECT_WHEEL_MEMBERS: Final = frozenset(
     {
         "rsna_knee/data/series_slots.py",
+        "rsna_knee/data/qa_strata.py",
         "rsna_knee/dicom/audit.py",
         "rsna_knee/dicom/benchmark.py",
         "rsna_knee/dicom/pipeline.py",
@@ -174,6 +225,9 @@ REQUIRED_PROJECT_WHEEL_MEMBERS: Final = frozenset(
     }
 )
 REVIEW_NOTEBOOK_BASENAME: Final = "review_ui.ipynb"
+PERFORMANCE_SMOKE_POLICY_BASENAME: Final = "performance-smoke-policy.json"
+PERFORMANCE_SMOKE_SELF_DEADLINE_SECONDS: Final = 3_600
+PERFORMANCE_SMOKE_SUMMARY_MAX_BYTES: Final = 16 * 1024
 SYNTHETIC_PREFLIGHT_BASENAME: Final = "synthetic-preflight.json"
 MAX_SYNTHETIC_PREFLIGHT_BYTES: Final = 16 * 1024
 SYNTHETIC_PREFLIGHT_REPORT: Final = {
@@ -202,6 +256,28 @@ SYNTHETIC_PREFLIGHT_REPORT: Final = {
         "through_plane_not_resampled": True,
     },
 }
+
+
+def _performance_smoke_policy(entrypoint_sha256: str) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "artifact_type": "dicom-qa-performance-smoke-policy",
+        "entrypoint": {"code_file": "performance_smoke.py", "sha256": entrypoint_sha256},
+        "kernel": {
+            "is_private": True,
+            "enable_internet": False,
+            "enable_gpu": False,
+            "enable_tpu": False,
+            "self_deadline_seconds": PERFORMANCE_SMOKE_SELF_DEADLINE_SECONDS,
+            "full_run_allowed": False,
+        },
+        "output": {
+            "directory": "dicom-qa-performance-smoke",
+            "filename": "sanitized_performance_smoke.json",
+            "kind": "sanitized_aggregate",
+            "max_bytes": PERFORMANCE_SMOKE_SUMMARY_MAX_BYTES,
+        },
+    }
 
 
 def _validate_preprocessing_config(path: Path) -> dict[str, Any]:
@@ -834,6 +910,7 @@ def _review_notebook_payload() -> bytes:
 
 def _derived_refs(owner: str, commit: str, bundle: str) -> dict[str, str]:
     prefixes = {
+        "performance_smoke": "rsna-knee-dqa-smoke",
         "run_a": "rsna-knee-dqa-a",
         "run_b": "rsna-knee-dqa-b",
         "comparison": "rsna-knee-dqa-cmp",
@@ -893,6 +970,8 @@ def _bundle_identity(
     git_commit: str,
     git_commit_timestamp: int,
     kernel_sha256: str,
+    performance_smoke_sha256: str,
+    performance_smoke_policy_sha256: str,
     comparison_sha256: str,
     review_finalizer_sha256: str,
     review_ui_sha256: str,
@@ -910,6 +989,12 @@ def _bundle_identity(
         "deployment": {"owner": owner},
         "competition": {"slug": COMPETITION_SLUG},
         "kernel": {"code_file": "run.py", "sha256": kernel_sha256},
+        "performance_smoke": {
+            "code_file": "performance_smoke.py",
+            "sha256": performance_smoke_sha256,
+            "policy_file": PERFORMANCE_SMOKE_POLICY_BASENAME,
+            "policy_sha256": performance_smoke_policy_sha256,
+        },
         "comparison": {"code_file": "compare_runs.py", "sha256": comparison_sha256},
         "review_finalizer": {
             "code_file": "finalize_review.py",
@@ -934,6 +1019,8 @@ def _run_config(
     owner: str,
     commit: str,
     runner_sha256: str,
+    performance_smoke_sha256: str,
+    performance_smoke_policy_sha256: str,
     comparison_sha256: str,
     review_finalizer_sha256: str,
     review_ui_sha256: str,
@@ -974,6 +1061,8 @@ def _run_config(
             "renderer_version": "private-qa-renderer-v1",
             "required_runtime_packages": dict(REQUIRED_RUNTIME_PACKAGES),
             "runner_sha256": runner_sha256,
+            "performance_smoke_sha256": performance_smoke_sha256,
+            "performance_smoke_policy_sha256": performance_smoke_policy_sha256,
             "comparison_sha256": comparison_sha256,
             "review_finalizer_sha256": review_finalizer_sha256,
             "review_ui_sha256": review_ui_sha256,
@@ -991,7 +1080,10 @@ def _run_config(
         },
         "review_policy": {
             "protocol_version": REVIEW_PROTOCOL_VERSION,
+            "instructions_version": REVIEW_INSTRUCTIONS_VERSION,
             "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
             "kernel_version": QA_KERNEL_VERSION,
             "checks": list(REVIEW_CHECKS),
             "statuses": list(REVIEW_STATUSES),
@@ -1006,26 +1098,14 @@ def _run_config(
             "wheel_set_sha256": _sha256_bytes(_canonical_json_bytes(dependency_identity)),
         },
         "selection": {
-            "source": "train_series.csv",
-            "seed": SELECTION_SEED,
-            "target_studies": TARGET_STUDIES,
-            "maximum_studies": MAX_TARGET_STUDIES,
-            "minimum_eligible_studies": MINIMUM_ELIGIBLE_STUDIES,
-            "material_stratum_minimum_studies": MATERIAL_STRATUM_MIN_STUDIES,
-            "material_stratum_sample_quota": MATERIAL_STRATUM_SAMPLE_QUOTA,
-            "strata": [
-                "plane_profile",
-                "fluid_profile",
-                "series_count_bucket",
-                "slice_count_profile",
-                "bit_depth_profile",
-                "photometric_profile",
-                "transfer_syntax_profile",
-                "resolution_profile",
-                "thickness_profile",
-                "slice_spacing_profile",
-                "orientation_obliquity_profile",
-            ],
+            "source": "full_run_terminal_records_plus_authenticated_manifest_v2",
+            "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "minimum_is_not_maximum": True,
+            "represented_value_quota": REPRESENTED_VALUE_QUOTA,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+            "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "dimensions": list(REQUIRED_REVIEW_DIMENSIONS),
         },
         "workers": workers,
         "privacy": {
@@ -1051,12 +1131,16 @@ def _run_config(
             "outer_kill_seconds": OUTER_KILL_SECONDS,
         },
         "output_policy": {
-            "private_remote_only": list(PRIVATE_OUTPUTS),
-            "private_remote_patterns": list(PRIVATE_PATTERN_OUTPUTS),
-            "downloadable": list(DOWNLOADABLE_OUTPUTS),
+            "run_private_remote_only": list(RUN_PRIVATE_OUTPUTS),
+            "run_downloadable": list(RUN_DOWNLOADABLE_OUTPUTS),
+            "review_private_remote_only": list(REVIEW_PRIVATE_OUTPUTS),
+            "review_private_remote_patterns": list(REVIEW_PRIVATE_PATTERN_OUTPUTS),
+            "review_downloadable": list(REVIEW_DOWNLOADABLE_OUTPUTS),
             "session_log": SESSION_LOG_POLICY,
-            "max_remote_bytes": 8 * 1024**3 + 581 * 1024**2,
-            "max_download_bytes": 512 * 1024,
+            "run_max_remote_bytes": 548 * 1024**2 + 384 * 1024,
+            "run_max_download_bytes": 384 * 1024,
+            "review_max_remote_bytes": 8 * 1024**3 + 66 * 1024**2 + 512 * 1024,
+            "review_max_download_bytes": 512 * 1024,
         },
     }
 
@@ -1077,6 +1161,7 @@ def _assemble_bundle(
     competition_contract_path: Path,
     uv_lock_path: Path,
     kernel_runner_path: Path,
+    performance_smoke_path: Path,
     comparison_path: Path,
     review_finalizer_path: Path,
     review_ui_path: Path,
@@ -1115,6 +1200,13 @@ def _assemble_bundle(
     runner_payload = _read_bounded(kernel_runner_path, 1024 * 1024)
     _scan_for_secrets(runner_payload)
     runner_sha256 = _sha256_bytes(runner_payload)
+    performance_smoke_payload = _read_bounded(performance_smoke_path, 1024 * 1024)
+    _scan_for_secrets(performance_smoke_payload)
+    performance_smoke_sha256 = _sha256_bytes(performance_smoke_payload)
+    performance_smoke_policy_payload = _canonical_json_bytes(
+        _performance_smoke_policy(performance_smoke_sha256)
+    )
+    performance_smoke_policy_sha256 = _sha256_bytes(performance_smoke_policy_payload)
     comparison_payload = _read_bounded(comparison_path, 1024 * 1024)
     _scan_for_secrets(comparison_payload)
     comparison_sha256 = _sha256_bytes(comparison_payload)
@@ -1135,6 +1227,7 @@ def _assemble_bundle(
     temporary_root = Path(tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=output.parent))
     try:
         dataset_dir = temporary_root / "dataset"
+        performance_smoke_dir = temporary_root / "performance-smoke-kernel"
         run_a_dir = temporary_root / "kernel-a"
         run_b_dir = temporary_root / "kernel-b"
         comparison_dir = temporary_root / "comparison-kernel"
@@ -1143,6 +1236,7 @@ def _assemble_bundle(
         review_finalizer_dir = temporary_root / "review-finalizer-kernel"
         dataset_dir.mkdir()
         for directory in (
+            performance_smoke_dir,
             run_a_dir,
             run_b_dir,
             comparison_dir,
@@ -1232,6 +1326,13 @@ def _assemble_bundle(
                 True,
             ),
             (
+                performance_smoke_path,
+                dataset_dir / "performance_smoke.py",
+                "performance_smoke_source",
+                "kaggle/dicom_qa/performance_smoke.py",
+                True,
+            ),
+            (
                 synthetic_preflight_path,
                 dataset_dir / SYNTHETIC_PREFLIGHT_BASENAME,
                 "synthetic_preflight",
@@ -1242,6 +1343,11 @@ def _assemble_bundle(
         _write_bytes(
             dataset_dir / REVIEW_NOTEBOOK_BASENAME,
             review_notebook_payload,
+            git_commit_timestamp,
+        )
+        _write_bytes(
+            dataset_dir / PERFORMANCE_SMOKE_POLICY_BASENAME,
+            performance_smoke_policy_payload,
             git_commit_timestamp,
         )
         for source, target, _role, _source_path, scan in payload_specs:
@@ -1263,6 +1369,13 @@ def _assemble_bundle(
                 "generated/review_ui.ipynb",
             )
         )
+        records.append(
+            _file_record(
+                dataset_dir / PERFORMANCE_SMOKE_POLICY_BASENAME,
+                "performance_smoke_policy",
+                f"generated/{PERFORMANCE_SMOKE_POLICY_BASENAME}",
+            )
+        )
         dependency_records: list[dict[str, object]] = []
         for dependency in sorted(dependency_wheel_paths, key=lambda path: path.name):
             target = dataset_dir / dependency.name
@@ -1281,6 +1394,8 @@ def _assemble_bundle(
             owner=owner,
             commit=git_commit,
             runner_sha256=runner_sha256,
+            performance_smoke_sha256=performance_smoke_sha256,
+            performance_smoke_policy_sha256=performance_smoke_policy_sha256,
             comparison_sha256=comparison_sha256,
             review_finalizer_sha256=review_finalizer_sha256,
             review_ui_sha256=review_ui_sha256,
@@ -1298,6 +1413,8 @@ def _assemble_bundle(
             git_commit=git_commit,
             git_commit_timestamp=git_commit_timestamp,
             kernel_sha256=runner_sha256,
+            performance_smoke_sha256=performance_smoke_sha256,
+            performance_smoke_policy_sha256=performance_smoke_policy_sha256,
             comparison_sha256=comparison_sha256,
             review_finalizer_sha256=review_finalizer_sha256,
             review_ui_sha256=review_ui_sha256,
@@ -1378,6 +1495,14 @@ def _assemble_bundle(
                 git_commit_timestamp,
             )
 
+        write_kernel(
+            performance_smoke_dir,
+            ref=refs["performance_smoke"],
+            code_file="performance_smoke.py",
+            payload=performance_smoke_payload,
+            kernel_sources=[source_manifest_ref],
+            competition_sources=[COMPETITION_SLUG],
+        )
         for directory, role in ((run_a_dir, "run_a"), (run_b_dir, "run_b")):
             write_kernel(
                 directory,
@@ -1399,7 +1524,13 @@ def _assemble_bundle(
             ref=refs["review_plan"],
             code_file="finalize_review.py",
             payload=review_finalizer_payload,
-            kernel_sources=[refs["run_a"], refs["run_b"], refs["comparison"]],
+            kernel_sources=[
+                refs["performance_smoke"],
+                refs["run_a"],
+                refs["run_b"],
+                refs["comparison"],
+            ],
+            competition_sources=[COMPETITION_SLUG],
         )
         review_sources = [
             refs["run_a"],
@@ -1424,11 +1555,13 @@ def _assemble_bundle(
                 refs["run_a"],
                 refs["run_b"],
                 refs["comparison"],
+                refs["review_plan"],
                 refs["review_session"],
             ],
         )
         directories = [
             dataset_dir,
+            performance_smoke_dir,
             run_a_dir,
             run_b_dir,
             comparison_dir,
@@ -1474,6 +1607,7 @@ def _clean_git_provenance(repo_root: Path) -> tuple[str, int]:
         "docs/competition_contract/contract.yaml",
         "uv.lock",
         "kaggle/dicom_qa/run.py",
+        "kaggle/dicom_qa/performance_smoke.py",
         "kaggle/dicom_qa/compare_runs.py",
         "kaggle/dicom_qa/finalize_review.py",
         "kaggle/dicom_qa/review_ui.py",
@@ -1553,6 +1687,7 @@ def package_from_clean_repo(args: argparse.Namespace) -> dict[str, str]:
             competition_contract_path=repo_root / "docs/competition_contract/contract.yaml",
             uv_lock_path=repo_root / "uv.lock",
             kernel_runner_path=repo_root / "kaggle/dicom_qa/run.py",
+            performance_smoke_path=repo_root / "kaggle/dicom_qa/performance_smoke.py",
             comparison_path=repo_root / "kaggle/dicom_qa/compare_runs.py",
             review_finalizer_path=repo_root / "kaggle/dicom_qa/finalize_review.py",
             review_ui_path=repo_root / "kaggle/dicom_qa/review_ui.py",

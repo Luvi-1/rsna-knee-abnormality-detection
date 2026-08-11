@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import subprocess
 import sys
@@ -36,6 +37,7 @@ def _options(module: Any) -> set[str]:
 
 def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) -> None:
     text = README.read_text()
+    normalized = " ".join(text.split())
     _load("package_manifest_bundle", MANIFEST_PACKAGER)
     packager = _load("_readme_packager", PACKAGER)
     validator = _load("_readme_validator", VALIDATOR)
@@ -60,6 +62,8 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     required_in_order = (
         "audit-0002-manifest-remediation",
         "validate_workflow_stage inputs",
+        '--path "$bundle_root/performance-smoke-kernel" --timeout 4200',
+        "validate_workflow_stage performance-smoke",
         "push_kernel_v1 kernel-a",
         "validate_workflow_stage run-a",
         "push_kernel_v1 kernel-b",
@@ -84,13 +88,46 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     assert checks == list(packager.REVIEW_CHECKS)
     assert "`PASS`, `BLOCK`, or\n   `NOT_APPLICABLE`" in text
     assert "`N` is permitted only for `duplicate_missing_abnormal_handling`" in text
-    assert "At least one reviewed series\n   must record `PASS` for every check" in text
+    assert "There is no global one-`PASS`-per-check shortcut" in text
+    assert "when the UI says `CHECK_9_APPLICABLE=NO`" in text
     assert "`final_performance_report.json`" in text
     assert "entire authorized training set" in text
     assert "at least 100 studies" in text
     assert "every eligible diagnostic\n   series" in text
     assert "Any `BLOCK`" in text
     assert "local aggregate" not in text.lower()
+    for value in (
+        "Run A and Run B are deliberately core-only.",
+        "`private_full_run_manifest.jsonl`",
+        "`private_full_run_metrics.json`",
+        "`private_cohort_plan.json`",
+        "`run_private_remote_only`, `run_downloadable`,",
+        "`review_private_remote_only`, `review_private_remote_patterns`, and `review_downloadable`",
+        "`cohort_plan_byte_equality`",
+        "The existing review-plan kernel is the only downstream QA-preparation stage",
+        "performance-smoke v1, Run A v1, Run B v1, and comparison v1, in that order",
+        "The `run-a` workflow gate reauthenticates the completed smoke v1",
+        "safe progress sequence begins with `full_pass`",
+        "`dicom_qa_plan_progress` sequence is exactly `cohort_replay` start/complete followed by",
+        "its only competition source is the official competition",
+        "It deliberately has no direct source-manifest kernel source",
+        "owned by review-plan v1, never by Run A or Run B",
+        "seven artifacts per series",
+        "20,000-file cap",
+        "fixed 600-second finalization reserve",
+        "8 GiB total and 32 MiB per-file caps",
+        "review-plan slug root",
+        "each run's `sanitized_summary.json` and `sanitized_artifact_inventory.json`",
+        "review-plan's `sanitized_summary.json`, `benchmark.md`, and",
+    ):
+        assert value in normalized
+    for obsolete_claim in (
+        "rehash the Run A artifacts",
+        "under the authenticated Run A",
+        "already-sanitized Run A measurements",
+        "each run's `sanitized_summary.json`, `benchmark.md`",
+    ):
+        assert obsolete_claim not in normalized
     assert "`dicom_qa_output_validation=PASS mode=workflow stage=<stage>`" in text
     assert (
         "`dicom_qa_output_validation=PASS mode=workflow stage=final "
@@ -98,6 +135,7 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     )
     workflow_stages = [
         "inputs",
+        "performance-smoke",
         "run-a",
         "run-b",
         "comparison",
@@ -126,9 +164,15 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
         "not target-runtime execution",
         "recomputes every declared size",
         "It never\ndownloads competition DICOMs",
-        "including singleton/nonmaterial values",
+        "`qa-stratum-registry-v1`",
+        "`qa-cohort-selection-v3`",
+        "minimum of 100 studies, not a maximum",
+        "represented\nregistry-value quota `min(2, population)`",
     ):
         assert value in text
+    assert "qa-material-strata-v1" not in text
+    assert "material_stratum_policy_version" not in text
+    assert "represented material stratum" not in text
 
     bash_blocks = re.findall(r"```bash\n(.*?)```", text, flags=re.DOTALL)
     package_flags = {
@@ -170,10 +214,32 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     assert list(workflow_stage_action.choices) == workflow_stages
 
     fixture = _load("_readme_packaging_fixture", PACKAGING_TEST)
-    bundle, _result = fixture._assembled(tmp_path)
+    bundle, result = fixture._assembled(tmp_path)
     generated = {path.name for path in bundle.iterdir()}
     documented = {name for name in generated if f"- `{name}`" in text}
     assert documented == generated
+    review_plan = _load_json(bundle / "review-plan-kernel/kernel-metadata.json")
+    assert review_plan["kernel_sources"] == [
+        result["performance_smoke_ref"],
+        result["run_a_ref"],
+        result["run_b_ref"],
+        result["comparison_ref"],
+    ]
+    assert review_plan["competition_sources"] == [packager.COMPETITION_SLUG]
+    finalizer = _load_json(bundle / "review-finalizer-kernel/kernel-metadata.json")
+    assert finalizer["kernel_sources"] == [
+        result["run_a_ref"],
+        result["run_b_ref"],
+        result["comparison_ref"],
+        result["review_plan_ref"],
+        result["review_session_ref"],
+    ]
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text())
+    assert isinstance(payload, dict)
+    return payload
 
 
 def test_documented_kaggle_flags_exist_in_cli_224_help_without_network() -> None:

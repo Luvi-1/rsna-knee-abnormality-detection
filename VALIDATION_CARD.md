@@ -73,33 +73,44 @@ deterministic sampling, flexible series slots, and repeated-output checks. Its o
 canonicalizes the physical slice direction while preserving native in-plane pixels and performing
 no horizontal flip.
 
-The complete staged candidate had no unstaged or untracked residue and passed locked offline
-sync/lock; isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24
-`src` files and seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret
-scan; sensitive-file and path/magic guards; dependency audit with no known vulnerabilities;
-CLI/config/submission/contract-schema smoke checks; and Git diff check. An independent settled
-red-team found no P0/P1. Every later edit requires the complete staged gate again. Competition-pixel
-execution, human review, and private Kaggle validation have not occurred.
+An earlier staged candidate passed its then-current complete local gate and red-team, but later
+source changes and the D-023 two-stage redesign invalidate that historical result. The fourth
+private Run A attempt completed a full-data pass and then failed closed in the superseded capped
+joint-material selector; it produced no admissible Run A package. Run B, comparison, QA
+materialization, human review, and finalization did not occur. The exact 29-file staged D-023
+candidate subsequently passed the complete final local gate, including pytest 507/507 and the
+locked install/build, lint, format, typing, CLI/config/submission/contract, pre-commit, privacy,
+dependency, contract-drift, diff, inventory, and clean-tree checks. Independent end-to-end/source-
+graph red-teams found no remaining P0/P1.
 
 This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
 the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
 superseded audit. Distinct private version-1 Run A and Run B kernels must independently process the
 entire authorized training set from the same bundle, preprocessing configuration, competition
-input, and source-manifest input. Every discovered study, series, and file must reconcile to an
-explicit terminal state. Each run must separately match train-series membership, `source_row_count`,
-organizer plane/fluid/fat flags, and every regular DICOM's keyed relative identity, byte size, and raw
-digest to authenticated `manifest-v2`, with zero unexplained DICOM issue and zero unresolved
-recoverable transfer-syntax, ordering, or geometry blocker.
+input, and source-manifest input. Each produces a canonical full-pass manifest, deterministic
+metrics, and a deterministic cohort plan without QA replay or rendering. Every discovered study,
+series, and file must reconcile to an explicit terminal state. Each run must separately match
+train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every regular
+DICOM's keyed relative identity, byte size, and raw digest to authenticated `manifest-v2`, with zero
+unexplained DICOM issue and zero unresolved recoverable transfer-syntax, ordering, or geometry
+blocker.
 
-A separate version-1 comparator must require byte-exact equality of the canonical deterministic
-manifests and exact equality of declared deterministic aggregate metrics. Timing and resource
-fields may differ only where excluded by the frozen comparison contract; no tolerance may be
-invented after a mismatch. Complete private runtime, decode, preprocessing, cache, disk,
-peak-memory, CPU-scaling, and throughput evidence is still required.
+A separate version-1 comparator must require byte-exact equality of the canonical manifests and
+cohort plans plus exact equality of declared deterministic metrics. Timing and resource fields may
+differ only where excluded by the frozen comparison contract; no tolerance may be invented after a
+mismatch. Complete private runtime, decode, preprocessing, cache, disk, peak-memory, CPU-scaling,
+and throughput evidence is still required.
 
-`qa-cohort-selection-v2` runs only after the full pass. Its bound private plan must cover at least
-100 reviewable studies, every materially represented available stratum, and every eligible
-diagnostic series in each selected study. The exact canonical checks are:
+Selector v3 runs after each full pass with a minimum of 100 reviewable studies and no arbitrary
+study maximum. Exact incremental greedy selection continues until every required represented value
+quota is met across bounded semantic registries, including bounded site-domain buckets. The only
+public registry-coverage token is `all_required_represented_registry_values_satisfy_quotas`; no
+legacy joint-material census or coverage claim is accepted. After exact Run A/Run B comparison, the
+existing review-plan kernel must authenticate the capacity certificate against the freeze, bundle,
+manifest, both runs, cohort plan, and renderer before any pixel decode. Physical file, byte, time,
+and disk limits fail closed. The kernel then replays every selected series, renders each twice, runs
+the representative benchmarks once, and materializes the bound private plan. Every eligible
+diagnostic series in each selected study must be reviewed. The exact canonical checks are:
 
 1. `slice_order`
 2. `anatomical_orientation`
@@ -127,8 +138,9 @@ bundle, preprocessing configuration, runs, comparison, cohort, UI parent, and ke
 review artifacts resolve only under authenticated Run A. It may release only
 `human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
 release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
-A locally composed review attestation is neither required nor accepted. No such run, comparison,
-review, or finalizer evidence exists yet. No folds exist and no fold-feasibility claim is made.
+A locally composed review attestation is neither required nor accepted. No admissible run,
+comparison, review, or finalizer evidence exists yet. No folds exist and no fold-feasibility claim
+is made.
 
 ## Shift and subgroup limits
 

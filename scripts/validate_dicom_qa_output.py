@@ -42,6 +42,7 @@ SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS: Final = {
     "audit-output/sanitized_artifact_inventory.json": 128 * 1024,
 }
 STAGE_SLUG_PREFIXES: Final = {
+    "performance_smoke": "rsna-knee-dqa-smoke",
     "run_a": "rsna-knee-dqa-a",
     "run_b": "rsna-knee-dqa-b",
     "comparator": "rsna-knee-dqa-cmp",
@@ -52,6 +53,7 @@ STAGE_SLUG_PREFIXES: Final = {
 }
 WORKFLOW_STAGES: Final = (
     "inputs",
+    "performance-smoke",
     "run-a",
     "run-b",
     "comparison",
@@ -60,6 +62,12 @@ WORKFLOW_STAGES: Final = (
     "review",
     "final",
 )
+PERFORMANCE_SMOKE_OUTPUT_DIRECTORY: Final = "dicom-qa-performance-smoke"
+PERFORMANCE_SMOKE_SUMMARY: Final = "sanitized_performance_smoke.json"
+PERFORMANCE_SMOKE_SUMMARY_MAX_BYTES: Final = 16 * 1024
+PERFORMANCE_SMOKE_SELF_DEADLINE_SECONDS: Final = 3_600
+POST_COMPARISON_PREPARATION_CEILING_SECONDS: Final = 3_600
+PERFORMANCE_SMOKE_PROJECTION_QUANTUM_SECONDS: Final = 60
 REVIEW_CHECKS: Final = (
     "slice_order",
     "anatomical_orientation",
@@ -468,31 +476,64 @@ def _kernel_listing_records(
     return parsed
 
 
-def _canonical_remote_name(name: str, runner: ModuleType) -> str:
+def _policy_names(runner: ModuleType, attribute: str) -> set[str]:
+    value = getattr(runner, attribute, None)
+    if (
+        not isinstance(value, dict)
+        or not value
+        or any(not isinstance(name, str) or "/" in name for name in value)
+    ):
+        raise OutputValidationError("runner_output_policy_invalid")
+    return set(value)
+
+
+def _canonical_remote_name(
+    name: str,
+    runner: ModuleType,
+    *,
+    private_names: set[str],
+    downloadable_names: set[str],
+) -> str:
     prefix = f"{runner.OUTPUT_DIRECTORY}/"
     if name.startswith(prefix):
         return name
-    if name in runner.PRIVATE_OUTPUT_POLICY or name in runner.DOWNLOADABLE_OUTPUT_POLICY:
+    if name in private_names or name in downloadable_names:
         return prefix + name
     if name.startswith(f"{runner.PRIVATE_REVIEW_DIRECTORY}/"):
         return prefix + name
     return name
 
 
-def validate_remote_listing(
-    pages: Sequence[bytes], _run_config: Mapping[str, Any], runner: ModuleType
+def _validate_review_output_listing(
+    pages: Sequence[bytes],
+    runner: ModuleType,
+    *,
+    finalizer: ModuleType | None = None,
 ) -> None:
     records = _kernel_listing_records(pages)
     prefix = f"{runner.OUTPUT_DIRECTORY}/"
+    private_names = _policy_names(runner, "PRIVATE_OUTPUT_POLICY")
+    downloadable_names = _policy_names(runner, "DOWNLOADABLE_OUTPUT_POLICY")
     required_fixed = {
-        *(prefix + name for name in runner.PRIVATE_OUTPUT_POLICY),
-        *(prefix + name for name in runner.DOWNLOADABLE_OUTPUT_POLICY),
+        *(prefix + name for name in private_names),
+        *(prefix + name for name in downloadable_names),
     }
+    plan_name = (
+        None
+        if finalizer is None
+        else f"{finalizer.TEMPLATE_OUTPUT_DIRECTORY}/{finalizer.REVIEW_PLAN_BASENAME}"
+    )
+    plan_aliases = (
+        frozenset()
+        if finalizer is None
+        else frozenset({plan_name, str(finalizer.REVIEW_PLAN_BASENAME)})
+    )
     observed: set[str] = set()
     review_groups: dict[str, set[str]] = defaultdict(set)
     log_count = 0
     required_suffixes = {
         "contact.png",
+        "orthogonal.png",
         "histogram.png",
         "animation.gif",
         "before_after.png",
@@ -501,11 +542,20 @@ def validate_remote_listing(
     }
     for record, _size in records:
         raw_name = _safe_remote_name(record.get("name"))
-        name = _canonical_remote_name(raw_name, runner)
+        name = (
+            plan_name
+            if plan_name is not None and raw_name in plan_aliases
+            else _canonical_remote_name(
+                raw_name,
+                runner,
+                private_names=private_names,
+                downloadable_names=downloadable_names,
+            )
+        )
         if name in observed:
             raise OutputValidationError("remote_duplicate_name")
         observed.add(name)
-        if name in required_fixed:
+        if name in required_fixed or name == plan_name:
             continue
         review_prefix = f"{prefix}{runner.PRIVATE_REVIEW_DIRECTORY}/"
         if name.startswith(review_prefix):
@@ -513,7 +563,7 @@ def validate_remote_listing(
             if re.fullmatch(runner.PRIVATE_REVIEW_PATTERN, basename) is None:
                 raise OutputValidationError("remote_review_name_invalid")
             match = re.fullmatch(r"(case_([0-9]{6})_series_([0-9]{3}))_(.+)", basename)
-            if match is None or int(match.group(2)) >= runner.MAX_TARGET_STUDIES:
+            if match is None:
                 raise OutputValidationError("remote_review_name_invalid")
             review_groups[match.group(1)].add(match.group(4))
             continue
@@ -521,16 +571,71 @@ def validate_remote_listing(
             log_count += 1
             continue
         raise OutputValidationError("remote_name_not_allowed")
-    if not required_fixed.issubset(observed) or log_count > 1:
+    if (
+        not required_fixed.issubset(observed)
+        or (plan_name is not None and plan_name not in observed)
+        or log_count > 1
+    ):
         raise OutputValidationError("remote_required_output_missing")
     reviewed_cases = {group.split("_series_", 1)[0] for group in review_groups}
     if (
         len(reviewed_cases) < runner.MINIMUM_ELIGIBLE_STUDIES
-        or any(not required_suffixes.issubset(suffixes) for suffixes in review_groups.values())
+        or any(suffixes != required_suffixes for suffixes in review_groups.values())
         or sum(len(suffixes) for suffixes in review_groups.values())
         > runner.PRIVATE_REVIEW_MAX_FILES
     ):
         raise OutputValidationError("remote_review_output_incomplete")
+
+
+def validate_remote_listing(
+    pages: Sequence[bytes], _run_config: Mapping[str, Any], runner: ModuleType
+) -> None:
+    """Validate the downstream review-plan output without retrieving private files."""
+
+    _validate_review_output_listing(pages, runner)
+
+
+def _validate_run_listing(pages: Sequence[bytes], runner: ModuleType) -> None:
+    """Require only the immutable full-pass outputs from Run A or Run B."""
+
+    records = _kernel_listing_records(pages)
+    prefix = f"{runner.OUTPUT_DIRECTORY}/"
+    private_names = _policy_names(runner, "RUN_PRIVATE_OUTPUT_POLICY")
+    downloadable_names = _policy_names(runner, "RUN_DOWNLOADABLE_OUTPUT_POLICY")
+    if private_names != {
+        "private_full_run_manifest.jsonl",
+        "private_full_run_metrics.json",
+        "private_cohort_plan.json",
+    } or downloadable_names != {
+        "sanitized_summary.json",
+        "sanitized_artifact_inventory.json",
+    }:
+        raise OutputValidationError("runner_output_policy_invalid")
+    required = {
+        *(prefix + name for name in private_names),
+        *(prefix + name for name in downloadable_names),
+    }
+    observed: set[str] = set()
+    log_count = 0
+    for record, _size in records:
+        raw_name = _safe_remote_name(record.get("name"))
+        if "/" not in raw_name and re.fullmatch(runner.SESSION_LOG_PATTERN, raw_name):
+            log_count += 1
+            continue
+        name = _canonical_remote_name(
+            raw_name,
+            runner,
+            private_names=private_names,
+            downloadable_names=downloadable_names,
+        )
+        if name in observed:
+            raise OutputValidationError("remote_duplicate_name")
+        observed.add(name)
+        if name in required:
+            continue
+        raise OutputValidationError("remote_name_not_allowed")
+    if observed - required or not required.issubset(observed) or log_count > 1:
+        raise OutputValidationError("remote_required_output_missing")
 
 
 def _validate_source_manifest_listing(pages: Sequence[bytes], identity: Mapping[str, Any]) -> None:
@@ -1065,6 +1170,7 @@ def _bundle_dataset_files(manifest: Mapping[str, Any]) -> dict[str, int]:
 
 def _workflow_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
     return {
+        "performance_smoke": _derived_stage_kernel_ref(run_config, "performance_smoke"),
         "run_a": _derived_stage_kernel_ref(run_config, "run_a"),
         "run_b": _derived_stage_kernel_ref(run_config, "run_b"),
         "comparison": _derived_stage_kernel_ref(run_config, "comparator"),
@@ -1230,8 +1336,14 @@ def _validated_workflow_identity(
         or official.get("contract_sha256") != provenance.get("competition_contract_sha256")
         or policy
         != {
-            "protocol_version": "private-dicom-qa-human-review-v1",
-            "cohort_selection_version": "qa-cohort-selection-v2",
+            "protocol_version": "private-dicom-qa-human-review-v2",
+            "instructions_version": "private-dicom-qa-review-instructions-v2",
+            "cohort_selection_version": "qa-cohort-selection-v3",
+            "stratum_registry_version": "qa-stratum-registry-v1",
+            "stratum_registry_sha256": (
+                "13829b49acec7ed2a3cb83cc862caaf3"  # pragma: allowlist secret
+                "251ecbab9f1b11eca4061c0c9ae5acf3"  # pragma: allowlist secret
+            ),
             "kernel_version": 1,
             "checks": list(REVIEW_CHECKS),
             "statuses": list(REVIEW_STATUSES),
@@ -1256,6 +1368,29 @@ def _validated_workflow_identity(
     if not isinstance(public, dict) or public_kernels != expected_public_kernels:
         raise OutputValidationError("review_identity_invalid")
     return cast(dict[str, Any], source), refs
+
+
+def _performance_smoke_identity(
+    run_config: Mapping[str, Any], manifest: Mapping[str, Any]
+) -> tuple[str, str]:
+    record = manifest.get("performance_smoke")
+    provenance = run_config.get("provenance")
+    if (
+        not isinstance(record, dict)
+        or set(record) != {"code_file", "sha256", "policy_file", "policy_sha256"}
+        or record.get("code_file") != "performance_smoke.py"
+        or record.get("policy_file") != "performance-smoke-policy.json"
+        or not isinstance(record.get("sha256"), str)
+        or HEX_64.fullmatch(cast(str, record["sha256"])) is None
+        or not isinstance(record.get("policy_sha256"), str)
+        or HEX_64.fullmatch(cast(str, record["policy_sha256"])) is None
+        or not isinstance(provenance, dict)
+        or provenance.get("performance_smoke_sha256") != record.get("sha256")
+        or provenance.get("performance_smoke_policy_sha256") != record.get("policy_sha256")
+        or run_config.get("bundle_sha256") != manifest.get("bundle_sha256")
+    ):
+        raise OutputValidationError("performance_smoke_identity_invalid")
+    return cast(str, record["sha256"]), cast(str, record["policy_sha256"])
 
 
 def _validate_exact_kernel_metadata(
@@ -1531,6 +1666,221 @@ def _authenticated_listing(ref: str, expected_version: int) -> tuple[bytes, ...]
     return tuple(pages)
 
 
+def _validate_performance_smoke_listing(pages: Sequence[bytes]) -> None:
+    expected = f"{PERFORMANCE_SMOKE_OUTPUT_DIRECTORY}/{PERFORMANCE_SMOKE_SUMMARY}"
+    observed_summary = False
+    log_count = 0
+    for record, _size in _kernel_listing_records(pages):
+        name = _safe_remote_name(record.get("name"))
+        if name in {expected, PERFORMANCE_SMOKE_SUMMARY}:
+            if observed_summary:
+                raise OutputValidationError("remote_duplicate_name")
+            observed_summary = True
+        elif "/" not in name and SAFE_LOG_PATTERN.fullmatch(name):
+            log_count += 1
+        else:
+            raise OutputValidationError("remote_name_not_allowed")
+    if not observed_summary or log_count > 1:
+        raise OutputValidationError("remote_required_output_missing")
+
+
+def _validate_performance_smoke_summary(
+    payload: bytes,
+    *,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    summary = _json_bytes(payload, "performance_smoke_summary_invalid")
+    smoke_sha256, policy_sha256 = _performance_smoke_identity(run_config, manifest)
+    provenance = run_config.get("provenance")
+    runtime = run_config.get("runtime")
+    if not isinstance(provenance, dict) or not isinstance(runtime, dict):
+        raise OutputValidationError("performance_smoke_summary_invalid")
+    input_binding = (
+        summary.get("provenance", {}).get("input_binding_sha256")
+        if isinstance(summary.get("provenance"), dict)
+        else None
+    )
+    expected_provenance = {
+        "git_commit": run_config.get("code_commit"),
+        "bundle_sha256": run_config.get("bundle_sha256"),
+        "runner_sha256": provenance.get("runner_sha256"),
+        "smoke_entrypoint_sha256": smoke_sha256,
+        "performance_smoke_policy_sha256": policy_sha256,
+        "preprocessing_config_sha256": provenance.get("preprocessing_config_sha256"),
+        "preprocessing_version": provenance.get("preprocessing_version"),
+        "source_manifest_version": SOURCE_MANIFEST_VERSION,
+        "source_manifest_audit_id": SOURCE_MANIFEST_AUDIT_ID,
+        "input_binding_sha256": input_binding,
+    }
+    smoke_runtime = summary.get("runtime")
+    performance = summary.get("performance")
+    privacy = summary.get("privacy")
+    competition_limit = (
+        smoke_runtime.get("competition_cpu_limit_seconds")
+        if isinstance(smoke_runtime, dict)
+        else None
+    )
+    expected_runtime = {
+        "private_kernel": True,
+        "internet": False,
+        "accelerator": "cpu",
+        "self_deadline_seconds": PERFORMANCE_SMOKE_SELF_DEADLINE_SECONDS,
+        "full_pass_budget_seconds": runner.SELF_DEADLINE_SECONDS,
+        "competition_cpu_limit_seconds": competition_limit,
+    }
+    expected_privacy = {
+        "identifiers_emitted": False,
+        "paths_emitted": False,
+        "pixels_emitted": False,
+        "reports_emitted": False,
+        "private_resource_locators_emitted": False,
+        "private_artifact_checksums_emitted": False,
+    }
+    if (
+        payload != _canonical_json_bytes(summary)
+        or set(summary)
+        != {
+            "schema_version",
+            "artifact_type",
+            "status",
+            "full_run_started",
+            "provenance",
+            "runtime",
+            "performance",
+            "privacy",
+        }
+        or summary.get("schema_version") != 1
+        or summary.get("artifact_type") != "dicom-qa-performance-smoke-sanitized-aggregate"
+        or summary.get("status") != "pass"
+        or summary.get("full_run_started") is not False
+        or not isinstance(input_binding, str)
+        or HEX_64.fullmatch(input_binding) is None
+        or summary.get("provenance") != expected_provenance
+        or smoke_runtime != expected_runtime
+        or isinstance(competition_limit, bool)
+        or not isinstance(competition_limit, int)
+        or competition_limit <= runner.SELF_DEADLINE_SECONDS
+        or runtime.get("internet") is not False
+        or runtime.get("accelerator") != "cpu"
+        or runtime.get("self_deadline_seconds") != runner.SELF_DEADLINE_SECONDS
+        or privacy != expected_privacy
+        or not isinstance(performance, dict)
+        or set(performance)
+        != {
+            "production_path_exercised",
+            "authenticated_sample",
+            "admission_status",
+            "smoke_elapsed_seconds_ceiling",
+            "projected_full_run_seconds_ceiling",
+            "post_comparison_preparation_path_exercised",
+            "qa_replay_render_seconds_per_series_ceiling",
+            "representative_benchmark_seconds_ceiling",
+            "review_artifacts_per_series_ceiling",
+            "review_artifact_bytes_per_series_power_of_two_mib_ceiling",
+        }
+        or performance.get("production_path_exercised") is not True
+        or performance.get("authenticated_sample") is not True
+        or performance.get("admission_status") != "pass"
+        or performance.get("post_comparison_preparation_path_exercised") is not True
+        or performance.get("review_artifacts_per_series_ceiling") != 7
+    ):
+        raise OutputValidationError("performance_smoke_summary_invalid")
+    for key, upper_bound in (
+        ("smoke_elapsed_seconds_ceiling", PERFORMANCE_SMOKE_SELF_DEADLINE_SECONDS),
+        ("projected_full_run_seconds_ceiling", runner.SELF_DEADLINE_SECONDS),
+    ):
+        value = performance.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not PERFORMANCE_SMOKE_PROJECTION_QUANTUM_SECONDS <= value <= upper_bound
+            or value % PERFORMANCE_SMOKE_PROJECTION_QUANTUM_SECONDS
+        ):
+            raise OutputValidationError("performance_smoke_summary_invalid")
+    replay_ceiling = performance.get("qa_replay_render_seconds_per_series_ceiling")
+    benchmark_ceiling = performance.get("representative_benchmark_seconds_ceiling")
+    if (
+        isinstance(replay_ceiling, bool)
+        or not isinstance(replay_ceiling, int)
+        or not 1 <= replay_ceiling <= POST_COMPARISON_PREPARATION_CEILING_SECONDS
+        or isinstance(benchmark_ceiling, bool)
+        or not isinstance(benchmark_ceiling, int)
+        or not PERFORMANCE_SMOKE_PROJECTION_QUANTUM_SECONDS
+        <= benchmark_ceiling
+        <= POST_COMPARISON_PREPARATION_CEILING_SECONDS
+        or benchmark_ceiling % PERFORMANCE_SMOKE_PROJECTION_QUANTUM_SECONDS
+    ):
+        raise OutputValidationError("performance_smoke_summary_invalid")
+    artifact_mib = performance.get("review_artifact_bytes_per_series_power_of_two_mib_ceiling")
+    if (
+        isinstance(artifact_mib, bool)
+        or not isinstance(artifact_mib, int)
+        or not 1 <= artifact_mib <= 256
+        or artifact_mib & (artifact_mib - 1)
+    ):
+        raise OutputValidationError("performance_smoke_summary_invalid")
+    try:
+        runner._scan_downloadable(
+            payload, str(cast(Mapping[str, Any], run_config["privacy"])["canary"])
+        )
+    except Exception as error:
+        raise OutputValidationError("performance_smoke_summary_invalid") from error
+    return summary
+
+
+def _retrieve_performance_smoke_summary(
+    ref: str,
+    *,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    manifest: Mapping[str, Any],
+) -> None:
+    pattern = (
+        rf"^({re.escape(PERFORMANCE_SMOKE_OUTPUT_DIRECTORY)}/)?"
+        rf"{re.escape(PERFORMANCE_SMOKE_SUMMARY)}$"
+    )
+    with tempfile.TemporaryDirectory(prefix="rsna-knee-performance-smoke-") as temporary:
+        root = Path(temporary)
+        _run_kaggle_cli(
+            (
+                "kernels",
+                "output",
+                ref,
+                "--path",
+                str(root),
+                "--file-pattern",
+                pattern,
+                "--quiet",
+            ),
+            maximum=64 * 1024,
+            allow_empty=True,
+        )
+        try:
+            entries = list(root.rglob("*"))
+        except OSError as error:
+            raise OutputValidationError("performance_smoke_output_layout_invalid") from error
+        files = [path for path in entries if path.is_file()]
+        if (
+            any(path.is_symlink() for path in entries)
+            or any(not path.is_file() and not path.is_dir() for path in entries)
+            or len(files) != 1
+            or files[0].name != PERFORMANCE_SMOKE_SUMMARY
+        ):
+            raise OutputValidationError("performance_smoke_output_layout_invalid")
+        _validate_performance_smoke_summary(
+            _read_bounded(
+                files[0],
+                PERFORMANCE_SMOKE_SUMMARY_MAX_BYTES,
+                "performance_smoke_summary_invalid",
+            ),
+            run_config=run_config,
+            runner=runner,
+            manifest=manifest,
+        )
+
+
 def _retrieve_safe_qa_output(
     ref: str,
     run_config: Mapping[str, Any],
@@ -1559,6 +1909,53 @@ def _retrieve_safe_qa_output(
         )
         summary = validate_local_output(root, run_config, runner, manifest)
         _validate_qa_exit_gate(summary)
+
+
+def _retrieve_safe_run_output(
+    ref: str,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    manifest: Mapping[str, Any],
+) -> None:
+    pattern = (
+        r"^(dicom-qa-output/)?(sanitized_summary\.json|"
+        r"sanitized_artifact_inventory\.json)$"
+    )
+    with tempfile.TemporaryDirectory(prefix="rsna-knee-safe-full-run-") as temporary:
+        root = Path(temporary)
+        _run_kaggle_cli(
+            (
+                "kernels",
+                "output",
+                ref,
+                "--path",
+                str(root),
+                "--file-pattern",
+                pattern,
+                "--quiet",
+            ),
+            maximum=64 * 1024,
+            allow_empty=True,
+        )
+        summary = validate_local_run_output(root, run_config, runner, manifest)
+        _validate_run_exit_gate(summary)
+
+
+def _validate_run_exit_gate(summary: Mapping[str, Any]) -> None:
+    pipeline = summary.get("pipeline")
+    selection = summary.get("selection")
+    if (
+        summary.get("status") != "complete_pending_comparison"
+        or not isinstance(pipeline, dict)
+        or pipeline.get("full_training_dataset_processed") is not True
+        or pipeline.get("all_series_terminal") is not True
+        or pipeline.get("integrity_gate") != "pass"
+        or pipeline.get("unresolved_blockers") != "zero"
+        or not isinstance(selection, dict)
+        or selection.get("cohort_plan_status") != "complete"
+        or selection.get("all_required_represented_registry_values_satisfy_quotas") is not True
+    ):
+        raise OutputValidationError("dicom_integrity_exit_gate_failed")
 
 
 def _validate_qa_exit_gate(summary: Mapping[str, Any]) -> None:
@@ -1619,8 +2016,13 @@ def _validated_log_events(payload: bytes, runner: ModuleType, canary: str) -> li
     return events
 
 
-def _expected_progress_events(runner: ModuleType) -> list[dict[str, str]]:
-    sequence = getattr(runner, "PROGRESS_EVENT_SEQUENCE", None)
+def _expected_progress_events(
+    runner: ModuleType,
+    *,
+    sequence_attribute: str = "PROGRESS_EVENT_SEQUENCE",
+    event_name: str = "dicom_qa_progress",
+) -> list[dict[str, str]]:
+    sequence = getattr(runner, sequence_attribute, None)
     if not isinstance(sequence, tuple) or any(
         not isinstance(item, tuple)
         or len(item) != 2
@@ -1631,9 +2033,9 @@ def _expected_progress_events(runner: ModuleType) -> list[dict[str, str]]:
         for item in sequence
     ):
         raise OutputValidationError("log_schema_invalid")
-    return [
-        {"event": "dicom_qa_progress", "phase": phase, "code": code} for phase, code in sequence
-    ]
+    if event_name not in {"dicom_qa_progress", "dicom_qa_plan_progress"}:
+        raise OutputValidationError("log_schema_invalid")
+    return [{"event": event_name, "phase": phase, "code": code} for phase, code in sequence]
 
 
 def validate_failure_log(
@@ -1723,6 +2125,84 @@ def validate_local_output(
             run_config=run_config,
             summary_payload=payloads["sanitized_summary.json"],
             benchmark_payload=payloads["benchmark.md"],
+        )
+    except OutputValidationError:
+        raise
+    except Exception as error:
+        raise OutputValidationError("local_output_validation_failed") from error
+    for log in logs:
+        if _validated_log_events(
+            _read_bounded(log, 2 * 1024 * 1024, "log_size_invalid"),
+            runner,
+            str(run_config["privacy"]["canary"]),
+        ) != [
+            {"event": "dicom_qa_started"},
+            *_expected_progress_events(
+                runner,
+                sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+                event_name="dicom_qa_plan_progress",
+            ),
+            {"event": "dicom_qa_complete"},
+        ]:
+            raise OutputValidationError("log_completion_invalid")
+    return cast(dict[str, Any], summary)
+
+
+def validate_local_run_output(
+    root: Path,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate the two release-safe full-pass files without accepting QA artifacts."""
+
+    try:
+        root_entries = list(root.iterdir())
+    except OSError as error:
+        raise OutputValidationError("local_output_layout_invalid") from error
+    logs = [
+        entry
+        for entry in root_entries
+        if entry.is_file() and re.fullmatch(runner.SESSION_LOG_PATTERN, entry.name)
+    ]
+    non_logs = [entry for entry in root_entries if entry not in logs]
+    nested = len(non_logs) == 1 and non_logs[0].name == runner.OUTPUT_DIRECTORY
+    if nested:
+        output_root = non_logs[0]
+        if output_root.is_symlink() or not output_root.is_dir():
+            raise OutputValidationError("private_artifact_download_detected")
+        try:
+            entries = list(output_root.iterdir())
+        except OSError as error:
+            raise OutputValidationError("local_output_layout_invalid") from error
+    else:
+        output_root = root
+        entries = non_logs
+    if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+        raise OutputValidationError("private_artifact_download_detected")
+    policy = getattr(runner, "RUN_DOWNLOADABLE_OUTPUT_POLICY", None)
+    expected = _policy_names(runner, "RUN_DOWNLOADABLE_OUTPUT_POLICY")
+    if expected != {"sanitized_summary.json", "sanitized_artifact_inventory.json"}:
+        raise OutputValidationError("runner_output_policy_invalid")
+    observed = {entry.name for entry in entries}
+    if observed != expected or len(logs) > 1 or not isinstance(policy, dict):
+        raise OutputValidationError("local_output_allowlist_invalid")
+    try:
+        payloads = {
+            name: _read_bounded(
+                output_root / name,
+                cast(tuple[str, int], policy[name])[1],
+                "local_output_size_invalid",
+            )
+            for name in expected
+        }
+        summary = runner._validate_run_summary(payloads["sanitized_summary.json"], run_config)
+        if summary["provenance"]["runner_sha256"] != manifest["kernel"]["sha256"]:
+            raise OutputValidationError("summary_runner_mismatch")
+        runner._validate_run_inventory(
+            payloads["sanitized_artifact_inventory.json"],
+            run_config=run_config,
+            summary_payload=payloads["sanitized_summary.json"],
         )
     except OutputValidationError:
         raise
@@ -1831,8 +2311,7 @@ def _validate_comparison_summary(payload: bytes) -> None:
         "independent_runs_compared": True,
         "exact_manifest_byte_equality": True,
         "deterministic_metrics_equal": True,
-        "case_index_deterministic_projection_equal": True,
-        "qa_artifact_inventory_equal": True,
+        "cohort_plan_byte_equality": True,
         "unresolved_mismatches": "zero",
         "private_case_details_downloaded": False,
     }
@@ -2009,7 +2488,8 @@ def _validate_review_summary_payload(
         or reviewed_range[0] < finalizer.MINIMUM_REVIEWED_STUDIES
         or eligible_range is None
         or eligible_range[0] < reviewed_range[0]
-        or review.get("represented_strata") != "all_material_covered"
+        or review.get("represented_strata")
+        != "all_required_represented_registry_values_satisfy_quotas"
         or set(check_results) != set(REVIEW_CHECKS)
         or any(check_results[check] != "PASS" for check in REVIEW_CHECKS)
         or review.get("block_decisions") != "zero"
@@ -2058,7 +2538,8 @@ def _validate_performance_report_payload(
         or not isinstance(review, dict)
         or reviewed_range is None
         or eligible_range is None
-        or review.get("represented_strata") != "all_material_covered"
+        or review.get("represented_strata")
+        != "all_required_represented_registry_values_satisfy_quotas"
         or review.get("all_nine_checks_pass") is not True
         or review.get("block_decisions") != "zero"
         or review.get("zero_blocks") is not True
@@ -2075,7 +2556,7 @@ def _authenticate_source_manifest_kernel(
     competition_slug: str,
     bundle_dataset_ref: str,
     bundle_dataset_content: Mapping[str, tuple[int, str]],
-) -> None:
+) -> dict[str, object]:
     ref = cast(str, source["kernel_ref"])
     version = cast(int, source["kernel_version"])
     dataset_ref = cast(str, source["bundle_dataset_ref"])
@@ -2123,6 +2604,53 @@ def _authenticate_source_manifest_kernel(
         raise OutputValidationError("kernel_version_race")
     if dataset_before != dataset_after:
         raise OutputValidationError("dataset_version_race")
+    return dataset_after
+
+
+def _authenticate_performance_smoke_kernel(
+    *,
+    ref: str,
+    dataset_ref: str,
+    source_manifest_ref: str,
+    competition_slug: str,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    manifest: Mapping[str, Any],
+) -> None:
+    expected_hash, _policy_sha256 = _performance_smoke_identity(run_config, manifest)
+    _assert_version_absent(ref, 2)
+    _kernel_status_complete(ref)
+    before = _pull_and_verify_exact_kernel(
+        ref,
+        1,
+        "performance_smoke.py",
+        expected_hash,
+        expected_kernel_type="script",
+        expected_dataset_sources=[dataset_ref],
+        expected_kernel_sources=[source_manifest_ref],
+        expected_competition_sources=[competition_slug],
+    )
+    _validate_performance_smoke_listing(_authenticated_listing(ref, 1))
+    _retrieve_performance_smoke_summary(
+        f"{ref}/1",
+        run_config=run_config,
+        runner=runner,
+        manifest=manifest,
+    )
+    _assert_version_absent(ref, 2)
+    _kernel_status_complete(ref)
+    after = _pull_and_verify_exact_kernel(
+        ref,
+        1,
+        "performance_smoke.py",
+        expected_hash,
+        expected_kernel_type="script",
+        expected_dataset_sources=[dataset_ref],
+        expected_kernel_sources=[source_manifest_ref],
+        expected_competition_sources=[competition_slug],
+    )
+    if before != after:
+        raise OutputValidationError("kernel_version_race")
 
 
 def _authenticate_qa_run(
@@ -2149,8 +2677,8 @@ def _authenticate_qa_run(
         expected_kernel_sources=[source_manifest_ref],
         expected_competition_sources=[competition_slug],
     )
-    validate_remote_listing(_authenticated_listing(ref, 1), run_config, runner)
-    _retrieve_safe_qa_output(f"{ref}/1", run_config, runner, manifest)
+    _validate_run_listing(_authenticated_listing(ref, 1), runner)
+    _retrieve_safe_run_output(f"{ref}/1", run_config, runner, manifest)
     _authenticate_kernel_api_version(ref, 1)
     _kernel_status_complete(ref)
     after = _pull_and_verify_exact_kernel(
@@ -2213,6 +2741,8 @@ def _authenticate_review_plan_kernel(
     ref: str,
     dataset_ref: str,
     kernel_sources: Sequence[str],
+    competition_slug: str,
+    run_config: Mapping[str, Any],
     runner: ModuleType,
     finalizer: ModuleType,
     manifest: Mapping[str, Any],
@@ -2229,9 +2759,10 @@ def _authenticate_review_plan_kernel(
         expected_kernel_type="script",
         expected_dataset_sources=[dataset_ref],
         expected_kernel_sources=kernel_sources,
-        expected_competition_sources=[],
+        expected_competition_sources=[competition_slug],
     )
-    _validate_template_listing(_authenticated_listing(ref, 1), runner, finalizer)
+    _validate_review_output_listing(_authenticated_listing(ref, 1), runner, finalizer=finalizer)
+    _retrieve_safe_qa_output(f"{ref}/1", run_config, runner, manifest)
     _authenticate_kernel_api_version(ref, 1)
     _kernel_status_complete(ref)
     after = _pull_and_verify_exact_kernel(
@@ -2242,7 +2773,7 @@ def _authenticate_review_plan_kernel(
         expected_kernel_type="script",
         expected_dataset_sources=[dataset_ref],
         expected_kernel_sources=kernel_sources,
-        expected_competition_sources=[],
+        expected_competition_sources=[competition_slug],
     )
     if before != after:
         raise OutputValidationError("kernel_version_race")
@@ -2411,13 +2942,26 @@ def validate_authenticated_workflow(
         raise OutputValidationError("review_identity_invalid")
     competition_slug = cast(str, competition["slug"])
     source_ref = cast(str, source["kernel_ref"])
+    authenticated_kernel_refs: list[str] = []
 
-    _authenticate_source_manifest_kernel(
+    source_dataset_snapshot = _authenticate_source_manifest_kernel(
         source=source,
         competition_slug=competition_slug,
         bundle_dataset_ref=dataset_ref,
         bundle_dataset_content=dataset_content,
     )
+    authenticated_kernel_refs.append(source_ref)
+    if stage_index >= WORKFLOW_STAGES.index("performance-smoke"):
+        _authenticate_performance_smoke_kernel(
+            ref=refs["performance_smoke"],
+            dataset_ref=dataset_ref,
+            source_manifest_ref=source_ref,
+            competition_slug=competition_slug,
+            run_config=run_config,
+            runner=runner,
+            manifest=manifest,
+        )
+        authenticated_kernel_refs.append(refs["performance_smoke"])
     if stage_index >= WORKFLOW_STAGES.index("run-a"):
         _authenticate_qa_run(
             ref=refs["run_a"],
@@ -2428,6 +2972,7 @@ def validate_authenticated_workflow(
             runner=runner,
             manifest=manifest,
         )
+        authenticated_kernel_refs.append(refs["run_a"])
     if stage_index >= WORKFLOW_STAGES.index("run-b"):
         _authenticate_qa_run(
             ref=refs["run_b"],
@@ -2438,6 +2983,7 @@ def validate_authenticated_workflow(
             runner=runner,
             manifest=manifest,
         )
+        authenticated_kernel_refs.append(refs["run_b"])
     run_refs = [refs["run_a"], refs["run_b"]]
     if stage_index >= WORKFLOW_STAGES.index("comparison"):
         _authenticate_comparison_kernel(
@@ -2447,17 +2993,22 @@ def validate_authenticated_workflow(
             runner=runner,
             manifest=manifest,
         )
-    plan_sources = [*run_refs, refs["comparison"]]
+        authenticated_kernel_refs.append(refs["comparison"])
+    comparison_ref = refs["comparison"]
+    plan_sources = [refs["performance_smoke"], *run_refs, comparison_ref]
     if stage_index >= WORKFLOW_STAGES.index("plan"):
         _authenticate_review_plan_kernel(
             ref=refs["review_plan"],
             dataset_ref=dataset_ref,
             kernel_sources=plan_sources,
+            competition_slug=competition_slug,
+            run_config=run_config,
             runner=runner,
             finalizer=finalizer,
             manifest=manifest,
         )
-    review_sources = [*plan_sources, refs["review_plan"]]
+        authenticated_kernel_refs.append(refs["review_plan"])
+    review_sources = [*run_refs, comparison_ref, refs["review_plan"]]
     if stage_index >= WORKFLOW_STAGES.index("ui"):
         _authenticate_review_ui_template_kernel(
             ref=refs["review_ui_template"],
@@ -2465,6 +3016,7 @@ def validate_authenticated_workflow(
             kernel_sources=review_sources,
             manifest=manifest,
         )
+        authenticated_kernel_refs.append(refs["review_ui_template"])
     if stage_index >= WORKFLOW_STAGES.index("review"):
         _authenticate_review_session_kernel(
             interpreter=interpreter,
@@ -2474,19 +3026,36 @@ def validate_authenticated_workflow(
             kernel_sources=review_sources,
             manifest=manifest,
         )
+        authenticated_kernel_refs.append(refs["review_session"])
     if stage_index >= WORKFLOW_STAGES.index("final"):
         _authenticate_review_finalizer_kernel(
             ref=refs["review_finalizer"],
             dataset_ref=dataset_ref,
-            kernel_sources=[*run_refs, refs["comparison"], refs["review_session"]],
+            kernel_sources=[
+                *run_refs,
+                comparison_ref,
+                refs["review_plan"],
+                refs["review_session"],
+            ],
             run_config=run_config,
             runner=runner,
             finalizer=finalizer,
             manifest=manifest,
         )
+        authenticated_kernel_refs.append(refs["review_finalizer"])
+
+    source_dataset_ref = cast(str, source["bundle_dataset_ref"])
+    source_dataset_after = _authenticated_dataset_snapshot(
+        source_dataset_ref, _source_manifest_dataset_files(source)
+    )
+    if source_dataset_snapshot != source_dataset_after:
+        raise OutputValidationError("dataset_version_race")
     dataset_after = _authenticated_dataset_snapshot(dataset_ref, dataset_files)
     if dataset_before != dataset_after:
         raise OutputValidationError("dataset_version_race")
+    for ref in authenticated_kernel_refs:
+        _kernel_status_complete(ref)
+        _authenticate_kernel_api_version(ref, 1)
 
 
 def _parser() -> argparse.ArgumentParser:

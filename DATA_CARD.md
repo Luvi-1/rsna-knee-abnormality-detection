@@ -105,37 +105,49 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 
 ## Next evidence required
 
-`dicom-model-v1` has local implementation evidence, but it is not promoted data readiness. The exact
-complete staged candidate had no unstaged or untracked residue and passed locked offline sync/lock;
-isolated wheel build/install/import; repository Ruff lint/format; strict mypy over 24 `src` files and
-seven trust-boundary files; full pytest 328/328; every pre-commit hook; exact secret scan; sensitive-file
-and path/magic guards; dependency audit with no known vulnerabilities;
-CLI/config/submission/contract-schema smoke checks; and Git diff check. An independent settled
-red-team found no P0/P1. Every later edit requires the complete staged gate again, and all
-private/remote gates remain pending.
+`dicom-model-v1` has local implementation evidence, but it is not promoted data readiness. An
+earlier staged candidate passed its then-current complete local gate and red-team; later source
+changes and the D-023 two-stage redesign invalidate that historical evidence. The fourth private
+Run A attempt completed its full-data pass but failed closed in the superseded capped joint-material
+selector, and Run B was not started. The exact 29-file staged D-023 candidate subsequently passed
+the complete final local gate, including pytest 507/507 and the locked install/build, lint, format,
+typing, CLI/config/submission/contract, pre-commit, privacy, dependency, contract-drift, diff,
+inventory, and clean-tree checks. Independent end-to-end/source-graph red-teams found no remaining
+P0/P1. The freeze, bundle, and all private/remote gates remain pending.
 
 The exact clean candidate must bind to the completed private
 `audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
 private Run A and Run B version-1 kernels must independently process the entire authorized training
 set from the same immutable bundle, configuration, competition input, and source-manifest input.
+Each run emits a canonical full-pass manifest, deterministic metrics, and a deterministic cohort
+plan, without replaying or rendering the selected QA artifacts.
 Every run must exactly reconcile train-series membership, `source_row_count`, organizer
 plane/fluid/fat flags, and every regular DICOM's keyed relative identity, byte size, and raw digest
 against `manifest-v2`. Every discovered study, series, and file must also reach one explicit terminal
 state, and all case-level geometry, decode, slot, quality, transform, checksum, cache, failure, and
 performance evidence must remain in Kaggle.
 
-A separate private comparator must require exact equality of the declared deterministic manifests
-and deterministic aggregate metrics. Runtime and resource observations are measured but excluded
-from equality only because that exclusion is frozen before execution; every other mismatch requires
-investigation and an unexplained mismatch blocks Chunk 5.
+A separate private comparator must require byte-exact equality of the canonical manifests and
+cohort plans plus exact equality of deterministic metrics. Runtime and resource observations are
+measured but excluded from equality only where frozen before execution; every other mismatch
+requires investigation and an unexplained mismatch blocks Chunk 5.
 
-Only after the full pass may `qa-cohort-selection-v2` select the private review cohort. It must
-include at least 100 reviewable studies and every materially represented available acquisition,
-quality, geometry, resolution, spacing, duplicate/missing, and remediation stratum; every eligible
-diagnostic series in each selected study must be reviewed. The private plan, review identity,
-cohort hash, artifact hashes, rows, and fixed nine-check decisions remain inside Kaggle. Every row
-also binds the private organizer/physical plane, assigned slot, retention reasons, six-slot missing
-mask, and ordinal sibling slot/terminal/model-eligibility/retention/quality-block context.
+Selector v3 runs from each complete full-pass result. It has a minimum target of 100 reviewable
+studies but no arbitrary study maximum; exact incremental greedy selection continues until every
+required represented value quota is met across bounded semantic registries, including bounded
+site-domain buckets. Physical file, byte, time, and disk gates may fail closed but cannot silently
+reduce coverage. The legacy joint-material census and coverage claim are removed. The only public
+registry-coverage token is `all_required_represented_registry_values_satisfy_quotas`.
+
+After exact Run A/Run B comparison, the existing review-plan kernel authenticates a capacity
+certificate bound to the freeze, bundle, manifest, both runs, cohort plan, and renderer. It replays
+every selected series, renders each twice, runs the representative decode/preprocessing/resource
+benchmarks once, and materializes the private plan without adding another kernel or data reference.
+Every eligible diagnostic series in each selected study must be reviewed. The private plan, review
+identity, cohort hash, artifact hashes, rows, and fixed nine-check decisions remain inside Kaggle.
+Every row also binds the private organizer/physical plane, assigned slot, retention reasons,
+six-slot missing mask, and ordinal sibling slot/terminal/model-eligibility/retention/quality-block
+context.
 
 The authorized human uses Chrome Copy & Edit on the safe private UI template to create a distinct
 private review session, enters `START` before any artifact access, and records only `PASS`, `BLOCK`,
@@ -144,8 +156,9 @@ authenticates the exact source manifest, bundle, preprocessing configuration, Ru
 comparison, cohort, UI, parent, and kernel versions. No locally composed review attestation is an
 input. Review artifacts resolve only under the authenticated Run A slug root. Only
 `human_review_summary.json` and `final_performance_report.json` may be retrieved as the two final
-allowlisted release-safe outputs. They must prove identity binding, at least 100 studies, all
-represented strata, all eligible series, all nine checks terminal, and zero `BLOCK` using
+allowlisted release-safe outputs. They must prove identity binding, at least 100 studies,
+`all_required_represented_registry_values_satisfy_quotas`, all eligible series, all nine checks
+terminal, and zero `BLOCK` using
 disclosure-controlled tokens while exact review counts, private identities, and private hashes
 remain inside Kaggle.
 

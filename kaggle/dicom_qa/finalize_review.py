@@ -15,8 +15,10 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, cast
@@ -27,7 +29,7 @@ SANITIZED_SUMMARY: Final = "human_review_summary.json"
 SANITIZED_PERFORMANCE: Final = "final_performance_report.json"
 PRIVATE_COMPLETION: Final = "private_human_review_completion.json"
 MINIMUM_REVIEWED_STUDIES: Final = 100
-MAX_REVIEWED_STUDIES: Final = 240
+MAX_REVIEWED_STUDIES: Final = 999_999
 MAX_INPUT_BYTES: Final = 64 * 1024**2
 MAX_LEDGER_BYTES: Final = 32 * 1024**2
 MAX_SUMMARY_BYTES: Final = 128 * 1024
@@ -36,8 +38,47 @@ MAX_PRIVATE_ARTIFACT_FILES: Final = 20_000
 MAX_PRIVATE_ARTIFACT_BYTES: Final = 8 * 1024**3
 REVIEW_PLAN_BASENAME: Final = "private_review_plan.json"
 REVIEW_LEDGER_BASENAME: Final = "completed_review_ledger.json"
-REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v1"
-QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v2"
+REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v2"
+REVIEW_INSTRUCTIONS_VERSION: Final = "private-dicom-qa-review-instructions-v2"
+QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v3"
+QA_STRATUM_REGISTRY_VERSION: Final = "qa-stratum-registry-v1"
+REPRESENTED_STRATA_SUMMARY_TOKEN: Final = "all_required_represented_registry_values_satisfy_quotas"
+QA_RENDERER_VERSION: Final = "private-qa-renderer-v1"
+QA_STRATUM_REGISTRY_SHA256: Final = (
+    "13829b49acec7ed2a3cb83cc862caaf3"  # pragma: allowlist secret
+    "251ecbab9f1b11eca4061c0c9ae5acf3"  # pragma: allowlist secret
+)
+REQUIRED_REVIEW_DIMENSIONS: Final = (
+    "laterality",
+    "organizer_plane",
+    "physical_plane",
+    "organizer_physical_plane_relation",
+    "assigned_diagnostic_slot",
+    "additional_diagnostic_series",
+    "multiple_series_per_slot",
+    "missing_diagnostic_slot",
+    "retained_nonduplicate_abnormal_series",
+    "duplicate_handling",
+    "bit_depth_category",
+    "photometric_interpretation",
+    "transfer_syntax",
+    "slice_thickness_stratum",
+    "slice_spacing_stratum",
+    "resolution_extreme",
+    "slice_count_extreme",
+    "scanner_manufacturer",
+    "scanner_model",
+    "field_strength",
+    "site_domain_cluster",
+    "source_manifest_quality_flag",
+    "terminal_state",
+    "pipeline_case",
+    "dicom_edge_case_subtype",
+)
+HUMAN_ATTESTATION_STATEMENT: Final = (
+    "I ATTEST THAT I AM AN AUTHORIZED HUMAN REVIEWER, I PERSONALLY INSPECTED EVERY "
+    "DISPLAYED PRIVATE ARTIFACT, AND NO LLM OR BROWSER AUTOMATION VIEWED THE PRIVATE ARTIFACTS."
+)
 HEX_40 = re.compile(r"[0-9a-f]{40}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 K20_RANGE = re.compile(r"range_([0-9]+)_([0-9]+)\Z")
@@ -108,6 +149,18 @@ QUALITY_BLOCK_REASON_ORDER: Final = (
     "duplicate_slices",
     "missing_physical_coverage",
 )
+CHECK_9_REASON_ORDER: Final = (
+    "missing_diagnostic_slot",
+    "additional_or_duplicate_series",
+    "non_model_eligible_sibling",
+    "retention_reason",
+    "quality_block_reason",
+    "source_manifest_quality_flag",
+    "recoverable_pipeline_case",
+    "dicom_edge_case",
+    "retained_nonduplicate_abnormal_series",
+    "duplicate_handling",
+)
 DETERMINISM_PASS: Final = {
     "schema_version": 1,
     "artifact_type": "dicom-run-determinism-aggregate",
@@ -115,8 +168,7 @@ DETERMINISM_PASS: Final = {
     "independent_runs_compared": True,
     "exact_manifest_byte_equality": True,
     "deterministic_metrics_equal": True,
-    "case_index_deterministic_projection_equal": True,
-    "qa_artifact_inventory_equal": True,
+    "cohort_plan_byte_equality": True,
     "unresolved_mismatches": "zero",
     "private_case_details_downloaded": False,
 }
@@ -128,6 +180,19 @@ class ReviewFinalizationError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code) else "internal_error"
         super().__init__(self.code)
+
+
+def _utc_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _duplicate_missing_abnormal_applicable(context: Mapping[str, Any]) -> bool:
+    return context.get("check_9_applicable") is True
 
 
 def _canonical_json_bytes(payload: object) -> bytes:
@@ -147,15 +212,13 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _count_token(count: int, *, public_cap: int | None = None) -> str:
-    if isinstance(count, bool) or count < 0 or (public_cap is not None and count > public_cap):
+def _count_token(count: int) -> str:
+    if isinstance(count, bool) or count < 0:
         raise ReviewFinalizationError("count_disclosure_invalid")
     if count == 0:
         return "zero"
     if count < 20:
         return "below_threshold_nonzero"
-    if public_cap is not None and count >= public_cap - 20:
-        return "at_or_above_threshold"
     lower = count // 20 * 20
     return f"range_{lower}_{lower + 19}"
 
@@ -168,8 +231,6 @@ def _k20_range_bounds(value: object) -> tuple[int, int] | None:
 
 
 def _reviewed_study_bounds(value: object) -> tuple[int, int] | None:
-    if value == "at_or_above_threshold":
-        return MAX_REVIEWED_STUDIES - 20, MAX_REVIEWED_STUDIES
     bounds = _k20_range_bounds(value)
     return bounds if bounds is not None and bounds[1] <= MAX_REVIEWED_STUDIES else None
 
@@ -288,6 +349,7 @@ def _derived_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
     ):
         raise ReviewFinalizationError("review_identity_invalid")
     prefixes = {
+        "performance_smoke": "rsna-knee-dqa-smoke",
         "run_a": "rsna-knee-dqa-a",
         "run_b": "rsna-knee-dqa-b",
         "comparison": "rsna-knee-dqa-cmp",
@@ -310,6 +372,7 @@ def _public_review_identity(
     input_identity = run_config.get("input_identity")
     policy = run_config.get("review_policy")
     kernel = manifest.get("kernel")
+    performance_smoke = manifest.get("performance_smoke")
     comparison = manifest.get("comparison")
     finalizer = manifest.get("review_finalizer")
     review_ui = manifest.get("review_ui")
@@ -319,12 +382,16 @@ def _public_review_identity(
         or not isinstance(input_identity, dict)
         or not isinstance(policy, dict)
         or not isinstance(kernel, dict)
+        or not isinstance(performance_smoke, dict)
         or not isinstance(comparison, dict)
         or not isinstance(finalizer, dict)
         or not isinstance(review_ui, dict)
         or not isinstance(output_validator, dict)
         or set(kernel) != {"code_file", "sha256"}
         or kernel.get("code_file") != "run.py"
+        or set(performance_smoke) != {"code_file", "sha256", "policy_file", "policy_sha256"}
+        or performance_smoke.get("code_file") != "performance_smoke.py"
+        or performance_smoke.get("policy_file") != "performance-smoke-policy.json"
         or set(comparison) != {"code_file", "sha256"}
         or comparison.get("code_file") != "compare_runs.py"
         or set(finalizer) != {"code_file", "sha256"}
@@ -337,7 +404,10 @@ def _public_review_identity(
         or policy
         != {
             "protocol_version": REVIEW_PROTOCOL_VERSION,
+            "instructions_version": REVIEW_INSTRUCTIONS_VERSION,
             "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
             "kernel_version": 1,
             "checks": list(REVIEW_CHECKS),
             "statuses": ["PASS", "BLOCK", "NOT_APPLICABLE"],
@@ -411,6 +481,8 @@ def _public_review_identity(
         raise ReviewFinalizationError("review_identity_invalid")
     hashes = {
         "runner_sha256": kernel.get("sha256"),
+        "performance_smoke_sha256": performance_smoke.get("sha256"),
+        "performance_smoke_policy_sha256": performance_smoke.get("policy_sha256"),
         "comparison_sha256": comparison.get("sha256"),
         "review_finalizer_sha256": finalizer.get("sha256"),
         "review_ui_sha256": review_ui.get("module_sha256"),
@@ -455,21 +527,24 @@ def _public_review_identity(
     }
 
 
-def _binding(
+def _verified_bundle(
     run_config_payload: bytes,
     manifest_payload: bytes,
-    case_payload: bytes,
-    inventory_payload: bytes,
     *,
     finalizer_sha256: str,
     bundle_root: Path,
     run_config_path: Path,
     runner_path: Path,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], ModuleType]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    ModuleType,
+    dict[str, Path],
+    tuple[Path, ...],
+]:
     run_config = _json_object(run_config_payload, "run_config_invalid")
     manifest = _json_object(manifest_payload, "bundle_manifest_invalid")
-    case_index = _json_object(case_payload, "private_case_index_invalid")
-    inventory = _json_object(inventory_payload, "private_inventory_invalid")
     provenance = run_config.get("provenance")
     manifest_provenance = manifest.get("provenance")
     kernel = manifest.get("kernel")
@@ -506,7 +581,7 @@ def _binding(
     try:
         exec(compile(runner_payload, str(runner_path), "exec"), runner.__dict__)
         records = runner._validated_records(bundle_root, manifest)
-        verified_config, paths, _dependencies = runner._verify_run_config(
+        verified_config, paths, dependencies = runner._verify_run_config(
             bundle_root, manifest, records
         )
         expected_run_config = paths["run_config"].resolve(strict=True)
@@ -521,12 +596,38 @@ def _binding(
         or runner_path.resolve(strict=True) != expected_runner
     ):
         raise ReviewFinalizationError("bundle_binding_invalid")
-    artifact_public = {
-        "git_commit": commit,
-        "bundle_sha256": bundle,
-        "runner_sha256": str(kernel["sha256"]),
-        "review_finalizer_sha256": finalizer_sha256,
-    }
+    return (
+        run_config,
+        manifest,
+        _public_review_identity(run_config, manifest),
+        runner,
+        cast(dict[str, Path], paths),
+        cast(tuple[Path, ...], dependencies),
+    )
+
+
+def _binding(
+    run_config_payload: bytes,
+    manifest_payload: bytes,
+    case_payload: bytes,
+    inventory_payload: bytes,
+    *,
+    finalizer_sha256: str,
+    bundle_root: Path,
+    run_config_path: Path,
+    runner_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], ModuleType]:
+    run_config, _manifest, static_identity, runner, _paths, _dependencies = _verified_bundle(
+        run_config_payload,
+        manifest_payload,
+        finalizer_sha256=finalizer_sha256,
+        bundle_root=bundle_root,
+        run_config_path=run_config_path,
+        runner_path=runner_path,
+    )
+    case_index = _json_object(case_payload, "private_case_index_invalid")
+    inventory = _json_object(inventory_payload, "private_inventory_invalid")
+    artifact_public = _materialization_identity(static_identity, case_index)
     expected_private = {
         **artifact_public,
         "private_case_index_sha256": _sha256_bytes(case_payload),
@@ -540,20 +641,92 @@ def _binding(
         or inventory_provenance != expected_private
     ):
         raise ReviewFinalizationError("private_artifact_binding_invalid")
-    return _public_review_identity(run_config, manifest), case_index, inventory, runner
+    return static_identity, case_index, inventory, runner
+
+
+def _materialization_identity(
+    static_identity: Mapping[str, Any], case_index: Mapping[str, Any]
+) -> dict[str, Any]:
+    provenance = case_index.get("provenance")
+    full_run = case_index.get("full_run")
+    selection = case_index.get("qa_cohort_selection")
+    kernels = static_identity.get("kernels")
+    code = static_identity.get("code")
+    if (
+        not isinstance(provenance, dict)
+        or set(provenance)
+        != {
+            "git_commit",
+            "bundle_sha256",
+            "runner_sha256",
+            "review_finalizer_sha256",
+            "full_run_manifest_sha256",
+            "cohort_plan_sha256",
+            "comparison_sha256",
+            "review_plan_ref",
+            "review_plan_version",
+            "qa_stratum_registry_version",
+            "qa_stratum_registry_sha256",
+            "qa_renderer_version",
+        }
+        or not isinstance(full_run, dict)
+        or not isinstance(selection, dict)
+        or not isinstance(kernels, dict)
+        or not isinstance(code, dict)
+        or provenance.get("git_commit") != static_identity.get("git_commit")
+        or provenance.get("bundle_sha256") != static_identity.get("project_bundle_sha256")
+        or provenance.get("runner_sha256") != code.get("runner_sha256")
+        or provenance.get("review_finalizer_sha256") != code.get("review_finalizer_sha256")
+        or provenance.get("full_run_manifest_sha256") != full_run.get("manifest_sha256")
+        or provenance.get("cohort_plan_sha256") != selection.get("cohort_plan_sha256")
+        or provenance.get("review_plan_ref")
+        != cast(Mapping[str, Any], kernels.get("review_plan", {})).get("ref")
+        or provenance.get("review_plan_version")
+        != cast(Mapping[str, Any], kernels.get("review_plan", {})).get("version")
+        or provenance.get("qa_stratum_registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or provenance.get("qa_stratum_registry_sha256") != QA_STRATUM_REGISTRY_SHA256
+        or provenance.get("qa_renderer_version") != QA_RENDERER_VERSION
+        or any(
+            not isinstance(provenance.get(key), str)
+            or HEX_64.fullmatch(str(provenance[key])) is None
+            for key in (
+                "full_run_manifest_sha256",
+                "cohort_plan_sha256",
+                "comparison_sha256",
+                "qa_stratum_registry_sha256",
+            )
+        )
+    ):
+        raise ReviewFinalizationError("private_artifact_binding_invalid")
+    return dict(provenance)
 
 
 def _validate_series_terminal_evidence(item: Mapping[str, Any]) -> bool:
     terminal = item.get("terminal_state")
     model_eligible = item.get("model_eligible")
     if model_eligible:
+        model_reconstruction = item.get("model_output_reconstruction")
+        qa_reconstruction = item.get("qa_output_reconstruction")
         if (
             item.get("source_failure") is not None
             or item.get("preprocessing_failure") is not None
-            or item.get("model_output_reconstruction") is None
-            or item.get("qa_output_reconstruction") is None
+            or not isinstance(model_reconstruction, dict)
+            or not isinstance(qa_reconstruction, dict)
         ):
             raise ReviewFinalizationError("private_case_index_invalid")
+        for reconstruction in (model_reconstruction, qa_reconstruction):
+            ledger = reconstruction.get("transformation_ledger")
+            source_laterality = reconstruction.get("laterality")
+            normalized_laterality = {"L": "left", "R": "right", "B": "bilateral"}.get(
+                source_laterality if isinstance(source_laterality, str) else "", "unknown"
+            )
+            if (
+                not isinstance(ledger, dict)
+                or ledger.get("laterality_transform") != "none"
+                or ledger.get("horizontal_flip_applied") is not False
+                or normalized_laterality != item.get("laterality")
+            ):
+                raise ReviewFinalizationError("private_case_index_invalid")
         return True
     if (terminal == "decode_blocked" and not item.get("decode_failures")) or (
         terminal == "ordering_blocked" and item.get("ordering_failure") is None
@@ -609,23 +782,35 @@ def _validate_review_context(value: object, series_ordinal: int) -> dict[str, ob
     if not isinstance(value, dict) or set(value) != {
         "organizer_plane",
         "physical_plane",
+        "laterality",
+        "laterality_transform",
+        "horizontal_flip_applied",
         "assigned_slot",
         "retention_reasons",
         "missing_series_mask",
         "sibling_series",
+        "check_9_applicable",
+        "check_9_reason_codes",
     }:
         raise ReviewFinalizationError("private_case_index_invalid")
     organizer_plane = value.get("organizer_plane")
     physical_plane = value.get("physical_plane")
     assigned_slot = value.get("assigned_slot")
+    laterality = value.get("laterality")
     retention_reasons = _fixed_enum_list(value.get("retention_reasons"), RETENTION_REASON_ORDER)
+    check_9_reasons = _fixed_enum_list(value.get("check_9_reason_codes"), CHECK_9_REASON_ORDER)
     missing_mask = value.get("missing_series_mask")
     siblings = value.get("sibling_series")
     if (
         organizer_plane not in ORGANIZER_PLANES
         or physical_plane not in PHYSICAL_PLANES
+        or laterality not in {"left", "right", "bilateral", "unknown"}
+        or value.get("laterality_transform") != "none"
+        or value.get("horizontal_flip_applied") is not False
         or assigned_slot not in SERIES_SLOTS
         or retention_reasons is None
+        or check_9_reasons is None
+        or value.get("check_9_applicable") is not bool(check_9_reasons)
         or not isinstance(missing_mask, list)
         or len(missing_mask) != len(PRIMARY_SERIES_SLOTS)
         or any(not isinstance(item, bool) for item in missing_mask)
@@ -670,6 +855,31 @@ def _validate_review_context(value: object, series_ordinal: int) -> dict[str, ob
         or current.get("retention_reasons") != retention_reasons
     ):
         raise ReviewFinalizationError("private_case_index_invalid")
+    required_reasons = {
+        *(("missing_diagnostic_slot",) if any(cast(list[bool], missing_mask)) else ()),
+        *(
+            ("additional_or_duplicate_series",)
+            if any(item["slot"] == "additional_or_duplicate" for item in siblings)
+            else ()
+        ),
+        *(
+            ("non_model_eligible_sibling",)
+            if any(item["model_eligible"] is False for item in siblings)
+            else ()
+        ),
+        *(
+            ("retention_reason",)
+            if any(bool(item["retention_reasons"]) for item in siblings)
+            else ()
+        ),
+        *(
+            ("quality_block_reason",)
+            if any(bool(item["quality_blocked_reasons"]) for item in siblings)
+            else ()
+        ),
+    }
+    if not required_reasons.issubset(check_9_reasons):
+        raise ReviewFinalizationError("private_case_index_invalid")
     return cast(dict[str, object], value)
 
 
@@ -689,7 +899,8 @@ def _case_series(
             "provenance",
             "input_identity",
             "qa_cohort_selection",
-            "selection_census",
+            "capacity_certificate",
+            "capacity_certificate_sha256",
             "represented_review_strata",
             "studies",
             "benchmark",
@@ -698,55 +909,23 @@ def _case_series(
         or case_index.get("schema_version") != 1
         or case_index.get("artifact_type") != "private-dicom-qa-case-index"
         or case_index.get("status") != "pending_private_human_review"
-        or not isinstance(case_index.get("selection_census"), list)
         or not isinstance(case_index.get("studies"), list)
     ):
         raise ReviewFinalizationError("private_case_index_invalid")
-    census = cast(list[object], case_index["selection_census"])
-    census_population: dict[tuple[str, ...], tuple[int, int, bool]] = {}
-    for item in census:
-        if not isinstance(item, dict) or set(item) != {
-            "stratum",
-            "population_studies",
-            "selected_studies",
-            "material",
-        }:
-            raise ReviewFinalizationError("private_case_index_invalid")
-        stratum_raw = item.get("stratum")
-        population = item.get("population_studies")
-        selected = item.get("selected_studies")
-        material = item.get("material")
-        if (
-            not isinstance(stratum_raw, list)
-            or len(stratum_raw) != 11
-            or any(not isinstance(value, str) or not value for value in stratum_raw)
-            or isinstance(population, bool)
-            or not isinstance(population, int)
-            or population < 1
-            or isinstance(selected, bool)
-            or not isinstance(selected, int)
-            or not 0 <= selected <= population
-            or not isinstance(material, bool)
-            or material is not (population >= 2)
-        ):
-            raise ReviewFinalizationError("private_case_index_invalid")
-        stratum = tuple(cast(list[str], stratum_raw))
-        if stratum in census_population:
-            raise ReviewFinalizationError("private_case_index_invalid")
-        census_population[stratum] = (population, selected, material)
-    if not census_population:
-        raise ReviewFinalizationError("private_case_index_invalid")
-
+    try:
+        _cohort_sha256_from_studies(cast(list[Mapping[str, object]], case_index["studies"]))
+    except ReviewFinalizationError as error:
+        raise ReviewFinalizationError("private_case_index_invalid") from error
     eligible: dict[int, tuple[tuple[str, ...], tuple[int, ...]]] = {}
     review_contexts: dict[tuple[int, int], dict[str, object]] = {}
     observed_cases: set[int] = set()
-    selected_counts: dict[tuple[str, ...], int] = defaultdict(int)
     observed_review_strata: set[tuple[str, ...]] = set()
     for study in cast(list[object], case_index["studies"]):
         if not isinstance(study, dict) or set(study) != {
             "case_ordinal",
             "study_uid",
             "selection_stratum",
+            "registry_memberships",
             "review_eligible",
             "missing_series_mask",
             "series",
@@ -754,6 +933,7 @@ def _case_series(
             raise ReviewFinalizationError("private_case_index_invalid")
         case = study.get("case_ordinal")
         stratum_raw = study.get("selection_stratum")
+        memberships_raw = study.get("registry_memberships")
         series = study.get("series")
         missing_mask = study.get("missing_series_mask")
         if (
@@ -766,6 +946,8 @@ def _case_series(
             or not isinstance(stratum_raw, list)
             or len(stratum_raw) != 11
             or any(not isinstance(value, str) for value in stratum_raw)
+            or not isinstance(memberships_raw, list)
+            or not memberships_raw
             or not isinstance(study.get("review_eligible"), bool)
             or not isinstance(missing_mask, list)
             or len(missing_mask) != len(PRIMARY_SERIES_SLOTS)
@@ -776,13 +958,10 @@ def _case_series(
             raise ReviewFinalizationError("private_case_index_invalid")
         observed_cases.add(case)
         study_stratum = tuple(cast(list[str], stratum_raw))
-        if study_stratum not in census_population:
-            raise ReviewFinalizationError("private_case_index_invalid")
-        selected_counts[study_stratum] += 1
         eligible_series: list[int] = []
         observed_series: set[int] = set()
         sibling_series: list[dict[str, object]] = []
-        context_fields: dict[int, tuple[str, str, str, list[str]]] = {}
+        context_fields: dict[int, tuple[str, str, str, str, list[str]]] = {}
         for item in series:
             if not isinstance(item, dict) or set(item) != {
                 "series_ordinal",
@@ -790,6 +969,9 @@ def _case_series(
                 "organizer_plane",
                 "physical_plane",
                 "slot",
+                "laterality",
+                "laterality_transform",
+                "horizontal_flip_applied",
                 "retention_reasons",
                 "quality",
                 "source_failure",
@@ -808,6 +990,7 @@ def _case_series(
             organizer_plane = item.get("organizer_plane")
             physical_plane = item.get("physical_plane")
             slot = item.get("slot")
+            laterality = item.get("laterality")
             retention_reasons = _fixed_enum_list(
                 item.get("retention_reasons"), RETENTION_REASON_ORDER
             )
@@ -830,6 +1013,21 @@ def _case_series(
                 or organizer_plane not in ORGANIZER_PLANES
                 or physical_plane not in PHYSICAL_PLANES
                 or slot not in SERIES_SLOTS
+                or laterality not in {"left", "right", "bilateral", "unknown"}
+                or (
+                    model_eligible
+                    and (
+                        item.get("laterality_transform") != "none"
+                        or item.get("horizontal_flip_applied") is not False
+                    )
+                )
+                or (
+                    not model_eligible
+                    and (
+                        item.get("laterality_transform") != "not_processed"
+                        or item.get("horizontal_flip_applied") is not None
+                    )
+                )
                 or retention_reasons is None
                 or quality_blocked_reasons is None
             ):
@@ -839,6 +1037,7 @@ def _case_series(
                 cast(str, organizer_plane),
                 cast(str, physical_plane),
                 cast(str, slot),
+                cast(str, laterality),
                 retention_reasons,
             )
             sibling_series.append(
@@ -856,17 +1055,79 @@ def _case_series(
         if sorted(observed_series) != list(range(len(series))):
             raise ReviewFinalizationError("private_case_index_invalid")
         sibling_series.sort(key=lambda item: cast(int, item["series_ordinal"]))
+        registry_values: dict[str, set[str]] = defaultdict(set)
+        for dimension, value in cast(list[list[str]], memberships_raw):
+            registry_values[dimension].add(value)
+        study_reason_codes = {
+            *(
+                ("source_manifest_quality_flag",)
+                if registry_values["source_manifest_quality_flag"] != {"none"}
+                else ()
+            ),
+            *(
+                ("recoverable_pipeline_case",)
+                if registry_values["pipeline_case"] != {"clean"}
+                else ()
+            ),
+            *(
+                ("dicom_edge_case",)
+                if registry_values["dicom_edge_case_subtype"] != {"none"}
+                else ()
+            ),
+            *(
+                ("retained_nonduplicate_abnormal_series",)
+                if "present" in registry_values["retained_nonduplicate_abnormal_series"]
+                else ()
+            ),
+            *(("duplicate_handling",) if registry_values["duplicate_handling"] != {"none"} else ()),
+        }
         for eligible_ordinal in eligible_series:
-            organizer_plane, physical_plane, assigned_slot, retention_reasons = context_fields[
-                eligible_ordinal
+            (
+                organizer_plane,
+                physical_plane,
+                assigned_slot,
+                laterality,
+                retention_reasons,
+            ) = context_fields[eligible_ordinal]
+            reason_codes = {
+                *study_reason_codes,
+                *(("missing_diagnostic_slot",) if any(cast(list[bool], missing_mask)) else ()),
+                *(
+                    ("additional_or_duplicate_series",)
+                    if any(item["slot"] == "additional_or_duplicate" for item in sibling_series)
+                    else ()
+                ),
+                *(
+                    ("non_model_eligible_sibling",)
+                    if any(item["model_eligible"] is False for item in sibling_series)
+                    else ()
+                ),
+                *(
+                    ("retention_reason",)
+                    if any(bool(item["retention_reasons"]) for item in sibling_series)
+                    else ()
+                ),
+                *(
+                    ("quality_block_reason",)
+                    if any(bool(item["quality_blocked_reasons"]) for item in sibling_series)
+                    else ()
+                ),
+            }
+            ordered_reason_codes = [
+                value for value in CHECK_9_REASON_ORDER if value in reason_codes
             ]
             context = {
                 "organizer_plane": organizer_plane,
                 "physical_plane": physical_plane,
+                "laterality": laterality,
+                "laterality_transform": "none",
+                "horizontal_flip_applied": False,
                 "assigned_slot": assigned_slot,
                 "retention_reasons": retention_reasons,
                 "missing_series_mask": cast(list[bool], missing_mask),
                 "sibling_series": sibling_series,
+                "check_9_applicable": bool(ordered_reason_codes),
+                "check_9_reason_codes": ordered_reason_codes,
             }
             review_contexts[(case, eligible_ordinal)] = _validate_review_context(
                 context, eligible_ordinal
@@ -876,15 +1137,7 @@ def _case_series(
         if eligible_series:
             eligible[case] = (study_stratum, tuple(sorted(eligible_series)))
             observed_review_strata.add(study_stratum)
-    if (
-        len(observed_cases) > MAX_REVIEWED_STUDIES
-        or sum(selected for _population, selected, _material in census_population.values())
-        != len(observed_cases)
-        or any(
-            selected_counts[stratum] != selected or (material and selected < min(2, population))
-            for stratum, (population, selected, material) in census_population.items()
-        )
-    ):
+    if len(observed_cases) > MAX_REVIEWED_STUDIES:
         raise ReviewFinalizationError("private_case_index_invalid")
     represented = case_index.get("represented_review_strata")
     if represented != [list(item) for item in sorted(observed_review_strata)]:
@@ -952,45 +1205,224 @@ def _review_case_ordinals(
     return selected
 
 
+def _cohort_sha256_from_studies(studies: Sequence[Mapping[str, object]]) -> str:
+    payload_studies: list[dict[str, object]] = []
+    observed_uids: set[str] = set()
+    for study in studies:
+        uid = study.get("study_uid")
+        raw_memberships = study.get("registry_memberships")
+        if (
+            not isinstance(uid, str)
+            or not uid
+            or len(uid) > 80
+            or uid in observed_uids
+            or not isinstance(raw_memberships, list)
+            or not raw_memberships
+        ):
+            raise ReviewFinalizationError("review_identity_invalid")
+        strata: list[list[str]] = []
+        seen: set[tuple[str, str]] = set()
+        dimensions: set[str] = set()
+        for item in raw_memberships:
+            if (
+                not isinstance(item, list)
+                or len(item) != 2
+                or any(not isinstance(value, str) or not value for value in item)
+            ):
+                raise ReviewFinalizationError("review_identity_invalid")
+            token = (item[0], item[1])
+            if token in seen or token[0] not in REQUIRED_REVIEW_DIMENSIONS:
+                raise ReviewFinalizationError("review_identity_invalid")
+            seen.add(token)
+            dimensions.add(token[0])
+            strata.append([token[0], token[1]])
+        if dimensions != set(REQUIRED_REVIEW_DIMENSIONS) or strata != sorted(strata):
+            raise ReviewFinalizationError("review_identity_invalid")
+        observed_uids.add(uid)
+        payload_studies.append({"study_key": uid, "strata": strata})
+    return _sha256_bytes(
+        json.dumps(
+            {
+                "domain": "rsna-knee-private-qa-cohort-v2",
+                "manifest_version": "manifest-v2",
+                "registry_version": QA_STRATUM_REGISTRY_VERSION,
+                "registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+                "selector_version": QA_COHORT_SELECTION_VERSION,
+                "studies": payload_studies,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    )
+
+
+def _capacity_certificate_sha256(
+    case_index: Mapping[str, Any],
+    materialization: Mapping[str, Any],
+    selection: Mapping[str, Any],
+) -> str:
+    certificate = case_index.get("capacity_certificate")
+    expected_sha256 = case_index.get("capacity_certificate_sha256")
+    full_run = case_index.get("full_run")
+    if not isinstance(certificate, dict):
+        raise ReviewFinalizationError("review_identity_invalid")
+    payload = _canonical_json_bytes(certificate)
+    provenance = certificate.get("provenance")
+    admission = certificate.get("admission")
+    eligible_series = selection.get("eligible_series")
+    if (
+        not isinstance(expected_sha256, str)
+        or HEX_64.fullmatch(expected_sha256) is None
+        or expected_sha256 != _sha256_bytes(payload)
+        or not isinstance(full_run, dict)
+        or full_run.get("qa_preparation_capacity_certificate") != certificate
+        or full_run.get("qa_preparation_capacity_certificate_sha256") != expected_sha256
+        or set(certificate)
+        != {"schema_version", "artifact_type", "status", "provenance", "admission"}
+        or certificate.get("schema_version") != 1
+        or certificate.get("artifact_type") != "private-dicom-qa-preparation-capacity-certificate"
+        or certificate.get("status") != "pass"
+        or not isinstance(provenance, dict)
+        or set(provenance)
+        != {
+            "git_commit",
+            "bundle_sha256",
+            "review_plan_ref",
+            "review_plan_version",
+            "performance_smoke_summary_sha256",
+            "full_run_manifest_sha256",
+            "cohort_plan_sha256",
+            "comparison_sha256",
+            "qa_renderer_version",
+            "qa_stratum_registry_version",
+            "qa_stratum_registry_sha256",
+        }
+        or provenance.get("git_commit") != materialization.get("git_commit")
+        or provenance.get("bundle_sha256") != materialization.get("bundle_sha256")
+        or provenance.get("review_plan_ref") != materialization.get("review_plan_ref")
+        or provenance.get("review_plan_version") != materialization.get("review_plan_version")
+        or provenance.get("full_run_manifest_sha256")
+        != materialization.get("full_run_manifest_sha256")
+        or provenance.get("cohort_plan_sha256") != materialization.get("cohort_plan_sha256")
+        or provenance.get("comparison_sha256") != materialization.get("comparison_sha256")
+        or provenance.get("qa_renderer_version") != QA_RENDERER_VERSION
+        or provenance.get("qa_stratum_registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or provenance.get("qa_stratum_registry_sha256") != QA_STRATUM_REGISTRY_SHA256
+        or not isinstance(provenance.get("performance_smoke_summary_sha256"), str)
+        or HEX_64.fullmatch(str(provenance["performance_smoke_summary_sha256"])) is None
+        or isinstance(eligible_series, bool)
+        or not isinstance(eligible_series, int)
+        or eligible_series < MINIMUM_REVIEWED_STUDIES
+        or not isinstance(admission, dict)
+        or set(admission)
+        != {
+            "eligible_series",
+            "projected_review_files",
+            "projected_review_bytes",
+            "projected_replay_seconds",
+            "projected_benchmark_seconds",
+            "finalization_reserve_seconds",
+            "required_seconds",
+            "remaining_seconds_at_gate",
+            "available_working_disk_bytes_at_gate",
+            "required_working_disk_bytes",
+        }
+        or admission.get("eligible_series") != eligible_series
+        or admission.get("projected_review_files") != eligible_series * 7
+        or admission.get("finalization_reserve_seconds") != 600
+    ):
+        raise ReviewFinalizationError("review_identity_invalid")
+    integers = {
+        key: admission.get(key)
+        for key in (
+            "projected_review_bytes",
+            "projected_replay_seconds",
+            "projected_benchmark_seconds",
+            "required_seconds",
+            "remaining_seconds_at_gate",
+            "available_working_disk_bytes_at_gate",
+            "required_working_disk_bytes",
+        )
+    }
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        for value in integers.values()
+    ):
+        raise ReviewFinalizationError("review_identity_invalid")
+    projected_bytes = cast(int, integers["projected_review_bytes"])
+    projected_replay = cast(int, integers["projected_replay_seconds"])
+    projected_benchmark = cast(int, integers["projected_benchmark_seconds"])
+    required_seconds = cast(int, integers["required_seconds"])
+    mib_per_series = projected_bytes // eligible_series // 1024**2
+    if (
+        projected_bytes != eligible_series * mib_per_series * 1024**2
+        or not 1 <= mib_per_series <= 256
+        or mib_per_series & (mib_per_series - 1)
+        or projected_bytes > MAX_PRIVATE_ARTIFACT_BYTES
+        or projected_replay % eligible_series
+        or not 1 <= projected_replay // eligible_series <= 3_600
+        or not 60 <= projected_benchmark <= 3_600
+        or projected_benchmark % 60
+        or required_seconds != projected_replay + projected_benchmark + 600
+        or cast(int, integers["remaining_seconds_at_gate"]) < required_seconds
+        or cast(int, integers["available_working_disk_bytes_at_gate"])
+        < cast(int, integers["required_working_disk_bytes"])
+    ):
+        raise ReviewFinalizationError("review_identity_invalid")
+    return expected_sha256
+
+
 def _private_review_identity(
     static_identity: Mapping[str, Any], case_index: Mapping[str, Any]
 ) -> dict[str, Any]:
+    materialization = _materialization_identity(static_identity, case_index)
     input_identity = case_index.get("input_identity")
     selection = case_index.get("qa_cohort_selection")
+    full_run = case_index.get("full_run")
     studies = case_index.get("studies")
     if (
         not isinstance(input_identity, dict)
-        or set(input_identity) != {"source_manifest", "official_competition"}
+        or set(input_identity)
+        != {
+            "audit_id",
+            "manifest_version",
+            "source_manifest_artifact_sha256",
+            "official_input_snapshot_sha256",
+        }
         or not isinstance(selection, dict)
         or set(selection)
         != {
             "selection_version",
+            "stratum_registry_version",
+            "stratum_registry_sha256",
             "selected_studies",
             "eligible_series",
             "cohort_sha256",
             "source_manifest_gate",
-            "coverage",
+            "coverage_ledger_sha256",
+            "cohort_plan_sha256",
+            "coverage_ledger",
         }
         or selection.get("selection_version") != QA_COHORT_SELECTION_VERSION
+        or selection.get("stratum_registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or selection.get("stratum_registry_sha256") != QA_STRATUM_REGISTRY_SHA256
         or selection.get("source_manifest_gate") != "pass"
+        or not isinstance(full_run, dict)
+        or full_run.get("qa_cohort_selection") != selection
         or not isinstance(studies, list)
         or not studies
     ):
         raise ReviewFinalizationError("review_identity_invalid")
-    private_source = input_identity.get("source_manifest")
-    private_official = input_identity.get("official_competition")
+    capacity_certificate_sha256 = _capacity_certificate_sha256(
+        case_index, materialization, selection
+    )
     if (
-        not isinstance(private_source, dict)
-        or set(private_source) != {"audit_id", "version", "source_manifest_artifact_sha256"}
-        or private_source.get("audit_id") != static_identity["source_manifest"]["audit_id"]
-        or private_source.get("version") != static_identity["source_manifest"]["version"]
-        or not isinstance(private_source.get("source_manifest_artifact_sha256"), str)
-        or HEX_64.fullmatch(str(private_source["source_manifest_artifact_sha256"])) is None
-        or not isinstance(private_official, dict)
-        or set(private_official) != {"slug", "official_input_snapshot_sha256"}
-        or private_official.get("slug") != static_identity["official_competition"]["slug"]
-        or not isinstance(private_official.get("official_input_snapshot_sha256"), str)
-        or HEX_64.fullmatch(str(private_official["official_input_snapshot_sha256"])) is None
+        input_identity.get("audit_id") != static_identity["source_manifest"]["audit_id"]
+        or input_identity.get("manifest_version") != static_identity["source_manifest"]["version"]
+        or not isinstance(input_identity.get("source_manifest_artifact_sha256"), str)
+        or HEX_64.fullmatch(str(input_identity["source_manifest_artifact_sha256"])) is None
+        or not isinstance(input_identity.get("official_input_snapshot_sha256"), str)
+        or HEX_64.fullmatch(str(input_identity["official_input_snapshot_sha256"])) is None
     ):
         raise ReviewFinalizationError("review_identity_invalid")
 
@@ -998,7 +1430,6 @@ def _private_review_identity(
         (cast(dict[str, Any], study) for study in studies),
         key=lambda study: study.get("case_ordinal", -1),
     )
-    cohort_studies: list[dict[str, object]] = []
     eligible_series = 0
     for ordinal, study in enumerate(ordered_studies):
         series = study.get("series")
@@ -1007,6 +1438,7 @@ def _private_review_identity(
             or not isinstance(study.get("study_uid"), str)
             or not isinstance(study.get("selection_stratum"), list)
             or len(study["selection_stratum"]) != 11
+            or not isinstance(study.get("registry_memberships"), list)
             or not isinstance(series, list)
         ):
             raise ReviewFinalizationError("review_identity_invalid")
@@ -1018,63 +1450,92 @@ def _private_review_identity(
         if any(not uid or len(uid) > 80 for uid in series_uids):
             raise ReviewFinalizationError("review_identity_invalid")
         eligible_series += len(series_uids)
-        cohort_studies.append(
-            {
-                "study_uid": study["study_uid"],
-                "selection_stratum": study["selection_stratum"],
-                "eligible_series_uids": series_uids,
-            }
-        )
-    cohort_sha256 = _sha256_bytes(
-        _canonical_json_bytes(
-            {
-                "domain": "rsna-knee-dicom-qa-cohort-v2",
-                "selection_version": QA_COHORT_SELECTION_VERSION,
-                "studies": cohort_studies,
-            }
-        )
-    )
+    cohort_sha256 = _cohort_sha256_from_studies(ordered_studies)
     if (
         selection.get("selected_studies") != len(ordered_studies)
         or selection.get("eligible_series") != eligible_series
         or selection.get("cohort_sha256") != cohort_sha256
     ):
         raise ReviewFinalizationError("review_identity_invalid")
-    coverage = selection.get("coverage")
+    coverage = selection.get("coverage_ledger")
     observed_coverage: set[tuple[str, str]] = set()
-    if not isinstance(coverage, list) or not coverage:
+    if (
+        not isinstance(coverage, dict)
+        or set(coverage)
+        != {
+            "rows",
+            "total_required_strata",
+            "total_satisfied",
+            "unsatisfied_strata",
+            "cohort_size",
+            "all_required_represented_registry_values_satisfy_quotas",
+            "registry_version",
+            "selector_version",
+            "manifest_version",
+        }
+        or coverage.get("registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or coverage.get("selector_version") != QA_COHORT_SELECTION_VERSION
+        or coverage.get("manifest_version") != "manifest-v2"
+        or selection.get("coverage_ledger_sha256") != _sha256_bytes(_canonical_json_bytes(coverage))
+        or coverage.get("cohort_size") != len(ordered_studies)
+        or coverage.get("all_required_represented_registry_values_satisfy_quotas") is not True
+        or coverage.get("unsatisfied_strata") != []
+        or not isinstance(coverage.get("rows"), list)
+        or not coverage["rows"]
+    ):
         raise ReviewFinalizationError("review_identity_invalid")
-    for row in coverage:
+    selected_memberships: dict[tuple[str, str], int] = defaultdict(int)
+    for study in ordered_studies:
+        for item in cast(list[list[str]], study["registry_memberships"]):
+            selected_memberships[(item[0], item[1])] += 1
+    ordered_tokens: list[tuple[str, str]] = []
+    for row in coverage["rows"]:
         if not isinstance(row, dict) or set(row) != {
             "dimension",
             "value",
-            "population_studies",
-            "selected_studies",
-            "disposition",
-            "source",
+            "represented",
+            "population",
+            "required_quota",
+            "selected",
+            "quota_met",
+            "reason",
+            "selector_version",
         }:
             raise ReviewFinalizationError("review_identity_invalid")
         key = (row.get("dimension"), row.get("value"))
-        population = row.get("population_studies")
-        selected = row.get("selected_studies")
-        disposition = row.get("disposition")
+        population = row.get("population")
+        selected = row.get("selected")
+        quota = row.get("required_quota")
         if (
             any(not isinstance(value, str) or not value for value in key)
             or cast(tuple[str, str], key) in observed_coverage
+            or key[0] not in REQUIRED_REVIEW_DIMENSIONS
+            or row.get("represented") is not True
             or isinstance(population, bool)
             or not isinstance(population, int)
-            or population < 0
+            or population < 1
+            or isinstance(quota, bool)
+            or not isinstance(quota, int)
+            or quota != min(2, population)
             or isinstance(selected, bool)
             or not isinstance(selected, int)
-            or not 0 <= selected <= population
-            or disposition not in {"covered", "represented_nonmaterial", "not_represented"}
-            or row.get("source") not in {"manifest-v2", "full_run_terminal_records"}
-            or (disposition == "not_represented") is not (population == selected == 0)
-            or (population > 0 and selected == 0)
+            or not quota <= selected <= population
+            or selected_memberships.get(cast(tuple[str, str], key), 0) != selected
+            or row.get("quota_met") is not True
+            or not isinstance(row.get("reason"), str)
+            or re.fullmatch(r"mandatory_represented_[a-z_]+", str(row["reason"])) is None
+            or row.get("selector_version") != QA_COHORT_SELECTION_VERSION
         ):
             raise ReviewFinalizationError("review_identity_invalid")
         observed_coverage.add(cast(tuple[str, str], key))
-    if len({dimension for dimension, _value in observed_coverage}) != 19:
+        ordered_tokens.append(cast(tuple[str, str], key))
+    if (
+        ordered_tokens != sorted(ordered_tokens)
+        or set(selected_memberships) - observed_coverage
+        or {dimension for dimension, _value in observed_coverage} != set(REQUIRED_REVIEW_DIMENSIONS)
+        or coverage.get("total_required_strata") != len(observed_coverage)
+        or coverage.get("total_satisfied") != len(observed_coverage)
+    ):
         raise ReviewFinalizationError("review_identity_invalid")
 
     identity = {
@@ -1082,16 +1543,31 @@ def _private_review_identity(
         "official_competition_input": {
             **dict(static_identity["official_competition"]),
             "snapshot_version": "chunk4-private-root-inventory-v1",
-            "snapshot_sha256": private_official["official_input_snapshot_sha256"],
+            "snapshot_sha256": input_identity["official_input_snapshot_sha256"],
         },
         "source_manifest": {
             **dict(static_identity["source_manifest"]),
-            "artifact_sha256": private_source["source_manifest_artifact_sha256"],
+            "artifact_sha256": input_identity["source_manifest_artifact_sha256"],
         },
         "qa_cohort": {
             "selection_version": QA_COHORT_SELECTION_VERSION,
             "sha256": cohort_sha256,
-            "coverage": coverage,
+            "coverage_ledger": coverage,
+        },
+        "qa_materialization": {
+            "run_a_full_manifest_sha256": materialization["full_run_manifest_sha256"],
+            "cohort_plan_sha256": materialization["cohort_plan_sha256"],
+            "comparison_proof_sha256": materialization["comparison_sha256"],
+            "review_plan": {
+                "ref": materialization["review_plan_ref"],
+                "version": materialization["review_plan_version"],
+            },
+            "stratum_registry": {
+                "version": materialization["qa_stratum_registry_version"],
+                "sha256": materialization["qa_stratum_registry_sha256"],
+            },
+            "renderer_version": materialization["qa_renderer_version"],
+            "capacity_certificate_sha256": capacity_certificate_sha256,
         },
     }
     identity.pop("official_competition")
@@ -1099,7 +1575,7 @@ def _private_review_identity(
         "c5qa-"
         + _sha256_bytes(
             _canonical_json_bytes(
-                {"domain": "rsna-knee-private-review-bundle-v1", "identity": identity}
+                {"domain": "rsna-knee-private-review-bundle-v2", "identity": identity}
             )
         )[:20]
     )
@@ -1132,7 +1608,7 @@ def _template(
                 }
             )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "artifact_type": "private-dicom-qa-review-plan",
         "status": "pending_private_human_review",
         "review_identity": _private_review_identity(static_identity, case_index),
@@ -1240,7 +1716,7 @@ def validate_sanitized_summary(
         or not MINIMUM_REVIEWED_STUDIES <= reviewed_range[0] <= MAX_REVIEWED_STUDIES
         or eligible_range is None
         or eligible_range[0] < reviewed_range[0]
-        or review.get("represented_strata") != "all_material_covered"
+        or review.get("represented_strata") != REPRESENTED_STRATA_SUMMARY_TOKEN
         or not isinstance(review.get("check_results"), dict)
         or set(review["check_results"]) != set(REVIEW_CHECKS)
         or any(value not in {"PASS", "BLOCK"} for value in review["check_results"].values())
@@ -1464,6 +1940,9 @@ def _validated_ledger(payload: bytes, plan: Mapping[str, Any]) -> dict[str, Any]
     ledger = _json_object(payload, "review_ledger_invalid")
     rows = ledger.get("rows")
     plan_rows = plan.get("rows")
+    started_at = _utc_timestamp(ledger.get("started_at_utc"))
+    completed_at = _utc_timestamp(ledger.get("completed_at_utc"))
+    attestation = ledger.get("human_attestation")
     if (
         set(ledger)
         != {
@@ -1472,27 +1951,44 @@ def _validated_ledger(payload: bytes, plan: Mapping[str, Any]) -> dict[str, Any]
             "status",
             "review_identity",
             "plan_sha256",
+            "started_at_utc",
             "completed_at_utc",
+            "human_attestation",
             "rows",
         }
-        or ledger.get("schema_version") != 1
+        or ledger.get("schema_version") != 2
         or ledger.get("artifact_type") != "private-dicom-qa-completed-review-ledger"
         or ledger.get("status") != "complete"
         or ledger.get("review_identity") != plan.get("review_identity")
         or ledger.get("plan_sha256") != _sha256_bytes(_canonical_json_bytes(plan))
-        or not isinstance(ledger.get("completed_at_utc"), str)
-        or re.fullmatch(
-            r"20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
-            str(ledger["completed_at_utc"]),
-        )
-        is None
+        or started_at is None
+        or completed_at is None
+        or not started_at <= completed_at <= datetime.now(UTC)
+        or not isinstance(attestation, dict)
+        or set(attestation)
+        != {
+            "schema_version",
+            "instructions_version",
+            "statement",
+            "authorized_human_reviewer",
+            "direct_visual_review",
+            "no_llm_or_browser_automation_pixel_access",
+            "attested_at_utc",
+        }
+        or attestation.get("schema_version") != 1
+        or attestation.get("instructions_version") != REVIEW_INSTRUCTIONS_VERSION
+        or attestation.get("statement") != HUMAN_ATTESTATION_STATEMENT
+        or attestation.get("authorized_human_reviewer") is not True
+        or attestation.get("direct_visual_review") is not True
+        or attestation.get("no_llm_or_browser_automation_pixel_access") is not True
+        or _utc_timestamp(attestation.get("attested_at_utc")) != completed_at
         or not isinstance(rows, list)
         or not isinstance(plan_rows, list)
         or len(rows) != len(plan_rows)
     ):
         raise ReviewFinalizationError("review_ledger_invalid")
-    passed_checks: set[str] = set()
     for row, expected in zip(rows, plan_rows, strict=True):
+        context = expected.get("review_context") if isinstance(expected, dict) else None
         if (
             not isinstance(row, dict)
             or not isinstance(expected, dict)
@@ -1506,18 +2002,20 @@ def _validated_ledger(payload: bytes, plan: Mapping[str, Any]) -> dict[str, Any]
             or row.get("case_ordinal") != expected.get("case_ordinal")
             or row.get("series_ordinal") != expected.get("series_ordinal")
             or row.get("artifact_hashes_verified") is not True
+            or not isinstance(context, dict)
             or not isinstance(row.get("decisions"), dict)
             or set(row["decisions"]) != set(REVIEW_CHECKS)
             or any(value not in REVIEW_STATUSES for value in row["decisions"].values())
             or any(
-                value == "NOT_APPLICABLE" and check not in NOT_APPLICABLE_CHECKS
+                value == "NOT_APPLICABLE"
+                and (
+                    check not in NOT_APPLICABLE_CHECKS
+                    or _duplicate_missing_abnormal_applicable(context)
+                )
                 for check, value in row["decisions"].items()
             )
         ):
             raise ReviewFinalizationError("review_ledger_invalid")
-        passed_checks.update(check for check, value in row["decisions"].items() if value == "PASS")
-    if passed_checks != set(REVIEW_CHECKS):
-        raise ReviewFinalizationError("review_ledger_invalid")
     return ledger
 
 
@@ -1570,13 +2068,15 @@ def finalize_review(
     ]
     private_completion = _canonical_json_bytes(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "artifact_type": "private-dicom-qa-human-review-completion",
             "status": "complete" if block_count == 0 else "blocked",
             "review_identity": plan["review_identity"],
             "plan_sha256": _sha256_bytes(_canonical_json_bytes(plan)),
             "ledger_sha256": _sha256_bytes(ledger_payload),
+            "started_at_utc": ledger["started_at_utc"],
             "completed_at_utc": ledger["completed_at_utc"],
+            "human_attestation": ledger["human_attestation"],
             "review": {
                 "reviewed_studies": len(reviewed_cases),
                 "eligible_series_reviewed": len(ledger["rows"]),
@@ -1602,9 +2102,9 @@ def finalize_review(
             "review_protocol": REVIEW_PROTOCOL_VERSION,
         },
         "review": {
-            "reviewed_studies": _count_token(len(reviewed_cases), public_cap=MAX_REVIEWED_STUDIES),
+            "reviewed_studies": _count_token(len(reviewed_cases)),
             "eligible_series_reviewed": _count_token(len(ledger["rows"])),
-            "represented_strata": "all_material_covered",
+            "represented_strata": REPRESENTED_STRATA_SUMMARY_TOKEN,
             "all_eligible_series_complete": True,
             "all_nine_checks_terminal": True,
             "artifact_presence_verified": True,
@@ -1734,6 +2234,14 @@ def _discover_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path:
     return matches[0]
 
 
+def _discover_optional_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path | None:
+    slug = kernel_ref.partition("/")[2]
+    matches = [path for path in _discover_matches(root, basename) if slug in path.parts]
+    if len(matches) > 1:
+        raise ReviewFinalizationError("input_discovery_invalid")
+    return matches[0] if matches else None
+
+
 def _automatic_args() -> argparse.Namespace:
     input_root = Path(os.environ.get("KAGGLE_INPUT_ROOT", "/kaggle/input"))
     working_root = Path(os.environ.get("KAGGLE_WORKING_ROOT", "/kaggle/working"))
@@ -1746,18 +2254,51 @@ def _automatic_args() -> argparse.Namespace:
         _read_bounded(run_config, 2 * 1024**2, "run_config_invalid"), "run_config_invalid"
     )
     refs = _derived_refs(run_config_value)
-    run_a_ref = refs["run_a"]
-    case_index = _discover_from_kernel(input_root, "private_case_index.json", run_a_ref)
+    completed_review_ledger = _discover_optional_from_kernel(
+        input_root, REVIEW_LEDGER_BASENAME, refs["review_session"]
+    )
+    if completed_review_ledger is None:
+        return argparse.Namespace(
+            automatic_materialization=True,
+            input_root=input_root,
+            working_root=working_root,
+            run_config=run_config,
+            bundle_manifest=manifest,
+            runner=runner,
+            run_a_full_manifest=_discover_from_kernel(
+                input_root, "private_full_run_manifest.jsonl", refs["run_a"]
+            ),
+            run_a_metrics=_discover_from_kernel(
+                input_root, "private_full_run_metrics.json", refs["run_a"]
+            ),
+            run_a_cohort_plan=_discover_from_kernel(
+                input_root, "private_cohort_plan.json", refs["run_a"]
+            ),
+            comparison_proof=_discover_from_kernel(
+                input_root, "private_run_comparison.json", refs["comparison"]
+            ),
+            performance_smoke_summary=_discover_from_kernel(
+                input_root,
+                "sanitized_performance_smoke.json",
+                refs["performance_smoke"],
+            ),
+            template_output=working_root / TEMPLATE_OUTPUT_DIRECTORY / REVIEW_PLAN_BASENAME,
+            completed_review_ledger=None,
+            output_dir=None,
+        )
+
+    review_plan_ref = refs["review_plan"]
+    case_index = _discover_from_kernel(input_root, "private_case_index.json", review_plan_ref)
     private_inventory = _discover_from_kernel(
-        input_root, "private_artifact_inventory.json", run_a_ref
+        input_root, "private_artifact_inventory.json", review_plan_ref
     )
     if case_index.parent != private_inventory.parent:
         raise ReviewFinalizationError("input_discovery_invalid")
     private_review_root = case_index.parent / "private-review"
     if private_review_root.is_symlink() or not private_review_root.is_dir():
         raise ReviewFinalizationError("input_discovery_invalid")
-    completed_review_ledger = _discover_optional_one(input_root, REVIEW_LEDGER_BASENAME)
     return argparse.Namespace(
+        automatic_materialization=False,
         run_config=run_config,
         bundle_manifest=manifest,
         runner=runner,
@@ -1765,19 +2306,185 @@ def _automatic_args() -> argparse.Namespace:
         private_artifact_inventory=private_inventory,
         private_review_root=private_review_root,
         run_a_sanitized_summary=_discover_from_kernel(
-            input_root, "sanitized_summary.json", run_a_ref
+            input_root, "sanitized_summary.json", review_plan_ref
         ),
         comparison_summary=_discover_from_kernel(
             input_root, "sanitized_determinism.json", refs["comparison"]
         ),
-        template_output=(
-            None
-            if completed_review_ledger is not None
-            else working_root / TEMPLATE_OUTPUT_DIRECTORY / REVIEW_PLAN_BASENAME
-        ),
+        template_output=None,
         completed_review_ledger=completed_review_ledger,
-        output_dir=working_root / OUTPUT_DIRECTORY if completed_review_ledger is not None else None,
+        output_dir=working_root / OUTPUT_DIRECTORY,
     )
+
+
+def _publish_review_plan_outputs(
+    qa_staging: Path,
+    plan_staging: Path,
+    qa_target: Path,
+    plan_target: Path,
+) -> None:
+    try:
+        if any(path.exists() or path.is_symlink() for path in (qa_target, plan_target)):
+            raise ReviewFinalizationError("arguments_invalid")
+        qa_staging.rename(qa_target)
+        plan_staging.rename(plan_target)
+    except BaseException as error:
+        rollback_failed = False
+        for staging, target in (
+            (plan_staging, plan_target),
+            (qa_staging, qa_target),
+        ):
+            staging_exists = staging.exists() or staging.is_symlink()
+            target_exists = target.exists() or target.is_symlink()
+            if not target_exists or staging_exists:
+                continue
+            try:
+                target.rename(staging)
+            except OSError:
+                rollback_failed = True
+        if any(path.exists() or path.is_symlink() for path in (qa_target, plan_target)):
+            rollback_failed = True
+        if rollback_failed:
+            raise ReviewFinalizationError("output_rollback_failed") from None
+        if isinstance(error, ReviewFinalizationError):
+            raise
+        if isinstance(error, OSError):
+            raise ReviewFinalizationError("output_write_failed") from error
+        raise
+
+
+def _materialize_automatic_template(
+    args: argparse.Namespace,
+    *,
+    run_config_payload: bytes,
+    manifest_payload: bytes,
+    finalizer_sha256: str,
+) -> None:
+    run_config, _manifest, _static, runner, paths, dependencies = _verified_bundle(
+        run_config_payload,
+        manifest_payload,
+        finalizer_sha256=finalizer_sha256,
+        bundle_root=args.bundle_manifest.parent,
+        run_config_path=args.run_config,
+        runner_path=args.runner,
+    )
+    prepare = getattr(runner, "prepare_private_review", None)
+    if not callable(prepare):
+        raise ReviewFinalizationError("runner_binding_invalid")
+    plan_target = args.template_output.parent
+    runner_output_name = getattr(runner, "OUTPUT_DIRECTORY", None)
+    if (
+        plan_target.name != TEMPLATE_OUTPUT_DIRECTORY
+        or not isinstance(runner_output_name, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", runner_output_name) is None
+        or runner_output_name == TEMPLATE_OUTPUT_DIRECTORY
+    ):
+        raise ReviewFinalizationError("runner_binding_invalid")
+    qa_target = plan_target.parent / runner_output_name
+    temporary: Path | None = None
+    runtime_root: Path | None = None
+    package_root = "rsna_knee"
+    displaced_modules: dict[str, ModuleType] = {}
+    runtime_modules_active = False
+    try:
+        if (
+            plan_target.exists()
+            or plan_target.is_symlink()
+            or qa_target.exists()
+            or qa_target.is_symlink()
+        ):
+            raise ReviewFinalizationError("arguments_invalid")
+        plan_target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix=f".{plan_target.name}-", dir=plan_target.parent))
+        temporary.chmod(0o700)
+        runner_staging = temporary / "runner-staging"
+        runner_staging.mkdir(mode=0o700)
+        materialized = temporary / runner_output_name
+        plan_staging = temporary / TEMPLATE_OUTPUT_DIRECTORY
+        plan_staging.mkdir(mode=0o700)
+        inference_limit_seconds = int(
+            runner._competition_cpu_limit_seconds(paths["competition_contract"])
+        )
+        deadline_at = time.monotonic() + int(runner.SELF_DEADLINE_SECONDS)
+        with (
+            runner._enforce_self_deadline(deadline_at - time.monotonic()),
+            runner._silence_process_output(),
+        ):
+            runtime_root = runner._install_offline_runtime(
+                args.bundle_manifest.parent, paths["project_wheel"], dependencies
+            )
+            sys.path.insert(0, str(runtime_root))
+            displaced_modules = {
+                name: module
+                for name, module in tuple(sys.modules.items())
+                if name == package_root or name.startswith(f"{package_root}.")
+            }
+            for name in displaced_modules:
+                del sys.modules[name]
+            runtime_modules_active = True
+            prepare(
+                competition_root=runner._find_competition_root(args.input_root),
+                output_root=materialized,
+                staging_parent=runner_staging,
+                run_config=run_config,
+                preprocessing_config_path=paths["preprocessing_config"],
+                full_manifest_path=args.run_a_full_manifest,
+                full_metrics_path=args.run_a_metrics,
+                cohort_plan_path=args.run_a_cohort_plan,
+                comparison_proof_path=args.comparison_proof,
+                performance_smoke_summary_payload=_read_bounded(
+                    args.performance_smoke_summary,
+                    MAX_SUMMARY_BYTES,
+                    "performance_smoke_summary_invalid",
+                ),
+                review_plan_ref=_derived_refs(run_config)["review_plan"],
+                review_plan_version=1,
+                inference_limit_seconds=inference_limit_seconds,
+                deadline_at=deadline_at,
+            )
+            if materialized.is_symlink() or not materialized.is_dir():
+                raise ReviewFinalizationError("private_artifact_root_invalid")
+            case_path = materialized / "private_case_index.json"
+            inventory_path = materialized / "private_artifact_inventory.json"
+            private_review_root = materialized / "private-review"
+            plan = create_template(
+                run_config_payload=run_config_payload,
+                manifest_payload=manifest_payload,
+                case_payload=_read_bounded(
+                    case_path, MAX_INPUT_BYTES, "private_case_index_invalid"
+                ),
+                inventory_payload=_read_bounded(
+                    inventory_path, MAX_INPUT_BYTES, "private_inventory_invalid"
+                ),
+                finalizer_sha256=finalizer_sha256,
+                bundle_root=args.bundle_manifest.parent,
+                run_config_path=args.run_config,
+                runner_path=args.runner,
+                private_review_root=private_review_root,
+            )
+            _write_new(plan_staging / REVIEW_PLAN_BASENAME, plan, MAX_LEDGER_BYTES)
+            _publish_review_plan_outputs(materialized, plan_staging, qa_target, plan_target)
+    except ReviewFinalizationError:
+        raise
+    except runner.SafeRunError as error:
+        raise ReviewFinalizationError(str(error.code)) from error
+    except runner._DeadlineExceeded as error:
+        raise ReviewFinalizationError("self_deadline_exceeded") from error
+    except Exception as error:
+        raise ReviewFinalizationError("review_materialization_failed") from error
+    finally:
+        if runtime_modules_active:
+            for name in tuple(sys.modules):
+                if name == package_root or name.startswith(f"{package_root}."):
+                    del sys.modules[name]
+            sys.modules.update(displaced_modules)
+        if runtime_root is not None:
+            runtime_text = str(runtime_root)
+            if runtime_text in sys.path:
+                sys.path.remove(runtime_text)
+            shutil.rmtree(runtime_root, ignore_errors=True)
+        if temporary is not None:
+            shutil.rmtree(temporary, ignore_errors=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1787,8 +2494,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = (
             _automatic_args() if argv is None and len(sys.argv) == 1 else _parser().parse_args(argv)
         )
-        run_config, manifest, case_index, inventory = _inputs(args)
+        run_config = _read_bounded(args.run_config, 2 * 1024**2, "run_config_invalid")
+        manifest = _read_bounded(args.bundle_manifest, 2 * 1024**2, "bundle_manifest_invalid")
         finalizer_sha256 = _self_hash()
+        if getattr(args, "automatic_materialization", False):
+            _materialize_automatic_template(
+                args,
+                run_config_payload=run_config,
+                manifest_payload=manifest,
+                finalizer_sha256=finalizer_sha256,
+            )
+            print('{"event":"dicom_qa_review_template_complete"}', flush=True)
+            return 0
+        _run_config, _manifest, case_index, inventory = _inputs(args)
+        if _run_config != run_config or _manifest != manifest:
+            raise ReviewFinalizationError("input_discovery_invalid")
         if args.template_output is not None:
             if args.output_dir is not None:
                 raise ReviewFinalizationError("arguments_invalid")

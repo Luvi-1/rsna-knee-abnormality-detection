@@ -1,5 +1,22 @@
 # Competition Contract Change Log
 
+## 2026-08-11T21:41:12Z
+
+Chunk 5 two-stage recovery refresh before the exact release gate and replacement freeze:
+
+- All nine official competition-page fingerprints and the incorporated MIRA PDF fingerprint match
+  the immediately previous snapshot exactly.
+- The authenticated official API returned one entered competition match, the unchanged final
+  deadline, five submissions available now, and zero submissions.
+- The five official host clarification topics remain available.
+- Rules, data interface, evaluation, timeline, runtime, submission/team limits, external-asset
+  requirements, sharing restrictions, licensing, and winner obligations have no material drift.
+- Identity verification remains unavailable from the API, so the last directly observed
+  incomplete state continues to block submissions and prize eligibility, not the authorized
+  private Chunk 5 smoke, full-data QA runs, comparison, or human-QA preparation.
+- No rules acceptance, submission, team action, data preview, compute launch, publication, or
+  remote mutation occurred during this refresh.
+
 ## 2026-08-10T07:19:35Z
 
 Chunk 5 recovery refresh before the replacement freeze, private bundle, and Run A retry:

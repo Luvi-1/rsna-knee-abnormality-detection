@@ -24,8 +24,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections import defaultdict
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 from heapq import nsmallest
@@ -69,6 +69,8 @@ EXPECTED_SINGLETON_ROLES: Final = {
     "review_notebook",
     "output_validator",
     "runner_source",
+    "performance_smoke_source",
+    "performance_smoke_policy",
     "synthetic_preflight",
 }
 DEPENDENCY_ROLE: Final = "dependency_wheel"
@@ -104,11 +106,18 @@ REQUIRED_RUNTIME_PACKAGES: Final = {
     "pylibjpeg-libjpeg": "2.4.0",
     "pylibjpeg-openjpeg": "2.5.0",
 }
+RUN_PRIVATE_OUTPUT_POLICY: Final = {
+    "private_full_run_manifest.jsonl": 512 * 1024**2,
+    "private_full_run_metrics.json": 2 * 1024**2,
+    "private_cohort_plan.json": 32 * 1024**2,
+}
+RUN_DOWNLOADABLE_OUTPUT_POLICY: Final = {
+    "sanitized_summary.json": ("aggregate_json", 256 * 1024),
+    "sanitized_artifact_inventory.json": ("aggregate_json", 128 * 1024),
+}
 PRIVATE_OUTPUT_POLICY: Final = {
     "private_case_index.json": 32 * 1024**2,
     "private_artifact_inventory.json": 32 * 1024**2,
-    "private_full_run_manifest.jsonl": 512 * 1024**2,
-    "private_full_run_metrics.json": 2 * 1024**2,
 }
 PRIVATE_REVIEW_PATTERN: Final = (
     r"case_[0-9]{6}_series_[0-9]{3}_"
@@ -129,28 +138,59 @@ OUTER_KILL_SECONDS: Final = 28_800
 POST_FULL_PASS_RESERVE_SECONDS: Final = 3_600
 PERFORMANCE_SMOKE_MAX_STUDIES: Final = 120
 PROGRESS_EVENT_SEQUENCE: Final = (
-    ("performance_smoke", "start"),
-    ("performance_smoke", "complete"),
     ("full_pass", "start"),
     ("full_pass", "q1"),
     ("full_pass", "q2"),
     ("full_pass", "q3"),
     ("full_pass", "complete"),
+)
+PLAN_PROGRESS_EVENT_SEQUENCE: Final = (
     ("cohort_replay", "start"),
     ("cohort_replay", "complete"),
     ("benchmark", "start"),
     ("benchmark", "complete"),
 )
-TARGET_STUDIES: Final = 120
-MAX_TARGET_STUDIES: Final = 240
+TARGET_STUDIES: Final = 100
 MINIMUM_ELIGIBLE_STUDIES: Final = 100
-MATERIAL_STRATUM_MIN_STUDIES: Final = 2
-MATERIAL_STRATUM_SAMPLE_QUOTA: Final = 2
+REPRESENTED_VALUE_QUOTA: Final = 2
 SELECTION_SEED: Final = 20260809
 SOURCE_MANIFEST_VERSION: Final = "manifest-v2"
 SOURCE_MANIFEST_AUDIT_ID: Final = "audit-0002-manifest-remediation"
-QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v2"
-REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v1"
+QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v3"
+QA_STRATUM_REGISTRY_VERSION: Final = "qa-stratum-registry-v1"
+QA_STRATUM_REGISTRY_SHA256: Final = (
+    "13829b49acec7ed2a3cb83cc862caaf3"  # pragma: allowlist secret
+    "251ecbab9f1b11eca4061c0c9ae5acf3"  # pragma: allowlist secret
+)
+REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v2"
+REVIEW_INSTRUCTIONS_VERSION: Final = "private-dicom-qa-review-instructions-v2"
+REQUIRED_REVIEW_DIMENSIONS: Final = (
+    "laterality",
+    "organizer_plane",
+    "physical_plane",
+    "organizer_physical_plane_relation",
+    "assigned_diagnostic_slot",
+    "additional_diagnostic_series",
+    "multiple_series_per_slot",
+    "missing_diagnostic_slot",
+    "retained_nonduplicate_abnormal_series",
+    "duplicate_handling",
+    "bit_depth_category",
+    "photometric_interpretation",
+    "transfer_syntax",
+    "slice_thickness_stratum",
+    "slice_spacing_stratum",
+    "resolution_extreme",
+    "slice_count_extreme",
+    "scanner_manufacturer",
+    "scanner_model",
+    "field_strength",
+    "site_domain_cluster",
+    "source_manifest_quality_flag",
+    "terminal_state",
+    "pipeline_case",
+    "dicom_edge_case_subtype",
+)
 REVIEW_CHECKS: Final = (
     "slice_order",
     "anatomical_orientation",
@@ -237,51 +277,6 @@ SOURCE_MANIFEST_PRIVATE_ARTIFACTS: Final = {
     "private_qa_samples.csv": (64 * 1024**2, None),
     "audit_key.bin": (64, 32),
 }
-SOURCE_MANIFEST_DIMENSIONS: Final = frozenset(
-    {
-        "scanner_manufacturer",
-        "scanner_model",
-        "field_strength",
-        "site_domain_cluster",
-        "protected_duplicate_group",
-        "candidate_duplicate_group",
-        "remediated_decode_case",
-    }
-)
-REQUIRED_REVIEW_DIMENSIONS: Final = (
-    "plane",
-    "sequence",
-    "fat_suppression",
-    "scanner_manufacturer",
-    "scanner_model",
-    "field_strength",
-    "site_domain_cluster",
-    "resolution",
-    "slice_count",
-    "slice_spacing",
-    "orientation",
-    "multiple_series_per_slot",
-    "missing_slot",
-    "quality",
-    "duplicate_integrity",
-    "protected_duplicate_group",
-    "candidate_duplicate_group",
-    "dicom_edge_case",
-    "remediated_decode_case",
-)
-REVIEW_DIMENSION_EXPECTED_VALUES: Final = {
-    "plane": ("sagittal", "coronal", "axial"),
-    "sequence": ("fluid_sensitive", "structural"),
-    "fat_suppression": ("present", "absent"),
-    "multiple_series_per_slot": ("present",),
-    "missing_slot": ("present", "absent"),
-    "quality": ("high", "low", "blocked"),
-    "duplicate_integrity": ("present",),
-    "dicom_edge_case": ("present",),
-    "protected_duplicate_group": ("present",),
-    "candidate_duplicate_group": ("present",),
-    "remediated_decode_case": ("present",),
-}
 FATAL_DECODE_ISSUE_CODES: Final = frozenset(
     {
         "decoder_unavailable",
@@ -367,24 +362,7 @@ class SeriesRow:
 class SelectedStudy:
     study_uid: str
     stratum: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class StratumCensus:
-    stratum: tuple[str, ...]
-    population_studies: int
-    selected_studies: int
-    material: bool
-
-
-@dataclass(frozen=True, slots=True)
-class DimensionCoverage:
-    dimension: str
-    value: str
-    population_studies: int
-    selected_studies: int
-    disposition: str
-    source: str
+    dimensions: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,8 +380,8 @@ class CohortStudy:
 @dataclass(frozen=True, slots=True)
 class SelectionPlan:
     studies: tuple[SelectedStudy, ...]
-    census: tuple[StratumCensus, ...]
-    coverage: tuple[DimensionCoverage, ...] = ()
+    coverage: Mapping[str, object] | None = None
+    cohort_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -435,6 +413,8 @@ class SourceManifestReconciliation:
 class RepresentativeSeriesInput:
     profile: str
     slice_count: int
+    study_uid: str
+    series_uid: str
     paths: tuple[Path, ...]
 
 
@@ -793,6 +773,7 @@ def _identity_payload(
         "deployment": manifest.get("deployment"),
         "competition": manifest.get("competition"),
         "kernel": manifest.get("kernel"),
+        "performance_smoke": manifest.get("performance_smoke"),
         "comparison": manifest.get("comparison"),
         "review_finalizer": manifest.get("review_finalizer"),
         "review_ui": manifest.get("review_ui"),
@@ -803,7 +784,23 @@ def _identity_payload(
 
 def _validate_output_policy(value: object) -> None:
     expected = {
-        "private_remote_only": [
+        "run_private_remote_only": [
+            {
+                "path": f"{OUTPUT_DIRECTORY}/{name}",
+                "kind": "private_remote_only",
+                "max_bytes": maximum,
+            }
+            for name, maximum in RUN_PRIVATE_OUTPUT_POLICY.items()
+        ],
+        "run_downloadable": [
+            {
+                "path": f"{OUTPUT_DIRECTORY}/{name}",
+                "kind": kind,
+                "max_bytes": maximum,
+            }
+            for name, (kind, maximum) in RUN_DOWNLOADABLE_OUTPUT_POLICY.items()
+        ],
+        "review_private_remote_only": [
             {
                 "path": f"{OUTPUT_DIRECTORY}/{name}",
                 "kind": "private_remote_only",
@@ -811,7 +808,7 @@ def _validate_output_policy(value: object) -> None:
             }
             for name, maximum in PRIVATE_OUTPUT_POLICY.items()
         ],
-        "private_remote_patterns": [
+        "review_private_remote_patterns": [
             {
                 "prefix": f"{OUTPUT_DIRECTORY}/{PRIVATE_REVIEW_DIRECTORY}/",
                 "basename_pattern": PRIVATE_REVIEW_PATTERN,
@@ -821,7 +818,7 @@ def _validate_output_policy(value: object) -> None:
                 "max_total_bytes": PRIVATE_REVIEW_MAX_TOTAL_BYTES,
             }
         ],
-        "downloadable": [
+        "review_downloadable": [
             {
                 "path": f"{OUTPUT_DIRECTORY}/{name}",
                 "kind": kind,
@@ -835,8 +832,19 @@ def _validate_output_policy(value: object) -> None:
             "max_bytes": 2 * 1024 * 1024,
             "max_files": 1,
         },
-        "max_remote_bytes": 8 * 1024**3 + 581 * 1024**2,
-        "max_download_bytes": 512 * 1024,
+        "run_max_remote_bytes": sum(RUN_PRIVATE_OUTPUT_POLICY.values())
+        + sum(maximum for _, maximum in RUN_DOWNLOADABLE_OUTPUT_POLICY.values())
+        + 2 * 1024**2,
+        "run_max_download_bytes": sum(
+            maximum for _, maximum in RUN_DOWNLOADABLE_OUTPUT_POLICY.values()
+        ),
+        "review_max_remote_bytes": PRIVATE_REVIEW_MAX_TOTAL_BYTES
+        + sum(PRIVATE_OUTPUT_POLICY.values())
+        + sum(maximum for _, maximum in DOWNLOADABLE_OUTPUT_POLICY.values())
+        + 2 * 1024**2,
+        "review_max_download_bytes": sum(
+            maximum for _, maximum in DOWNLOADABLE_OUTPUT_POLICY.values()
+        ),
     }
     if value != expected:
         raise SafeRunError("output_policy_invalid")
@@ -860,6 +868,7 @@ def _verify_run_config(
             "deployment",
             "competition",
             "kernel",
+            "performance_smoke",
             "comparison",
             "review_finalizer",
             "review_ui",
@@ -961,6 +970,8 @@ def _verify_run_config(
         "renderer_version",
         "required_runtime_packages",
         "runner_sha256",
+        "performance_smoke_sha256",
+        "performance_smoke_policy_sha256",
         "comparison_sha256",
         "review_finalizer_sha256",
         "review_ui_sha256",
@@ -976,6 +987,8 @@ def _verify_run_config(
         "competition_contract_sha256": records["competition_contract"][0]["sha256"],
         "uv_lock_sha256": records["dependency_lock"][0]["sha256"],
         "review_finalizer_sha256": records["review_finalizer"][0]["sha256"],
+        "performance_smoke_sha256": records["performance_smoke_source"][0]["sha256"],
+        "performance_smoke_policy_sha256": records["performance_smoke_policy"][0]["sha256"],
         "synthetic_preflight_sha256": records["synthetic_preflight"][0]["sha256"],
     }
     if any(config_provenance.get(key) != value for key, value in expected_hashes.items()):
@@ -992,9 +1005,40 @@ def _verify_run_config(
         or synthetic_preflight_payload != _canonical_json_bytes(synthetic_preflight)
     ):
         raise SafeRunError("synthetic_preflight_invalid")
+    smoke_policy_payload = _read_bounded(
+        paths["performance_smoke_policy"],
+        16 * 1024,
+        "performance_smoke_policy_invalid",
+        allow_symlink=True,
+    )
+    smoke_policy = _json_object(smoke_policy_payload, "performance_smoke_policy_invalid")
+    if smoke_policy_payload != _canonical_json_bytes(smoke_policy) or smoke_policy != {
+        "schema_version": 1,
+        "artifact_type": "dicom-qa-performance-smoke-policy",
+        "entrypoint": {
+            "code_file": "performance_smoke.py",
+            "sha256": records["performance_smoke_source"][0]["sha256"],
+        },
+        "kernel": {
+            "is_private": True,
+            "enable_internet": False,
+            "enable_gpu": False,
+            "enable_tpu": False,
+            "self_deadline_seconds": 3_600,
+            "full_run_allowed": False,
+        },
+        "output": {
+            "directory": "dicom-qa-performance-smoke",
+            "filename": "sanitized_performance_smoke.json",
+            "kind": "sanitized_aggregate",
+            "max_bytes": 16 * 1024,
+        },
+    }:
+        raise SafeRunError("performance_smoke_policy_invalid")
     if config_provenance.get("required_runtime_packages") != REQUIRED_RUNTIME_PACKAGES:
         raise SafeRunError("runtime_dependency_policy_invalid")
     kernel = manifest.get("kernel")
+    performance_smoke = manifest.get("performance_smoke")
     comparison = manifest.get("comparison")
     finalizer = manifest.get("review_finalizer")
     review_ui = manifest.get("review_ui")
@@ -1005,6 +1049,17 @@ def _verify_run_config(
         or kernel.get("code_file") != "run.py"
         or config_provenance.get("runner_sha256") != kernel.get("sha256")
         or records["runner_source"][0].get("sha256") != kernel.get("sha256")
+        or not isinstance(performance_smoke, dict)
+        or performance_smoke
+        != {
+            "code_file": "performance_smoke.py",
+            "sha256": config_provenance.get("performance_smoke_sha256"),
+            "policy_file": "performance-smoke-policy.json",
+            "policy_sha256": config_provenance.get("performance_smoke_policy_sha256"),
+        }
+        or records["performance_smoke_source"][0].get("sha256") != performance_smoke.get("sha256")
+        or records["performance_smoke_policy"][0].get("sha256")
+        != performance_smoke.get("policy_sha256")
         or not isinstance(comparison, dict)
         or comparison
         != {
@@ -1063,7 +1118,10 @@ def _verify_run_config(
     review_policy = run_config.get("review_policy")
     if review_policy != {
         "protocol_version": REVIEW_PROTOCOL_VERSION,
+        "instructions_version": REVIEW_INSTRUCTIONS_VERSION,
         "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+        "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+        "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
         "kernel_version": 1,
         "checks": list(REVIEW_CHECKS),
         "statuses": list(REVIEW_STATUSES),
@@ -1077,35 +1135,22 @@ def _verify_run_config(
         or set(selection)
         != {
             "source",
-            "seed",
-            "target_studies",
-            "maximum_studies",
-            "minimum_eligible_studies",
-            "material_stratum_minimum_studies",
-            "material_stratum_sample_quota",
-            "strata",
+            "minimum_studies",
+            "minimum_is_not_maximum",
+            "represented_value_quota",
+            "stratum_registry_version",
+            "stratum_registry_sha256",
+            "cohort_selection_version",
+            "dimensions",
         }
-        or selection.get("source") != "train_series.csv"
-        or selection.get("seed") != SELECTION_SEED
-        or selection.get("target_studies") != TARGET_STUDIES
-        or selection.get("maximum_studies") != MAX_TARGET_STUDIES
-        or selection.get("minimum_eligible_studies") != MINIMUM_ELIGIBLE_STUDIES
-        or selection.get("material_stratum_minimum_studies") != MATERIAL_STRATUM_MIN_STUDIES
-        or selection.get("material_stratum_sample_quota") != MATERIAL_STRATUM_SAMPLE_QUOTA
-        or selection.get("strata")
-        != [
-            "plane_profile",
-            "fluid_profile",
-            "series_count_bucket",
-            "slice_count_profile",
-            "bit_depth_profile",
-            "photometric_profile",
-            "transfer_syntax_profile",
-            "resolution_profile",
-            "thickness_profile",
-            "slice_spacing_profile",
-            "orientation_obliquity_profile",
-        ]
+        or selection.get("source") != "full_run_terminal_records_plus_authenticated_manifest_v2"
+        or selection.get("minimum_studies") != MINIMUM_ELIGIBLE_STUDIES
+        or selection.get("minimum_is_not_maximum") is not True
+        or selection.get("represented_value_quota") != REPRESENTED_VALUE_QUOTA
+        or selection.get("stratum_registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or selection.get("stratum_registry_sha256") != QA_STRATUM_REGISTRY_SHA256
+        or selection.get("cohort_selection_version") != QA_COHORT_SELECTION_VERSION
+        or selection.get("dimensions") != list(REQUIRED_REVIEW_DIMENSIONS)
     ):
         raise SafeRunError("selection_policy_invalid")
     runtime = run_config.get("runtime")
@@ -1715,6 +1760,24 @@ def _source_manifest_expected_file_count(connection: sqlite3.Connection) -> int:
     return raw_count[0]
 
 
+def _domain_cluster_buckets(values: Sequence[object]) -> tuple[str, ...]:
+    """Collapse opaque per-study domain keys into a fixed semantic registry."""
+
+    counts = Counter(str(value) for value in values if value is not None)
+    return tuple(
+        "missing"
+        if value is None
+        else "singleton"
+        if counts[str(value)] == 1
+        else "rare_2_4"
+        if counts[str(value)] <= 4
+        else "represented_5_19"
+        if counts[str(value)] <= 19
+        else "represented_20_plus"
+        for value in values
+    )
+
+
 def _reconcile_source_manifest_series_files(
     reconciliation: SourceManifestReconciliation,
     *,
@@ -1951,13 +2014,13 @@ def _load_source_manifest_facts(
         raise SafeRunError("source_manifest_input_invalid") from error
     try:
         facts: dict[str, dict[str, tuple[str, ...]]] = {}
-        for item in study_rows:
+        domain_buckets = _domain_cluster_buckets(tuple(item[4] for item in study_rows))
+        for item, domain_bucket in zip(study_rows, domain_buckets, strict=True):
             study_key = str(item[0])
             uid = requested_keys[study_key]
             manufacturer = str(item[1]) if item[1] is not None else None
             model = str(item[2]) if item[2] is not None else None
             field_strength = _bucket_number(item[3], (1.0, 1.5, 3.0), ("le_1", "le_1_5", "le_3"))
-            domain = str(item[4]) if item[4] is not None else None
             try:
                 flags_raw = json.loads(str(item[5]))
             except (json.JSONDecodeError, TypeError, ValueError) as error:
@@ -1973,14 +2036,16 @@ def _load_source_manifest_facts(
                 for code, resolution in study_issues
             )
             facts[uid] = {
-                "scanner_manufacturer": (() if manufacturer is None else (manufacturer,)),
-                "scanner_model": (() if model is None else (model,)),
-                "field_strength": (() if field_strength == "missing" else (field_strength,)),
-                "site_domain_cluster": (() if domain is None else (domain,)),
+                "scanner_manufacturer": ((manufacturer or "missing"),),
+                "scanner_model": ((model or "missing"),),
+                "field_strength": (field_strength,),
+                "site_domain_cluster": (domain_bucket,),
                 "protected_duplicate_group": (("present",) if study_key in protected else ()),
                 "candidate_duplicate_group": (("present",) if study_key in candidates else ()),
                 "remediated_decode_case": (("present",) if remediated else ()),
-                "source_manifest_quality_flag": tuple(sorted(set(cast(list[str], flags_raw)))),
+                "source_manifest_quality_flag": tuple(
+                    sorted(set(cast(list[str], flags_raw))) or ["none"]
+                ),
                 "source_manifest_terminal_state": (str(item[6]),),
             }
     except BaseException:
@@ -2041,80 +2106,7 @@ def _transfer_syntax_bucket(value: object) -> str:
     return "missing" if not raw else "other"
 
 
-def _header_buckets(path: Path, pydicom_module: Any) -> tuple[str, ...]:
-    missing = ("missing",) * 7
-    try:
-        dataset = pydicom_module.dcmread(
-            path,
-            force=False,
-            stop_before_pixels=True,
-            specific_tags=(
-                "BitsAllocated",
-                "BitsStored",
-                "PhotometricInterpretation",
-                "Rows",
-                "Columns",
-                "SliceThickness",
-                "SpacingBetweenSlices",
-                "ImageOrientationPatient",
-            ),
-        )
-        bits_raw = getattr(dataset, "BitsStored", getattr(dataset, "BitsAllocated", None))
-        try:
-            bits = int(cast(Any, bits_raw))
-        except (TypeError, ValueError, OverflowError):
-            bits_bucket = "missing"
-        else:
-            bits_bucket = (
-                "missing"
-                if bits < 1
-                else "le_8"
-                if bits <= 8
-                else "le_12"
-                if bits <= 12
-                else "le_16"
-                if bits <= 16
-                else "other"
-            )
-        photometric_raw = str(getattr(dataset, "PhotometricInterpretation", "")).strip().upper()
-        photometric = (
-            "monochrome1"
-            if photometric_raw == "MONOCHROME1"
-            else "monochrome2"
-            if photometric_raw == "MONOCHROME2"
-            else "missing"
-            if not photometric_raw
-            else "other"
-        )
-        transfer = _transfer_syntax_bucket(
-            getattr(getattr(dataset, "file_meta", None), "TransferSyntaxUID", None)
-        )
-        try:
-            rows, columns = int(dataset.Rows), int(dataset.Columns)
-        except (AttributeError, TypeError, ValueError, OverflowError):
-            resolution = "missing"
-        else:
-            maximum = max(rows, columns)
-            resolution = "le_256" if maximum <= 256 else "le_512" if maximum <= 512 else "gt_512"
-        thickness = _bucket_number(
-            getattr(dataset, "SliceThickness", None),
-            (1.5, 3.0, 5.0),
-            ("le_1_5", "le_3", "le_5"),
-        )
-        spacing = _bucket_number(
-            getattr(dataset, "SpacingBetweenSlices", None),
-            (1.5, 3.0, 5.0),
-            ("le_1_5", "le_3", "le_5"),
-        )
-        orientation = _orientation_bucket(getattr(dataset, "ImageOrientationPatient", None))
-        return (bits_bucket, photometric, transfer, resolution, thickness, spacing, orientation)
-    except MemoryError:
-        raise
-    except Exception:
-        return missing
-
-
-def _profile(values: Sequence[str]) -> str:
+def _profile(values: Iterable[str]) -> str:
     return "+".join(sorted(set(values))) if values else "missing"
 
 
@@ -2132,122 +2124,6 @@ def _slice_count_bucket(count: int) -> str:
     if count <= 64:
         return "thirty_three_to_sixty_four"
     return "sixty_five_plus"
-
-
-def _deterministic_header_sample(files: Sequence[Path], seed: int) -> Path:
-    return min(
-        files,
-        key=lambda path: hashlib.sha256(f"{seed}:{path.name}".encode()).digest(),
-    )
-
-
-def _select_studies(
-    competition_root: Path,
-    rows: Sequence[SeriesRow],
-    pydicom_module: Any,
-    *,
-    target: int = TARGET_STUDIES,
-    maximum: int = MAX_TARGET_STUDIES,
-    seed: int = SELECTION_SEED,
-    deadline_at: float | None = None,
-) -> SelectionPlan:
-    """Select a bounded cohort covering every material header-only stratum."""
-
-    if target < 1 or maximum < target:
-        raise SafeRunError("selection_target_invalid")
-    by_study: dict[str, list[tuple[SeriesRow, tuple[str, ...], str]]] = defaultdict(list)
-    for row in rows:
-        _check_deadline(deadline_at)
-        files = _series_files(competition_root, row)
-        sample = _deterministic_header_sample(files, seed)
-        by_study[row.study_uid].append(
-            (row, _header_buckets(sample, pydicom_module), _slice_count_bucket(len(files)))
-        )
-    if len(by_study) < target:
-        raise SafeRunError("selection_population_too_small")
-
-    strata: dict[tuple[str, ...], list[str]] = defaultdict(list)
-    for study_uid, values in by_study.items():
-        _check_deadline(deadline_at)
-        study_rows = [item[0] for item in values]
-        headers = [item[1] for item in values]
-        slice_counts = [item[2] for item in values]
-        plane_profile = _profile([row.plane for row in study_rows])
-        fluid_values = {row.fluid_sensitive for row in study_rows}
-        fluid_profile = (
-            "mixed"
-            if {"present", "absent"}.issubset(fluid_values)
-            else "fluid_only"
-            if fluid_values == {"present"}
-            else "structural_only"
-            if fluid_values == {"absent"}
-            else "missing_or_partial"
-        )
-        stratum = (
-            plane_profile,
-            fluid_profile,
-            _series_count_bucket(len(study_rows)),
-            _profile(slice_counts),
-            *(_profile([header[index] for header in headers]) for index in range(7)),
-        )
-        strata[stratum].append(study_uid)
-    for stratum, studies in strata.items():
-        studies.sort(
-            key=lambda uid: hashlib.sha256(f"{seed}:{'|'.join(stratum)}:{uid}".encode()).digest()
-        )
-    ordered_strata = sorted(
-        strata,
-        key=lambda stratum: hashlib.sha256(f"{seed}:{'|'.join(stratum)}".encode()).digest(),
-    )
-    material = {
-        stratum
-        for stratum, studies in strata.items()
-        if len(studies) >= MATERIAL_STRATUM_MIN_STUDIES
-    }
-    material_quota = sum(
-        min(MATERIAL_STRATUM_SAMPLE_QUOTA, len(strata[stratum])) for stratum in material
-    )
-    required_target = max(target, material_quota)
-    if required_target > maximum:
-        raise SafeRunError("material_strata_coverage_impossible")
-    offsets = {stratum: 0 for stratum in ordered_strata}
-    selected: list[SelectedStudy] = []
-    for stratum in ordered_strata:
-        if stratum not in material:
-            continue
-        quota = min(MATERIAL_STRATUM_SAMPLE_QUOTA, len(strata[stratum]))
-        for study_uid in strata[stratum][:quota]:
-            selected.append(SelectedStudy(study_uid, stratum))
-        offsets[stratum] = quota
-    while len(selected) < required_target:
-        progressed = False
-        for stratum in ordered_strata:
-            offset = offsets[stratum]
-            studies = strata[stratum]
-            if offset >= len(studies):
-                continue
-            selected.append(SelectedStudy(studies[offset], stratum))
-            offsets[stratum] += 1
-            progressed = True
-            if len(selected) == required_target:
-                break
-        if not progressed:
-            raise SafeRunError("selection_population_too_small")
-    selected_counts: dict[tuple[str, ...], int] = defaultdict(int)
-    for item in selected:
-        selected_counts[item.stratum] += 1
-    if any(selected_counts[stratum] < 1 for stratum in material):
-        raise SafeRunError("material_strata_coverage_failed")
-    census = tuple(
-        StratumCensus(
-            stratum=stratum,
-            population_studies=len(strata[stratum]),
-            selected_studies=selected_counts[stratum],
-            material=stratum in material,
-        )
-        for stratum in sorted(strata)
-    )
-    return SelectionPlan(tuple(selected), census)
 
 
 def _check_deadline(deadline_at: float | None) -> None:
@@ -2693,10 +2569,11 @@ def _series_selection_features(
     series_pass: SeriesPass,
     quality: Any,
     terminal_state: str,
+    slots_module: Any,
 ) -> dict[str, tuple[str, ...]]:
     metadata = [item.metadata for item in series_pass.decoded]
-    bits = _profile(
-        [
+    bits_values = {
+        *(
             "le_8"
             if item.bits_stored <= 8
             else "le_12"
@@ -2705,53 +2582,75 @@ def _series_selection_features(
             if item.bits_stored <= 16
             else "other"
             for item in metadata
-        ]
-    )
-    photometric = _profile(
-        [str(item.photometric_interpretation).strip().casefold() for item in metadata]
-    )
-    transfer = _profile(
-        [_transfer_syntax_bucket(item.transfer_syntax) for item in series_pass.decoded]
-    )
-    resolution = _profile(
-        [
+        )
+    } or {"missing"}
+    photometric_values = {
+        str(item.photometric_interpretation).strip().casefold() or "missing" for item in metadata
+    } or {"missing"}
+    transfer_values = {
+        _transfer_syntax_bucket(item.transfer_syntax) for item in series_pass.decoded
+    } or {"missing"}
+    resolution_values = {
+        *(
             "le_256"
             if max(item.rows, item.columns) <= 256
             else "le_512"
             if max(item.rows, item.columns) <= 512
             else "gt_512"
             for item in metadata
-        ]
-    )
-    thickness = _profile(
-        [
+        )
+    } or {"missing"}
+    thickness_values = {
+        *(
             _bucket_number(
                 item.slice_thickness,
                 (1.5, 3.0, 5.0),
                 ("le_1_5", "le_3", "le_5"),
             )
             for item in metadata
-        ]
-    )
-    slice_spacing = (
-        _bucket_number(
-            quality.median_slice_spacing_mm,
-            (1.5, 3.0, 5.0),
-            ("le_1_5", "le_3", "le_5"),
         )
+    } or {"missing"}
+    spacing_values = (
+        {
+            _bucket_number(
+                quality.median_slice_spacing_mm,
+                (1.5, 3.0, 5.0),
+                ("le_1_5", "le_3", "le_5"),
+            )
+        }
         if quality.median_slice_spacing_mm is not None
-        else _profile(
-            [
+        else {
+            *(
                 _bucket_number(
                     item.spacing_between_slices,
                     (1.5, 3.0, 5.0),
                     ("le_1_5", "le_3", "le_5"),
                 )
                 for item in metadata
-            ]
-        )
+            )
+        }
     )
-    orientation = _profile([_orientation_bucket(item.image_orientation) for item in metadata])
+    spacing_values = spacing_values or {"missing"}
+    orientation_values = {_orientation_bucket(item.image_orientation) for item in metadata} or {
+        "missing"
+    }
+    physical_planes = {
+        _physical_plane_value(item.image_orientation, slots_module) for item in metadata
+    } or {"unknown"}
+    ordered_laterality = getattr(series_pass.ordered, "laterality", None)
+    laterality_values = {
+        {"L": "left", "R": "right", "B": "bilateral"}.get(str(ordered_laterality or ""), "unknown")
+    }
+    plane_relations = {
+        "organizer_missing"
+        if row.plane == "missing"
+        else "agreement"
+        if physical == row.plane
+        else "physical_unknown"
+        if physical == "unknown"
+        else "conflict"
+        for physical in physical_planes
+    }
     eligible = terminal_state == "model_eligible"
     spacing_cv = quality.spacing_coefficient_of_variation
     quality_band = (
@@ -2763,14 +2662,22 @@ def _series_selection_features(
         and (spacing_cv is None or spacing_cv <= 0.01)
         else "low"
     )
-    edge_case = any(
-        (
-            "oblique" in orientation,
-            "monochrome1" in photometric,
-            "jpeg" in transfer,
-            terminal_state != "model_eligible",
-        )
-    )
+    edge_subtypes = {
+        *(
+            f"orientation_{value}"
+            for value in orientation_values
+            if not value.startswith("orthogonal_")
+        ),
+        *(f"photometric_{value}" for value in photometric_values if value != "monochrome2"),
+        *(
+            f"transfer_{value}"
+            for value in transfer_values
+            if value != "uncompressed_little_endian"
+        ),
+        *(f"bit_depth_{value}" for value in bits_values if value in {"missing", "other"}),
+        *(f"quality_{reason.value}" for reason in quality.blocked_reasons),
+        *((f"terminal_{terminal_state}",) if terminal_state != "model_eligible" else ()),
+    } or {"none"}
     return {
         "plane": (row.plane,),
         "sequence": (
@@ -2782,16 +2689,26 @@ def _series_selection_features(
         ),
         "fat_suppression": (row.fat_suppression,),
         "slice_count": (_slice_count_bucket(quality.total_slices),),
-        "bit_depth": (bits,),
-        "photometric": (photometric,),
-        "transfer_syntax": (transfer,),
-        "resolution": (resolution,),
-        "slice_thickness": (thickness,),
-        "slice_spacing": (slice_spacing,),
-        "orientation": (orientation,),
+        "bit_depth": (_profile(bits_values),),
+        "photometric": (_profile(photometric_values),),
+        "resolution": (_profile(resolution_values),),
+        "slice_thickness": (_profile(thickness_values),),
+        "slice_spacing": (_profile(spacing_values),),
+        "orientation": (_profile(orientation_values),),
         "quality": (quality_band,),
         "duplicate_integrity": (("present",) if quality.duplicate_slices else ()),
-        "dicom_edge_case": (("present",) if edge_case else ()),
+        "laterality": tuple(sorted(laterality_values)),
+        "organizer_plane": (row.plane,),
+        "physical_plane": tuple(sorted(physical_planes)),
+        "organizer_physical_plane_relation": tuple(sorted(plane_relations)),
+        "bit_depth_category": tuple(sorted(bits_values)),
+        "photometric_interpretation": tuple(sorted(photometric_values)),
+        "transfer_syntax": tuple(sorted(transfer_values)),
+        "slice_thickness_stratum": tuple(sorted(thickness_values)),
+        "slice_spacing_stratum": tuple(sorted(spacing_values)),
+        "resolution_extreme": tuple(sorted(resolution_values)),
+        "slice_count_extreme": (_slice_count_bucket(quality.total_slices),),
+        "dicom_edge_case_subtype": tuple(sorted(edge_subtypes)),
         "terminal_state": (terminal_state,),
     }
 
@@ -2872,7 +2789,7 @@ def _full_series_state(
             "provenance": None,
             "quality": quality,
             "selection_features": _series_selection_features(
-                row, empty_pass, quality, "source_access_blocked"
+                row, empty_pass, quality, "source_access_blocked", slots_module
             ),
             "cache_path": None,
             "timings": {
@@ -2890,6 +2807,7 @@ def _full_series_state(
                 },
                 "files": len(paths),
                 "slot": None,
+                "original_slot": None,
                 "retention_reasons": [],
                 "quality": {
                     "blocked_reasons": [reason.value for reason in quality.blocked_reasons],
@@ -3001,7 +2919,9 @@ def _full_series_state(
         "file_raw_checksums": series_pass.file_raw_checksums,
         "provenance": provenance,
         "quality": quality,
-        "selection_features": _series_selection_features(row, series_pass, quality, terminal_state),
+        "selection_features": _series_selection_features(
+            row, series_pass, quality, terminal_state, slots_module
+        ),
         "cache_path": cache_path,
         "timings": {
             "decode_seconds": series_pass.decode_seconds,
@@ -3018,6 +2938,7 @@ def _full_series_state(
             },
             "files": len(paths),
             "slot": None,
+            "original_slot": None,
             "retention_reasons": [],
             "quality": {
                 "blocked_reasons": [reason.value for reason in quality.blocked_reasons],
@@ -3044,29 +2965,103 @@ def _full_series_state(
     }
 
 
+def _slot_assignment_by_series(
+    assignment: Any,
+) -> dict[str, tuple[str, str | None, tuple[str, ...]]]:
+    """Retain assigned and original-slot provenance for every classified series."""
+
+    result: dict[str, tuple[str, str | None, tuple[str, ...]]] = {}
+    for selection in assignment.primary_slots:
+        if selection.primary is not None:
+            result[selection.primary.candidate.series_key] = (
+                selection.slot.value,
+                selection.primary.original_slot.value,
+                (),
+            )
+    for item in assignment.additional_or_duplicate:
+        key = item.candidate.series_key
+        if key in result:
+            raise SafeRunError("series_slot_assignment_invalid")
+        result[key] = (
+            "additional_or_duplicate",
+            item.original_slot.value if item.original_slot is not None else None,
+            tuple(reason.value for reason in item.reasons),
+        )
+    return result
+
+
 def _cohort_study(
     study_uid: str,
     states: Sequence[Mapping[str, Any]],
     missing_mask: Sequence[bool],
     source_manifest_facts: Mapping[str, tuple[str, ...]] | None,
 ) -> CohortStudy:
+    from rsna_knee.data.qa_strata import MISSING_VALUE, QA_STRATUM_REGISTRY
+
     dimensions: dict[str, set[str]] = defaultdict(set)
+    original_slot_counts: Counter[str] = Counter()
     duplicate_slot = False
+    additional_series = False
+    retained_abnormal = False
+    any_eligible = False
+    all_eligible = True
     for state in states:
         features = cast(Mapping[str, Sequence[str]], state["selection_features"])
         for dimension, values in features.items():
             dimensions[dimension].update(str(value) for value in values if value)
         record = cast(Mapping[str, Any], state["record"])
-        duplicate_slot = duplicate_slot or "duplicate_slot" in cast(
-            Sequence[str], record["retention_reasons"]
+        reasons = cast(Sequence[str], record["retention_reasons"])
+        slot = str(record["slot"])
+        original_slot = record.get("original_slot")
+        if original_slot is not None:
+            if not isinstance(original_slot, str):
+                raise SafeRunError("series_slot_assignment_invalid")
+            original_slot_counts[original_slot] += 1
+        model_eligible = record.get("model_eligible") is True
+        duplicate_slot = duplicate_slot or "duplicate_slot" in reasons
+        additional_series = additional_series or slot == "additional_or_duplicate"
+        retained_abnormal = retained_abnormal or (
+            slot == "additional_or_duplicate"
+            and any(reason != "duplicate_slot" for reason in reasons)
         )
-    dimensions["multiple_series_per_slot"].add("present" if duplicate_slot else "absent")
+        any_eligible = any_eligible or model_eligible
+        all_eligible = all_eligible and model_eligible
+        dimensions["assigned_diagnostic_slot"].add(slot)
+    dimensions["multiple_series_per_slot"].add(
+        "present" if any(count > 1 for count in original_slot_counts.values()) else "absent"
+    )
     dimensions["missing_slot"].add("present" if any(missing_mask) else "absent")
+    dimensions["additional_diagnostic_series"].add("present" if additional_series else "absent")
+    dimensions["missing_diagnostic_slot"].add("present" if any(missing_mask) else "absent")
+    dimensions["retained_nonduplicate_abnormal_series"].add(
+        "present" if retained_abnormal else "absent"
+    )
+    duplicate_slices = bool(dimensions.get("duplicate_integrity"))
     if duplicate_slot:
         dimensions["duplicate_integrity"].add("present")
     if source_manifest_facts is not None:
         for dimension, values in source_manifest_facts.items():
             dimensions[dimension].update(values)
+    duplicate_handling = {
+        *(("duplicate_slot",) if duplicate_slot else ()),
+        *(("duplicate_slices",) if duplicate_slices else ()),
+        *(("protected_group",) if dimensions.get("protected_duplicate_group") else ()),
+        *(("candidate_group",) if dimensions.get("candidate_duplicate_group") else ()),
+    }
+    dimensions["duplicate_handling"].update(duplicate_handling or {"none"})
+    if dimensions.get("remediated_decode_case"):
+        dimensions["dicom_edge_case_subtype"].add("remediated_decode_case")
+    source_abnormal = dimensions.get("source_manifest_quality_flag", {"none"}) != {"none"}
+    dimensions["pipeline_case"].add(
+        "excluded"
+        if not any_eligible
+        else "clean"
+        if all_eligible and not additional_series and not source_abnormal
+        else "recoverable"
+    )
+    for rule in QA_STRATUM_REGISTRY:
+        if not dimensions.get(rule.dimension):
+            dimensions[rule.dimension].add(MISSING_VALUE)
 
     def profile(name: str) -> str:
         return _profile(sorted(dimensions.get(name, ())))
@@ -3106,14 +3101,22 @@ def _select_after_full_pass(
     *,
     source_manifest_available: bool,
     target: int = TARGET_STUDIES,
-    maximum: int = MAX_TARGET_STUDIES,
     minimum_eligible: int = MINIMUM_ELIGIBLE_STUDIES,
-    seed: int = SELECTION_SEED,
 ) -> SelectionPlan:
-    """Select reviewable studies only after every series has a terminal full-run record."""
+    """Cover every represented registered value, then fill to the review minimum."""
 
-    if target < 1 or minimum_eligible < 1 or maximum < max(target, minimum_eligible):
+    from rsna_knee.data import qa_strata
+
+    if target < 1 or minimum_eligible < 1:
         raise SafeRunError("selection_target_invalid")
+    if (
+        qa_strata.QA_COHORT_SELECTOR_VERSION != QA_COHORT_SELECTION_VERSION
+        or qa_strata.QA_STRATUM_REGISTRY_VERSION != QA_STRATUM_REGISTRY_VERSION
+        or qa_strata.registry_sha256() != QA_STRATUM_REGISTRY_SHA256
+        or tuple(rule.dimension for rule in qa_strata.QA_STRATUM_REGISTRY)
+        != REQUIRED_REVIEW_DIMENSIONS
+    ):
+        raise SafeRunError("qa_stratum_registry_invalid")
     eligible = tuple(
         sorted(
             (item for item in studies if item.eligible_series),
@@ -3125,188 +3128,34 @@ def _select_after_full_pass(
         raise SafeRunError("eligible_study_gate_failed")
 
     by_uid = {item.study_uid: item for item in eligible}
-    token_members: dict[tuple[str, str], set[str]] = defaultdict(set)
-    joint_members: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    registry_dimensions = {rule.dimension for rule in qa_strata.QA_STRATUM_REGISTRY}
+    private_studies: list[Any] = []
     for item in eligible:
-        for dimension, values in item.dimensions:
-            if dimension not in REQUIRED_REVIEW_DIMENSIONS:
-                continue
-            for value in values:
-                token_members[(dimension, value)].add(item.study_uid)
-        joint_members[item.stratum].add(item.study_uid)
-
-    requirements: dict[tuple[str, str], int] = {
-        token: min(MATERIAL_STRATUM_SAMPLE_QUOTA, len(members))
-        for token, members in token_members.items()
-    }
-    study_tokens = {
-        item.study_uid: {
-            (dimension, value)
+        memberships = frozenset(
+            qa_strata.Stratum(dimension, value)
             for dimension, values in item.dimensions
-            if dimension in REQUIRED_REVIEW_DIMENSIONS
+            if dimension in registry_dimensions
             for value in values
-        }
-        for item in eligible
-    }
-    joint_requirements = {
-        stratum: min(MATERIAL_STRATUM_SAMPLE_QUOTA, len(members))
-        for stratum, members in joint_members.items()
-        if len(members) >= MATERIAL_STRATUM_MIN_STUDIES
-    }
-    selected: set[str] = set()
-    token_counts: dict[tuple[str, str], int] = defaultdict(int)
-    joint_counts: dict[tuple[str, ...], int] = defaultdict(int)
-
-    def needs(uid: str) -> int:
-        item = by_uid[uid]
-        score = sum(
-            token_counts[token] < requirements[token]
-            for token in study_tokens[uid]
-            if token in requirements
         )
-        return score + int(
-            item.stratum in joint_requirements
-            and joint_counts[item.stratum] < joint_requirements[item.stratum]
+        private_studies.append(qa_strata.StudyStrata(item.study_uid, memberships))
+    try:
+        result = qa_strata.select_qa_cohort(
+            tuple(private_studies),
+            minimum_size=required_target,
+            manifest_version=SOURCE_MANIFEST_VERSION,
         )
+    except qa_strata.QAStrataError as error:
+        raise SafeRunError(str(error)) from None
 
-    while any(token_counts[token] < count for token, count in requirements.items()) or any(
-        joint_counts[stratum] < count for stratum, count in joint_requirements.items()
-    ):
-        candidates = [uid for uid in by_uid if uid not in selected and needs(uid)]
-        if not candidates or len(selected) >= maximum:
-            raise SafeRunError("material_strata_coverage_impossible")
-        chosen = min(
-            candidates,
-            key=lambda uid: (
-                -needs(uid),
-                hashlib.sha256(f"{seed}:material:{uid}".encode()).digest(),
-            ),
-        )
-        selected.add(chosen)
-        item = by_uid[chosen]
-        for dimension, values in item.dimensions:
-            for value in values:
-                token_counts[(dimension, value)] += 1
-        joint_counts[item.stratum] += 1
-
-    remaining = sorted(
-        (uid for uid in by_uid if uid not in selected),
-        key=lambda uid: hashlib.sha256(f"{seed}:fill:{uid}".encode()).digest(),
-    )
-    selected.update(remaining[: max(0, required_target - len(selected))])
-    if not required_target <= len(selected) <= maximum:
-        raise SafeRunError("selection_population_too_small")
-    selected_order = sorted(
-        selected, key=lambda uid: hashlib.sha256(f"{seed}:order:{uid}".encode()).digest()
-    )
-
-    selected_token_counts: dict[tuple[str, str], int] = defaultdict(int)
-    selected_joint_counts: dict[tuple[str, ...], int] = defaultdict(int)
-    for uid in selected_order:
-        item = by_uid[uid]
-        selected_joint_counts[item.stratum] += 1
-        for dimension, values in item.dimensions:
-            for value in values:
-                selected_token_counts[(dimension, value)] += 1
-    if any(
-        selected_token_counts[token] < required for token, required in requirements.items()
-    ) or any(
-        selected_joint_counts[stratum] < required
-        for stratum, required in joint_requirements.items()
-    ):
-        raise SafeRunError("material_strata_coverage_failed")
-
-    coverage: list[DimensionCoverage] = []
-    for dimension in REQUIRED_REVIEW_DIMENSIONS:
-        source = (
-            SOURCE_MANIFEST_VERSION
-            if dimension in SOURCE_MANIFEST_DIMENSIONS and source_manifest_available
-            else "full_run_terminal_records"
-        )
-        if dimension in SOURCE_MANIFEST_DIMENSIONS and not source_manifest_available:
-            coverage.append(
-                DimensionCoverage(
-                    dimension,
-                    "unavailable_source_manifest",
-                    0,
-                    0,
-                    "unavailable_source_manifest",
-                    "source_manifest_not_attached",
-                )
-            )
-            continue
-        observed = sorted(value for key, value in token_members if key == dimension)
-        coverage_values = sorted(
-            set(observed) | set(REVIEW_DIMENSION_EXPECTED_VALUES.get(dimension, ()))
-        )
-        if not coverage_values:
-            coverage.append(
-                DimensionCoverage(
-                    dimension,
-                    "not_represented",
-                    0,
-                    0,
-                    "not_represented",
-                    source,
-                )
-            )
-            continue
-        for value in coverage_values:
-            population = len(token_members.get((dimension, value), ()))
-            selected_count = selected_token_counts.get((dimension, value), 0)
-            disposition = (
-                "not_represented"
-                if population == 0
-                else "covered"
-                if population >= MATERIAL_STRATUM_MIN_STUDIES
-                else "represented_nonmaterial"
-            )
-            coverage.append(
-                DimensionCoverage(
-                    dimension,
-                    value,
-                    population,
-                    selected_count,
-                    disposition,
-                    source,
-                )
-            )
-
-    census = tuple(
-        StratumCensus(
-            stratum=stratum,
-            population_studies=len(members),
-            selected_studies=selected_joint_counts[stratum],
-            material=len(members) >= MATERIAL_STRATUM_MIN_STUDIES,
-        )
-        for stratum, members in sorted(joint_members.items())
-    )
+    selected_order = result.selected_study_keys
     return SelectionPlan(
-        studies=tuple(SelectedStudy(uid, by_uid[uid].stratum) for uid in selected_order),
-        census=census,
-        coverage=tuple(coverage),
+        studies=tuple(
+            SelectedStudy(uid, by_uid[uid].stratum, by_uid[uid].dimensions)
+            for uid in selected_order
+        ),
+        coverage=cast(dict[str, object], asdict(result.coverage)),
+        cohort_sha256=result.cohort_sha256,
     )
-
-
-def _case_index_cohort_sha256(studies: Sequence[Mapping[str, object]]) -> str:
-    ordered = sorted(studies, key=lambda item: cast(int, item["case_ordinal"]))
-    payload = {
-        "domain": "rsna-knee-dicom-qa-cohort-v2",
-        "selection_version": QA_COHORT_SELECTION_VERSION,
-        "studies": [
-            {
-                "study_uid": study["study_uid"],
-                "selection_stratum": study["selection_stratum"],
-                "eligible_series_uids": sorted(
-                    str(series["series_uid"])
-                    for series in cast(Sequence[Mapping[str, object]], study["series"])
-                    if series.get("model_eligible") is True
-                ),
-            }
-            for study in ordered
-        ],
-    }
-    return _sha256_bytes(_canonical_json_bytes(payload))
 
 
 def _selected_replay_terminal(
@@ -3317,6 +3166,9 @@ def _selected_replay_terminal(
         "preprocessing_failure",
         "source_failure",
         "quality",
+        "slot",
+        "original_slot",
+        "retention_reasons",
     }:
         raise SafeRunError("full_cohort_replay_mismatch")
     terminal = evidence.get("terminal_state")
@@ -3443,7 +3295,6 @@ def _run_full_dataset_pass(
     source_manifest_identity: Mapping[str, str] | None = None,
     source_manifest_reconciliation: SourceManifestReconciliation | None = None,
     selection_target: int = TARGET_STUDIES,
-    selection_maximum: int = MAX_TARGET_STUDIES,
     selection_minimum_eligible: int = MINIMUM_ELIGIBLE_STUDIES,
     progress: Callable[[str], None] | None = None,
 ) -> tuple[
@@ -3516,7 +3367,7 @@ def _run_full_dataset_pass(
         payload = _canonical_json_bytes(value)
         stream.write(payload)
         digest.update(payload)
-        if stream.tell() > PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"]:
+        if stream.tell() > RUN_PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"]:
             raise SafeRunError("private_full_run_manifest_too_large")
 
     try:
@@ -3529,7 +3380,7 @@ def _run_full_dataset_pass(
                     "classification": "private_remote_only",
                     "filename": "private_full_run_manifest.jsonl",
                     "format": "canonical-json-lines-v1",
-                    "maximum_bytes": PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
+                    "maximum_bytes": RUN_PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
                     "case_data": "permitted_private_only",
                     "dynamic_measurements": "excluded",
                 },
@@ -3580,15 +3431,9 @@ def _run_full_dataset_pass(
                     tuple(state["candidate"] for state in states)
                 )
                 timings["slot_assignment_seconds"] += time.perf_counter() - slot_started
-                primary_slots = {
-                    selection.primary.candidate.series_key: selection.slot.value
-                    for selection in assignment.primary_slots
-                    if selection.primary is not None
-                }
-                additional = {
-                    item.candidate.series_key: tuple(reason.value for reason in item.reasons)
-                    for item in assignment.additional_or_duplicate
-                }
+                slot_assignments = _slot_assignment_by_series(assignment)
+                if len(slot_assignments) != len(states):
+                    raise SafeRunError("series_slot_assignment_invalid")
                 records: list[dict[str, object]] = []
                 for state in states:
                     if source_manifest_reconciliation is not None:
@@ -3608,10 +3453,15 @@ def _run_full_dataset_pass(
                         )
                     record = cast(dict[str, object], state["record"])
                     candidate = state["candidate"]
-                    record["slot"] = primary_slots.get(
-                        candidate.series_key, "additional_or_duplicate"
-                    )
-                    record["retention_reasons"] = list(additional.get(candidate.series_key, ()))
+                    try:
+                        slot, original_slot, retention_reasons = slot_assignments[
+                            candidate.series_key
+                        ]
+                    except KeyError:
+                        raise SafeRunError("series_slot_assignment_invalid") from None
+                    record["slot"] = slot
+                    record["original_slot"] = original_slot
+                    record["retention_reasons"] = list(retention_reasons)
                     records.append(record)
                     series_files = int(cast(Any, record["files"]))
                     file_records = record.get("file_records")
@@ -3653,6 +3503,11 @@ def _run_full_dataset_pass(
                         "preprocessing_failure": preprocessing_failure,
                         "source_failure": source_failure,
                         "quality": state["quality"],
+                        "slot": record["slot"],
+                        "original_slot": record["original_slot"],
+                        "retention_reasons": tuple(
+                            cast(Sequence[str], record["retention_reasons"])
+                        ),
                     }
                     if resolution == "unresolved_blocker":
                         unresolved_stage_counts[terminal] += 1
@@ -3795,6 +3650,8 @@ def _run_full_dataset_pass(
             RepresentativeSeriesInput(
                 profile=profile,
                 slice_count=slice_count,
+                study_uid=profile_row.study_uid,
+                series_uid=profile_row.series_uid,
                 paths=profile_paths,
             )
         )
@@ -3802,26 +3659,11 @@ def _run_full_dataset_pass(
         cohort_studies,
         source_manifest_available=source_manifest_facts is not None,
         target=selection_target,
-        maximum=selection_maximum,
         minimum_eligible=selection_minimum_eligible,
     )
     cohort_by_uid = {study.study_uid: study for study in cohort_studies}
-    cohort_payload = _canonical_json_bytes(
-        {
-            "domain": "rsna-knee-dicom-qa-cohort-v2",
-            "selection_version": QA_COHORT_SELECTION_VERSION,
-            "studies": [
-                {
-                    "study_uid": item.study_uid,
-                    "selection_stratum": list(item.stratum),
-                    "eligible_series_uids": list(
-                        cohort_by_uid[item.study_uid].eligible_series_uids
-                    ),
-                }
-                for item in selection_plan.studies
-            ],
-        }
-    )
+    if selection_plan.coverage is None or selection_plan.cohort_sha256 is None:
+        raise SafeRunError("qa_registry_coverage_incomplete")
     cpu_capacity = max(1, min(workers, os.cpu_count() or workers))
     metrics: dict[str, object] = {
         "schema_version": 1,
@@ -3830,16 +3672,23 @@ def _run_full_dataset_pass(
             "private_full_run_manifest.jsonl": {
                 "classification": "private_remote_only",
                 "format": "canonical-json-lines-v1",
-                "maximum_bytes": PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
+                "maximum_bytes": RUN_PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"],
                 "case_data": "permitted_private_only",
                 "timings": "excluded",
             },
             "private_full_run_metrics.json": {
                 "classification": "private_remote_only",
                 "format": "canonical-json-v1",
-                "maximum_bytes": PRIVATE_OUTPUT_POLICY["private_full_run_metrics.json"],
+                "maximum_bytes": RUN_PRIVATE_OUTPUT_POLICY["private_full_run_metrics.json"],
                 "case_data": "excluded",
                 "timings": "aggregate_only",
+            },
+            "private_cohort_plan.json": {
+                "classification": "private_remote_only",
+                "format": "canonical-json-v1",
+                "maximum_bytes": RUN_PRIVATE_OUTPUT_POLICY["private_cohort_plan.json"],
+                "case_data": "permitted_private_only",
+                "timings": "excluded",
             },
         },
         "input_identity": (
@@ -3892,15 +3741,18 @@ def _run_full_dataset_pass(
         "throughput_scope": "single_full_dataset_pass_excludes_post_pass_qa_replay",
         "qa_cohort_selection": {
             "selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
             "selected_studies": len(selection_plan.studies),
             "eligible_series": sum(
                 cohort_by_uid[item.study_uid].eligible_series for item in selection_plan.studies
             ),
-            "cohort_sha256": _sha256_bytes(cohort_payload),
+            "cohort_sha256": selection_plan.cohort_sha256,
             "source_manifest_gate": (
                 "pass" if source_manifest_facts is not None else "unavailable_source_manifest"
             ),
-            "coverage": [asdict(item) for item in selection_plan.coverage],
+            "coverage_ledger_sha256": _sha256_bytes(_canonical_json_bytes(selection_plan.coverage)),
+            "cohort_plan_sha256": None,
         },
     }
     return metrics, tuple(representatives), first_provenance, selection_plan, replay_evidence
@@ -3926,6 +3778,268 @@ def _directory_records(root: Path) -> tuple[dict[str, object], ...]:
     if not records or total > PRIVATE_REVIEW_MAX_TOTAL_BYTES:
         raise SafeRunError("private_artifact_inventory_invalid")
     return tuple(records)
+
+
+def _replay_render_series(
+    *,
+    row: SeriesRow,
+    paths: tuple[Path, ...],
+    case_ordinal: int,
+    series_ordinal: int,
+    config: Any,
+    versions: Any,
+    pipeline_module: Any,
+    qa_module: Any,
+    slots_module: Any,
+    first_output_dir: Path,
+    repeat_parent: Path,
+    deadline_at: float | None,
+    expected_model_reconstruction: Mapping[str, object] | None = None,
+) -> tuple[dict[str, object], dict[str, object], Any, Any, tuple[dict[str, object], ...], float]:
+    """Replay and render one eligible series twice, deleting the repeat immediately."""
+
+    import numpy as np
+
+    _check_deadline(deadline_at)
+    started = time.perf_counter()
+    first_pass = _decode_order_pass(paths, pipeline_module, deadline_at=deadline_at)
+    repeat_pass = _decode_order_pass(paths, pipeline_module, deadline_at=deadline_at)
+    if (
+        first_pass.ordered is None
+        or repeat_pass.ordered is None
+        or first_pass.decode_failures
+        or repeat_pass.decode_failures
+        or first_pass.order_failure is not None
+        or repeat_pass.order_failure is not None
+        or _canonical_json_bytes(_series_pass_record(first_pass))
+        != _canonical_json_bytes(_series_pass_record(repeat_pass))
+    ):
+        raise SafeRunError("full_cohort_replay_mismatch")
+    ordered = first_pass.ordered
+    repeated_ordered = repeat_pass.ordered
+    quality = _quality(
+        total=len(paths),
+        decoded=len(first_pass.decoded),
+        ordered=ordered,
+        slots_module=slots_module,
+    )
+    if quality.blocked or not ordered.model_eligible:
+        raise SafeRunError("full_cohort_replay_mismatch")
+    try:
+        model_result = pipeline_module.preprocess_series(ordered, config, versions)
+        qa_result = pipeline_module.preprocess_series(
+            ordered, replace(config, sample_count=None), versions
+        )
+        repeated_model = pipeline_module.preprocess_series(repeated_ordered, config, versions)
+        repeated_qa = pipeline_module.preprocess_series(
+            repeated_ordered, replace(config, sample_count=None), versions
+        )
+    except pipeline_module.PipelineError:
+        raise SafeRunError("full_cohort_replay_mismatch") from None
+    model_reconstruction = _private_reconstruction_record(model_result)
+    qa_reconstruction = _private_reconstruction_record(qa_result)
+    if (
+        not np.array_equal(model_result.tensor, repeated_model.tensor)
+        or model_result.provenance != repeated_model.provenance
+        or not np.array_equal(qa_result.tensor, repeated_qa.tensor)
+        or qa_result.provenance != repeated_qa.provenance
+        or model_reconstruction != _private_reconstruction_record(repeated_model)
+        or qa_reconstruction != _private_reconstruction_record(repeated_qa)
+        or (
+            expected_model_reconstruction is not None
+            and model_reconstruction != expected_model_reconstruction
+        )
+    ):
+        raise SafeRunError("full_cohort_replay_mismatch")
+    metadata = _qa_metadata(
+        case_ordinal=case_ordinal,
+        series_ordinal=series_ordinal,
+        row=row,
+        ordered=ordered,
+        qa_result=qa_result,
+        qa_module=qa_module,
+        slots_module=slots_module,
+    )
+    source = np.stack([item.pixels for item in ordered.slices], axis=0)
+    repeated_source = np.stack([item.pixels for item in repeated_ordered.slices], axis=0)
+    contact_count = min(qa_module.CONTACT_MAX_SLICES, len(ordered.slices))
+    contact = tuple(
+        sorted(
+            set(
+                pipeline_module.deterministic_slice_indices(
+                    ordered.geometry.projected_positions_mm, contact_count
+                )
+            )
+        )
+    )
+    repeat_dir = Path(tempfile.mkdtemp(prefix=".qa-repeat-", dir=repeat_parent))
+    try:
+        first = qa_module.render_private_qa(
+            source,
+            qa_result.tensor[:, 0, :, :],
+            metadata=metadata,
+            output_dir=first_output_dir,
+            contact_slice_indices=contact,
+        )
+        repeated = qa_module.render_private_qa(
+            repeated_source,
+            repeated_qa.tensor[:, 0, :, :],
+            metadata=metadata,
+            output_dir=repeat_dir,
+            contact_slice_indices=contact,
+        )
+        if first.artifacts != repeated.artifacts:
+            raise SafeRunError("repeat_render_nondeterministic")
+        records: list[dict[str, object]] = []
+        for artifact in first.artifacts:
+            first_path = first_output_dir / artifact.basename
+            repeat_path = repeat_dir / artifact.basename
+            if (
+                first_path.is_symlink()
+                or repeat_path.is_symlink()
+                or not first_path.is_file()
+                or not repeat_path.is_file()
+                or first_path.stat().st_size != artifact.bytes
+                or repeat_path.stat().st_size != artifact.bytes
+                or _sha256_file(first_path) != artifact.sha256
+                or _sha256_file(repeat_path) != artifact.sha256
+                or first_path.read_bytes() != repeat_path.read_bytes()
+            ):
+                raise SafeRunError("repeat_render_nondeterministic")
+            records.append(
+                {
+                    "basename": artifact.basename,
+                    "bytes": artifact.bytes,
+                    "sha256": artifact.sha256,
+                }
+            )
+    finally:
+        shutil.rmtree(repeat_dir, ignore_errors=True)
+    return (
+        model_reconstruction,
+        qa_reconstruction,
+        quality,
+        ordered,
+        tuple(records),
+        time.perf_counter() - started,
+    )
+
+
+def _run_preparation_smoke(
+    *,
+    competition_root: Path,
+    rows: Sequence[SeriesRow],
+    sample_study_uids: Sequence[str],
+    config: Any,
+    versions: Any,
+    pipeline_module: Any,
+    qa_module: Any,
+    slots_module: Any,
+    benchmark_module: Any,
+    workers: int,
+    cache_parent: Path,
+    deadline_at: float | None,
+) -> dict[str, float | int]:
+    """Measure raw Stage-B replay/render and benchmark scalars for private quantization."""
+
+    sample = set(sample_study_uids)
+    candidates = sorted(
+        (row for row in rows if row.study_uid in sample),
+        key=lambda item: (item.study_uid, item.series_uid),
+    )
+    if not sample or {row.study_uid for row in candidates} != sample:
+        raise SafeRunError("performance_smoke_sample_invalid")
+    scratch = Path(tempfile.mkdtemp(prefix=".qa-preparation-smoke-", dir=cache_parent))
+    output = scratch / "first"
+    output.mkdir()
+    try:
+        eligible_profiles: list[tuple[int, str, SeriesRow, tuple[Path, ...]]] = []
+        for row in candidates:
+            _check_deadline(deadline_at)
+            paths = _series_files(competition_root, row)
+            series_pass = _decode_order_pass(paths, pipeline_module, deadline_at=deadline_at)
+            if (
+                not series_pass.decode_failures
+                and series_pass.order_failure is None
+                and series_pass.ordered is not None
+                and series_pass.ordered.model_eligible
+                and not _quality(
+                    total=len(paths),
+                    decoded=len(series_pass.decoded),
+                    ordered=series_pass.ordered,
+                    slots_module=slots_module,
+                ).blocked
+            ):
+                eligible_profiles.append(
+                    (
+                        len(paths),
+                        hashlib.sha256(row.series_uid.encode("ascii")).hexdigest(),
+                        row,
+                        paths,
+                    )
+                )
+        if not eligible_profiles:
+            raise SafeRunError("performance_smoke_sample_invalid")
+        eligible_profiles.sort(key=lambda item: (item[0], item[1]))
+        profile_requests = (
+            ("small", 0, 1),
+            ("median", (len(eligible_profiles) - 1) // 2, 3),
+            ("large", len(eligible_profiles) - 1, 1),
+        )
+        benchmark_profiles: list[tuple[tuple[Path, ...], int]] = []
+        seen: set[tuple[str, str]] = set()
+        replay_seconds_values: list[float] = []
+        review_bytes_values: list[int] = []
+        review_file_values: list[int] = []
+        for case_ordinal, (_, index, iterations) in enumerate(profile_requests):
+            _, _, row, paths = eligible_profiles[index]
+            benchmark_profiles.append((paths, iterations))
+            identity = (row.study_uid, row.series_uid)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            *_, records, replay_seconds = _replay_render_series(
+                row=row,
+                paths=paths,
+                case_ordinal=case_ordinal,
+                series_ordinal=0,
+                config=config,
+                versions=versions,
+                pipeline_module=pipeline_module,
+                qa_module=qa_module,
+                slots_module=slots_module,
+                first_output_dir=output,
+                repeat_parent=scratch,
+                deadline_at=deadline_at,
+            )
+            replay_seconds_values.append(replay_seconds)
+            review_bytes_values.append(sum(cast(int, item["bytes"]) for item in records))
+            review_file_values.append(len(records))
+        _check_deadline(deadline_at)
+        benchmark_started = time.perf_counter()
+        worker_counts = tuple(
+            value
+            for value in REPRESENTATIVE_WORKER_COUNTS
+            if value <= min(workers, os.cpu_count() or 1, 8)
+        )
+        for paths, iterations in benchmark_profiles:
+            benchmark_module.benchmark_dicom_pipeline(
+                paths,
+                config,
+                versions,
+                iterations=iterations,
+                worker_counts=worker_counts,
+                offline_bundle_verified=True,
+            )
+        benchmark_seconds = time.perf_counter() - benchmark_started
+        return {
+            "qa_replay_render_seconds": max(replay_seconds_values),
+            "representative_benchmark_seconds": benchmark_seconds,
+            "review_artifact_bytes": max(review_bytes_values),
+            "review_artifacts": max(review_file_values),
+        }
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _write_new(path: Path, payload: bytes, *, maximum: int) -> None:
@@ -4544,20 +4658,20 @@ def _validate_summary(
     if (
         selection
         != {
-            "source": "full_run_terminal_records_plus_authenticated_manifest_v2",
-            "target_studies": TARGET_STUDIES,
-            "maximum_studies": MAX_TARGET_STUDIES,
-            "selected_studies": "between_120_and_240",
-            "minimum_eligible_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "source": "authenticated_run_a_cohort_plan_v1",
+            "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "minimum_is_not_maximum": True,
+            "selected_studies": "at_least_100",
             "eligible_studies": "at_least_100",
             "stratified": True,
-            "slice_count_stratified": True,
-            "material_strata_covered": True,
-            "bounded_deterministic_expansion": True,
+            "all_required_represented_registry_values_satisfy_quotas": True,
+            "deterministic_constrained_greedy": True,
             "selected_after_full_pass": True,
             "source_manifest_authenticated": True,
-            "available_required_strata_dispositioned": True,
+            "represented_value_quota": REPRESENTED_VALUE_QUOTA,
             "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
         }
         or not isinstance(qa, dict)
         or qa.get("all_model_eligible_series_rendered") is not True
@@ -4837,7 +4951,542 @@ def _validate_inventory(
     _scan_downloadable(payload, str(cast(Mapping[str, Any], run_config["privacy"])["canary"]))
 
 
-def _run_private_qa(
+def _cohort_plan_payload(
+    *,
+    run_config: Mapping[str, Any],
+    metrics: Mapping[str, object],
+    rows: Sequence[SeriesRow],
+    representatives: Sequence[RepresentativeSeriesInput],
+    selection_plan: SelectionPlan,
+    replay_evidence: Mapping[tuple[str, str], Mapping[str, object]],
+) -> bytes:
+    """Bind the exact post-pass cohort without retaining pixels or re-running selection."""
+
+    coverage = selection_plan.coverage
+    cohort_sha256 = selection_plan.cohort_sha256
+    if (
+        not isinstance(coverage, Mapping)
+        or coverage.get("all_required_represented_registry_values_satisfy_quotas") is not True
+        or not isinstance(cohort_sha256, str)
+    ):
+        raise SafeRunError("private_cohort_plan_invalid")
+    rows_by_study: dict[str, list[SeriesRow]] = defaultdict(list)
+    for row in rows:
+        rows_by_study[row.study_uid].append(row)
+    studies: list[dict[str, object]] = []
+    eligible_series = 0
+    for selected in selection_plan.studies:
+        dimensions = {dimension: tuple(sorted(values)) for dimension, values in selected.dimensions}
+        if set(dimensions) != set(REQUIRED_REVIEW_DIMENSIONS) or any(
+            not values for values in dimensions.values()
+        ):
+            raise SafeRunError("private_cohort_plan_invalid")
+        study_rows = rows_by_study.get(selected.study_uid)
+        if not study_rows:
+            raise SafeRunError("private_cohort_plan_invalid")
+        selected_eligible = tuple(
+            sorted(
+                row.series_uid
+                for row in study_rows
+                if replay_evidence.get((row.study_uid, row.series_uid), {}).get("terminal_state")
+                == "model_eligible"
+            )
+        )
+        eligible_series += len(selected_eligible)
+        studies.append(
+            {
+                "study_uid": selected.study_uid,
+                "selection_stratum": list(selected.stratum),
+                "memberships": [
+                    [dimension, value]
+                    for dimension, values in sorted(dimensions.items())
+                    for value in values
+                ],
+                "eligible_series_uids": list(selected_eligible),
+            }
+        )
+        if not selected_eligible:
+            raise SafeRunError("eligible_study_gate_failed")
+    qa_selection = metrics.get("qa_cohort_selection")
+    input_identity = metrics.get("input_identity")
+    manifest_sha256 = metrics.get("manifest_sha256")
+    if (
+        not isinstance(qa_selection, Mapping)
+        or not isinstance(input_identity, Mapping)
+        or not isinstance(manifest_sha256, str)
+        or qa_selection.get("selected_studies") != len(studies)
+        or qa_selection.get("eligible_series") != eligible_series
+        or qa_selection.get("cohort_sha256") != cohort_sha256
+    ):
+        raise SafeRunError("private_cohort_plan_invalid")
+    if eligible_series * 7 > PRIVATE_REVIEW_MAX_FILES:
+        raise SafeRunError("qa_review_artifact_capacity_exceeded")
+    payload = {
+        "schema_version": 1,
+        "artifact_type": "private-dicom-qa-cohort-plan",
+        "status": "complete_pending_comparison",
+        "provenance": {
+            "git_commit": run_config["code_commit"],
+            "bundle_sha256": run_config["bundle_sha256"],
+            "runner_sha256": _sha256_file(Path(__file__).resolve(strict=True)),
+            "source_manifest_identity": dict(sorted(input_identity.items())),
+            "full_run_manifest_sha256": manifest_sha256,
+            "qa_cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "qa_stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "qa_stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+        },
+        "selection": {
+            "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "selected_studies": len(studies),
+            "eligible_series": eligible_series,
+            "cohort_sha256": cohort_sha256,
+        },
+        "coverage": {
+            "ledger": coverage,
+            "ledger_sha256": _sha256_bytes(_canonical_json_bytes(coverage)),
+        },
+        "representatives": [
+            {
+                "profile": item.profile,
+                "slice_count": item.slice_count,
+                "study_uid": item.study_uid,
+                "series_uid": item.series_uid,
+            }
+            for item in representatives
+        ],
+        "studies": studies,
+    }
+    result = _canonical_json_bytes(payload)
+    if len(result) > RUN_PRIVATE_OUTPUT_POLICY["private_cohort_plan.json"]:
+        raise SafeRunError("private_cohort_plan_too_large")
+    return result
+
+
+def _power_of_two_mib_ceiling(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SafeRunError("private_metrics_invalid")
+    mib = max(1, math.ceil(value / 1024**2))
+    return 1 << mib.bit_length()
+
+
+def _throughput_bucket(value: object) -> str:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value <= 0
+    ):
+        raise SafeRunError("private_metrics_invalid")
+    number = float(value)
+    return next(token for token, lower, upper in THROUGHPUT_BUCKETS if lower <= number < upper)
+
+
+def _validated_cohort_plan(
+    payload: bytes,
+    *,
+    run_config: Mapping[str, Any],
+    metrics: Mapping[str, object],
+) -> dict[str, Any]:
+    value = _json_object(payload, "private_cohort_plan_invalid")
+    provenance = value.get("provenance")
+    selection = value.get("selection")
+    coverage = value.get("coverage")
+    representatives = value.get("representatives")
+    studies = value.get("studies")
+    qa_selection = metrics.get("qa_cohort_selection")
+    if (
+        payload != _canonical_json_bytes(value)
+        or set(value)
+        != {
+            "schema_version",
+            "artifact_type",
+            "status",
+            "provenance",
+            "selection",
+            "coverage",
+            "representatives",
+            "studies",
+        }
+        or value.get("schema_version") != 1
+        or value.get("artifact_type") != "private-dicom-qa-cohort-plan"
+        or value.get("status") != "complete_pending_comparison"
+        or not isinstance(provenance, dict)
+        or set(provenance)
+        != {
+            "git_commit",
+            "bundle_sha256",
+            "runner_sha256",
+            "source_manifest_identity",
+            "full_run_manifest_sha256",
+            "qa_cohort_selection_version",
+            "qa_stratum_registry_version",
+            "qa_stratum_registry_sha256",
+        }
+        or provenance.get("git_commit") != run_config.get("code_commit")
+        or provenance.get("bundle_sha256") != run_config.get("bundle_sha256")
+        or provenance.get("runner_sha256") != _sha256_file(Path(__file__).resolve(strict=True))
+        or provenance.get("source_manifest_identity") != metrics.get("input_identity")
+        or provenance.get("full_run_manifest_sha256") != metrics.get("manifest_sha256")
+        or provenance.get("qa_cohort_selection_version") != QA_COHORT_SELECTION_VERSION
+        or provenance.get("qa_stratum_registry_version") != QA_STRATUM_REGISTRY_VERSION
+        or provenance.get("qa_stratum_registry_sha256") != QA_STRATUM_REGISTRY_SHA256
+        or not isinstance(selection, dict)
+        or set(selection)
+        != {"minimum_studies", "selected_studies", "eligible_series", "cohort_sha256"}
+        or selection.get("minimum_studies") != MINIMUM_ELIGIBLE_STUDIES
+        or isinstance(selection.get("selected_studies"), bool)
+        or not isinstance(selection.get("selected_studies"), int)
+        or cast(int, selection["selected_studies"]) < MINIMUM_ELIGIBLE_STUDIES
+        or isinstance(selection.get("eligible_series"), bool)
+        or not isinstance(selection.get("eligible_series"), int)
+        or cast(int, selection["eligible_series"]) < cast(int, selection["selected_studies"])
+        or cast(int, selection["eligible_series"]) * 7 > PRIVATE_REVIEW_MAX_FILES
+        or not isinstance(qa_selection, Mapping)
+        or selection.get("selected_studies") != qa_selection.get("selected_studies")
+        or selection.get("eligible_series") != qa_selection.get("eligible_series")
+        or selection.get("cohort_sha256") != qa_selection.get("cohort_sha256")
+        or not isinstance(coverage, dict)
+        or set(coverage) != {"ledger", "ledger_sha256"}
+        or coverage.get("ledger_sha256")
+        != _sha256_bytes(_canonical_json_bytes(coverage.get("ledger")))
+        or coverage.get("ledger_sha256") != qa_selection.get("coverage_ledger_sha256")
+        or coverage.get("ledger_sha256") != metrics.get("coverage_ledger_sha256")
+        or qa_selection.get("cohort_plan_sha256") != _sha256_bytes(payload)
+        or metrics.get("cohort_plan_sha256") != _sha256_bytes(payload)
+        or not isinstance(representatives, list)
+        or not isinstance(studies, list)
+        or len(studies) != selection.get("selected_studies")
+    ):
+        raise SafeRunError("private_cohort_plan_invalid")
+    study_uids: set[str] = set()
+    eligible_total = 0
+    for study in studies:
+        if not isinstance(study, dict) or set(study) != {
+            "study_uid",
+            "selection_stratum",
+            "memberships",
+            "eligible_series_uids",
+        }:
+            raise SafeRunError("private_cohort_plan_invalid")
+        study_uid = study.get("study_uid")
+        memberships = study.get("memberships")
+        eligible = study.get("eligible_series_uids")
+        if (
+            not isinstance(study_uid, str)
+            or UID.fullmatch(study_uid) is None
+            or study_uid in study_uids
+            or not isinstance(study.get("selection_stratum"), list)
+            or not isinstance(memberships, list)
+            or not isinstance(eligible, list)
+            or not eligible
+            or eligible != sorted(set(eligible))
+            or any(not isinstance(item, str) or UID.fullmatch(item) is None for item in eligible)
+        ):
+            raise SafeRunError("private_cohort_plan_invalid")
+        study_uids.add(study_uid)
+        parsed_memberships: list[tuple[str, str]] = []
+        for item in memberships:
+            if (
+                not isinstance(item, list)
+                or len(item) != 2
+                or not all(isinstance(part, str) and part for part in item)
+            ):
+                raise SafeRunError("private_cohort_plan_invalid")
+            parsed_memberships.append((item[0], item[1]))
+        if parsed_memberships != sorted(set(parsed_memberships)) or {
+            dimension for dimension, _ in parsed_memberships
+        } != set(REQUIRED_REVIEW_DIMENSIONS):
+            raise SafeRunError("private_cohort_plan_invalid")
+        eligible_total += len(eligible)
+    if eligible_total != selection.get("eligible_series"):
+        raise SafeRunError("private_cohort_plan_invalid")
+    planned_eligible = {
+        (cast(str, study["study_uid"]), series_uid)
+        for study in studies
+        for series_uid in cast(list[str], study["eligible_series_uids"])
+    }
+    representative_profiles: set[str] = set()
+    representative_identities: set[tuple[str, str]] = set()
+    for item in representatives:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"profile", "slice_count", "study_uid", "series_uid"}
+            or item.get("profile") not in {"small", "median", "large"}
+            or isinstance(item.get("slice_count"), bool)
+            or not isinstance(item.get("slice_count"), int)
+            or cast(int, item["slice_count"]) < 1
+            or not isinstance(item.get("study_uid"), str)
+            or UID.fullmatch(cast(str, item["study_uid"])) is None
+            or not isinstance(item.get("series_uid"), str)
+            or UID.fullmatch(cast(str, item["series_uid"])) is None
+            or (cast(str, item["study_uid"]), cast(str, item["series_uid"])) not in planned_eligible
+            or cast(str, item["profile"]) in representative_profiles
+            or (cast(str, item["study_uid"]), cast(str, item["series_uid"]))
+            in representative_identities
+        ):
+            raise SafeRunError("private_cohort_plan_invalid")
+        representative_profiles.add(cast(str, item["profile"]))
+        representative_identities.add((cast(str, item["study_uid"]), cast(str, item["series_uid"])))
+    if not representatives:
+        raise SafeRunError("private_cohort_plan_invalid")
+    return value
+
+
+def _core_summary_payload(
+    *,
+    run_config: Mapping[str, Any],
+    metrics: Mapping[str, object],
+    cohort_plan_sha256: str,
+    inference_limit_seconds: int,
+) -> bytes:
+    if cast(Mapping[str, Any], metrics["integrity_gate"])["status"] != "pass":
+        raise SafeRunError("full_run_integrity_blocked")
+    timings = cast(Mapping[str, Any], metrics["timings_seconds"])
+    throughput = cast(Mapping[str, Any], metrics["throughput"])
+    summary = {
+        "schema_version": 1,
+        "artifact_type": "dicom-qa-sanitized-core-aggregate",
+        "status": "complete_pending_comparison",
+        "provenance": {
+            "git_commit": run_config["code_commit"],
+            "bundle_sha256": run_config["bundle_sha256"],
+            "runner_sha256": _sha256_file(Path(__file__).resolve(strict=True)),
+            "qa_cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "qa_stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+        },
+        "pipeline": {
+            "full_training_dataset_processed": True,
+            "all_series_terminal": True,
+            "integrity_gate": "pass",
+            "unresolved_blockers": "zero",
+            "cohort_selected_after_full_pass": True,
+            "cohort_plan_bound": bool(HEX_64.fullmatch(cohort_plan_sha256)),
+            "comparison_status": "pending_independent_run",
+            "private_qa_status": "pending_post_comparison_preparation",
+        },
+        "selection": {
+            "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "minimum_is_not_maximum": True,
+            "selected_studies": "at_least_100",
+            "cohort_plan_status": "complete",
+            "all_required_represented_registry_values_satisfy_quotas": True,
+            "deterministic_constrained_greedy": True,
+            "selected_after_full_pass": True,
+            "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+        },
+        "performance": {
+            "scope": "complete_full_dataset_core_excludes_post_comparison_qa",
+            "full_dataset_wall_seconds": round(
+                float(cast(int | float, metrics["total_wall_seconds"])), 6
+            ),
+            "decode_accumulated_seconds": round(float(timings["decode_seconds"]), 6),
+            "preprocessing_accumulated_seconds": round(float(timings["preprocessing_seconds"]), 6),
+            "cache_generation_seconds": round(float(timings["cache_generation_seconds"]), 6),
+            "process_peak_rss_mib_ceiling": max(
+                1, math.ceil(cast(int, metrics["process_peak_rss_bytes"]) / 1024**2)
+            ),
+            "peak_ephemeral_cache_power_of_two_mib_ceiling": _power_of_two_mib_ceiling(
+                cast(int, metrics["peak_ephemeral_cache_bytes"])
+            ),
+            "decode_files_per_second_token": _throughput_bucket(
+                float(throughput["files_per_second"])
+            ),
+            "preprocessing_series_per_second_token": _throughput_bucket(
+                float(throughput["series_per_second"])
+            ),
+            "competition_cpu_limit_seconds": inference_limit_seconds,
+            "within_competition_cpu_limit": float(cast(int | float, metrics["total_wall_seconds"]))
+            <= inference_limit_seconds,
+        },
+        "privacy": {
+            "downloaded_case_details": False,
+            "downloaded_identifiers": False,
+            "downloaded_paths": False,
+            "downloaded_pixels": False,
+            "private_cohort_plan_remote_only": True,
+        },
+    }
+    result = _canonical_json_bytes(summary)
+    _scan_downloadable(result, str(cast(Mapping[str, Any], run_config["privacy"])["canary"]))
+    return result
+
+
+def _core_inventory_payload(*, run_config: Mapping[str, Any], summary_payload: bytes) -> bytes:
+    result = _canonical_json_bytes(
+        {
+            "schema_version": 1,
+            "artifact_type": "dicom-qa-sanitized-core-artifact-inventory",
+            "provenance": {
+                "git_commit": run_config["code_commit"],
+                "bundle_sha256": run_config["bundle_sha256"],
+            },
+            "artifacts": [
+                {
+                    "name": "sanitized_summary.json",
+                    "kind": "aggregate_json",
+                    "bytes": len(summary_payload),
+                    "sha256": _sha256_bytes(summary_payload),
+                }
+            ],
+        }
+    )
+    _scan_downloadable(result, str(cast(Mapping[str, Any], run_config["privacy"])["canary"]))
+    return result
+
+
+def _validate_run_summary(payload: bytes, run_config: Mapping[str, Any]) -> dict[str, Any]:
+    value = _json_object(payload, "sanitized_summary_invalid")
+    provenance = value.get("provenance")
+    pipeline = value.get("pipeline")
+    selection = value.get("selection")
+    performance = value.get("performance")
+    privacy = value.get("privacy")
+    if (
+        payload != _canonical_json_bytes(value)
+        or set(value)
+        != {
+            "schema_version",
+            "artifact_type",
+            "status",
+            "provenance",
+            "pipeline",
+            "selection",
+            "performance",
+            "privacy",
+        }
+        or value.get("schema_version") != 1
+        or value.get("artifact_type") != "dicom-qa-sanitized-core-aggregate"
+        or value.get("status") != "complete_pending_comparison"
+        or provenance
+        != {
+            "git_commit": run_config.get("code_commit"),
+            "bundle_sha256": run_config.get("bundle_sha256"),
+            "runner_sha256": _sha256_file(Path(__file__).resolve(strict=True)),
+            "qa_cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "qa_stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+        }
+        or not isinstance(pipeline, dict)
+        or set(pipeline)
+        != {
+            "full_training_dataset_processed",
+            "all_series_terminal",
+            "integrity_gate",
+            "unresolved_blockers",
+            "cohort_selected_after_full_pass",
+            "cohort_plan_bound",
+            "comparison_status",
+            "private_qa_status",
+        }
+        or pipeline.get("full_training_dataset_processed") is not True
+        or pipeline.get("all_series_terminal") is not True
+        or pipeline.get("integrity_gate") != "pass"
+        or pipeline.get("unresolved_blockers") != "zero"
+        or pipeline.get("cohort_selected_after_full_pass") is not True
+        or pipeline.get("cohort_plan_bound") is not True
+        or pipeline.get("comparison_status") != "pending_independent_run"
+        or pipeline.get("private_qa_status") != "pending_post_comparison_preparation"
+        or selection
+        != {
+            "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+            "minimum_is_not_maximum": True,
+            "selected_studies": "at_least_100",
+            "cohort_plan_status": "complete",
+            "all_required_represented_registry_values_satisfy_quotas": True,
+            "deterministic_constrained_greedy": True,
+            "selected_after_full_pass": True,
+            "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+        }
+        or not isinstance(performance, dict)
+        or set(performance)
+        != {
+            "scope",
+            "full_dataset_wall_seconds",
+            "decode_accumulated_seconds",
+            "preprocessing_accumulated_seconds",
+            "cache_generation_seconds",
+            "process_peak_rss_mib_ceiling",
+            "peak_ephemeral_cache_power_of_two_mib_ceiling",
+            "decode_files_per_second_token",
+            "preprocessing_series_per_second_token",
+            "competition_cpu_limit_seconds",
+            "within_competition_cpu_limit",
+        }
+        or performance.get("scope") != "complete_full_dataset_core_excludes_post_comparison_qa"
+        or performance.get("decode_files_per_second_token")
+        not in {item[0] for item in THROUGHPUT_BUCKETS}
+        or performance.get("preprocessing_series_per_second_token")
+        not in {item[0] for item in THROUGHPUT_BUCKETS}
+        or performance.get("within_competition_cpu_limit") is not True
+        or privacy
+        != {
+            "downloaded_case_details": False,
+            "downloaded_identifiers": False,
+            "downloaded_paths": False,
+            "downloaded_pixels": False,
+            "private_cohort_plan_remote_only": True,
+        }
+    ):
+        raise SafeRunError("sanitized_summary_invalid")
+    for key in (
+        "full_dataset_wall_seconds",
+        "decode_accumulated_seconds",
+        "preprocessing_accumulated_seconds",
+        "cache_generation_seconds",
+    ):
+        item = performance.get(key)
+        if (
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(float(item))
+            or float(item) < 0
+        ):
+            raise SafeRunError("sanitized_summary_invalid")
+    for key in (
+        "process_peak_rss_mib_ceiling",
+        "peak_ephemeral_cache_power_of_two_mib_ceiling",
+        "competition_cpu_limit_seconds",
+    ):
+        item = performance.get(key)
+        if isinstance(item, bool) or not isinstance(item, int) or item < 1:
+            raise SafeRunError("sanitized_summary_invalid")
+    _scan_downloadable(payload, str(cast(Mapping[str, Any], run_config["privacy"])["canary"]))
+    return value
+
+
+def _validate_run_inventory(
+    payload: bytes,
+    run_config: Mapping[str, Any],
+    summary_payload: bytes,
+) -> dict[str, Any]:
+    value = _json_object(payload, "sanitized_inventory_invalid")
+    expected = {
+        "schema_version": 1,
+        "artifact_type": "dicom-qa-sanitized-core-artifact-inventory",
+        "provenance": {
+            "git_commit": run_config.get("code_commit"),
+            "bundle_sha256": run_config.get("bundle_sha256"),
+        },
+        "artifacts": [
+            {
+                "name": "sanitized_summary.json",
+                "kind": "aggregate_json",
+                "bytes": len(summary_payload),
+                "sha256": _sha256_bytes(summary_payload),
+            }
+        ],
+    }
+    if payload != _canonical_json_bytes(value) or value != expected:
+        raise SafeRunError("sanitized_inventory_invalid")
+    _validate_run_summary(summary_payload, run_config)
+    _scan_downloadable(payload, str(cast(Mapping[str, Any], run_config["privacy"])["canary"]))
+    return value
+
+
+def _run_private_core(
     *,
     input_root: Path,
     competition_root: Path,
@@ -4847,12 +5496,10 @@ def _run_private_qa(
     inference_limit_seconds: int,
     deadline_at: float | None = None,
 ) -> None:
-    import numpy as np
+    """Run the complete data pass and freeze its exact post-pass cohort, then stop."""
 
     from rsna_knee.data import series_slots as slots
-    from rsna_knee.dicom import benchmark as benchmark_module
     from rsna_knee.dicom import pipeline
-    from rsna_knee.qa import preprocessing as qa
 
     if output_root.exists():
         raise SafeRunError("output_exists")
@@ -4863,82 +5510,39 @@ def _run_private_qa(
         input_root,
         cast(Mapping[str, object], input_identity["source_manifest"]),
     )
+    reconciliation: SourceManifestReconciliation | None = None
+    staging_parent: Path | None = None
+    private_run_started = time.perf_counter()
+    private_run_cpu_started = _cpu_seconds()
+    private_run_peak_rss_started = _peak_rss_bytes()
     try:
-        (
-            source_manifest_facts,
-            source_manifest_identity,
-            source_manifest_reconciliation,
-        ) = _load_source_manifest_facts(source_binding, rows)
+        source_facts, source_identity, reconciliation = _load_source_manifest_facts(
+            source_binding, rows
+        )
         config = _preprocessing_config(preprocessing_config_path, pipeline)
         versions = pipeline.PipelineVersions(
             code_commit=str(run_config["code_commit"]),
             source_manifest_version=SOURCE_MANIFEST_VERSION,
         )
-        workers = int(run_config["workers"])
-    except (KeyError, TypeError, ValueError, OverflowError) as error:
-        if "source_manifest_reconciliation" in locals():
-            source_manifest_reconciliation.connection.close()
-        raise SafeRunError("worker_count_invalid") from error
-    except BaseException:
-        if "source_manifest_reconciliation" in locals():
-            source_manifest_reconciliation.connection.close()
-        raise
-    if not 1 <= workers <= 16:
-        source_manifest_reconciliation.connection.close()
-        raise SafeRunError("worker_count_invalid")
+        workers = run_config["workers"]
+        if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
+            raise SafeRunError("worker_count_invalid")
 
-    private_run_started = time.perf_counter()
-    private_run_cpu_started = _cpu_seconds()
-    private_run_peak_rss_started = _peak_rss_bytes()
-    try:
-        _safe_event("dicom_qa_progress", phase="performance_smoke", code="start")
-        _run_performance_smoke(
-            competition_root=competition_root,
-            rows=rows,
-            reconciliation=source_manifest_reconciliation,
-            pipeline_module=pipeline,
-            slots_module=slots,
-            config=config,
-            versions=versions,
-            workers=workers,
-            cache_parent=output_root.parent,
-            budget_seconds=(
-                deadline_at - time.monotonic() if deadline_at is not None else SELF_DEADLINE_SECONDS
-            ),
-            deadline_at=deadline_at,
-        )
-    except BaseException:
-        source_manifest_reconciliation.connection.close()
-        raise
-    _safe_event("dicom_qa_progress", phase="performance_smoke", code="complete")
-    staging_parent = Path(tempfile.mkdtemp(prefix=".dicom-qa-output-", dir=output_root.parent))
-    first_render = staging_parent / "first-render"
-    repeat_render = staging_parent / "repeat-render"
-    final_staging = staging_parent / OUTPUT_DIRECTORY
-    first_render.mkdir()
-    repeat_render.mkdir()
-    final_staging.mkdir()
-    private_cases: list[dict[str, object]] = []
-    representative_inputs: tuple[RepresentativeSeriesInput, ...] | None = None
-    eligible_studies = 0
-    eligible_series = 0
-    rendered_series = 0
-    eligible_strata: set[tuple[str, ...]] = set()
-    first_provenance: Any | None = None
-    qa_generation_seconds = 0.0
-    try:
-        full_manifest_staging = staging_parent / "private_full_run_manifest.jsonl"
+        staging_parent = Path(tempfile.mkdtemp(prefix=".dicom-qa-core-", dir=output_root.parent))
+        staging_output = staging_parent / OUTPUT_DIRECTORY
+        staging_output.mkdir()
+        manifest_path = staging_parent / "private_full_run_manifest.jsonl"
         _safe_event("dicom_qa_progress", phase="full_pass", code="start")
         (
-            full_run_metrics,
-            representative_inputs,
-            first_provenance,
+            metrics,
+            representatives,
+            _,
             selection_plan,
-            full_replay_evidence,
+            replay_evidence,
         ) = _run_full_dataset_pass(
             competition_root=competition_root,
             rows=rows,
-            private_manifest_path=full_manifest_staging,
+            private_manifest_path=manifest_path,
             run_config=run_config,
             config=config,
             versions=versions,
@@ -4946,297 +5550,731 @@ def _run_private_qa(
             slots_module=slots,
             workers=workers,
             deadline_at=deadline_at,
-            source_manifest_facts=source_manifest_facts,
-            source_manifest_identity=source_manifest_identity,
-            source_manifest_reconciliation=source_manifest_reconciliation,
+            source_manifest_facts=source_facts,
+            source_manifest_identity=source_identity,
+            source_manifest_reconciliation=reconciliation,
             progress=lambda code: _safe_event("dicom_qa_progress", phase="full_pass", code=code),
         )
         _safe_event("dicom_qa_progress", phase="full_pass", code="complete")
-        source_manifest_reconciliation.connection.close()
-        selected = selection_plan.studies
-        selected_uids = {item.study_uid for item in selected}
-        selected_rows: dict[str, list[SeriesRow]] = defaultdict(list)
-        for row in rows:
-            if row.study_uid in selected_uids:
-                selected_rows[row.study_uid].append(row)
-        if set(selected_rows) != selected_uids:
-            raise SafeRunError("selection_reconciliation_failed")
-        _safe_event("dicom_qa_progress", phase="cohort_replay", code="start")
-        cohort_replay_started = time.perf_counter()
-        for case_ordinal, selected_study in enumerate(selected):
-            _check_deadline(deadline_at)
-            study_rows = sorted(
-                selected_rows[selected_study.study_uid],
-                key=lambda row: hashlib.sha256(
-                    f"{SELECTION_SEED}:{row.series_uid}".encode()
-                ).digest(),
-            )
-            states: list[dict[str, Any]] = []
-            candidates: list[Any] = []
-            for series_ordinal, row in enumerate(study_rows):
-                _check_deadline(deadline_at)
-                full_evidence = full_replay_evidence.get((row.study_uid, row.series_uid))
-                if not isinstance(full_evidence, Mapping):
-                    raise SafeRunError("full_cohort_replay_mismatch")
-                source_failure = full_evidence.get("source_failure")
-                paths: tuple[Path, ...]
-                decoded: tuple[Any, ...]
-                ordered: Any | None
-                repeat_ordered: Any | None
-                decode_failures: tuple[dict[str, str | None], ...]
-                order_failure: dict[str, str | None] | None
-                quality: Any
-                if full_evidence.get("terminal_state") == "source_access_blocked":
-                    paths = ()
-                    decoded = ()
-                    ordered = None
-                    repeat_ordered = None
-                    decode_failures = ()
-                    order_failure = None
-                    quality = full_evidence.get("quality")
-                    if quality is None:
-                        raise SafeRunError("full_cohort_replay_mismatch")
-                    base_terminal = "source_access_blocked"
+        reconciliation.connection.close()
+        reconciliation = None
+
+        plan_payload = _cohort_plan_payload(
+            run_config=run_config,
+            metrics=metrics,
+            rows=rows,
+            representatives=representatives,
+            selection_plan=selection_plan,
+            replay_evidence=replay_evidence,
+        )
+        plan_sha256 = _sha256_bytes(plan_payload)
+        qa_selection = cast(dict[str, object], metrics["qa_cohort_selection"])
+        qa_selection["cohort_plan_sha256"] = plan_sha256
+        metrics["cohort_plan_sha256"] = plan_sha256
+        metrics["coverage_ledger_sha256"] = qa_selection["coverage_ledger_sha256"]
+        full_dataset_seconds = float(cast(Any, metrics["total_wall_seconds"]))
+        metrics["full_dataset_wall_seconds"] = full_dataset_seconds
+        total_wall_seconds = time.perf_counter() - private_run_started
+        metrics["total_wall_seconds"] = total_wall_seconds
+        cast(dict[str, float], metrics["timings_seconds"])["total_seconds"] = total_wall_seconds
+        process_cpu_seconds = max(0.0, _cpu_seconds() - private_run_cpu_started)
+        metrics["process_cpu_seconds"] = process_cpu_seconds
+        cpu_capacity = int(cast(Any, metrics["cpu_capacity_threads"]))
+        metrics["cpu_utilization_percent"] = min(
+            100.0,
+            100.0 * process_cpu_seconds / max(total_wall_seconds * cpu_capacity, 1e-12),
+        )
+        process_peak_rss = _peak_rss_bytes()
+        metrics["process_peak_rss_bytes"] = process_peak_rss
+        metrics["process_peak_rss_increase_bytes"] = max(
+            0, process_peak_rss - private_run_peak_rss_started
+        )
+        _validated_cohort_plan(plan_payload, run_config=run_config, metrics=metrics)
+        summary_payload = _core_summary_payload(
+            run_config=run_config,
+            metrics=metrics,
+            cohort_plan_sha256=plan_sha256,
+            inference_limit_seconds=inference_limit_seconds,
+        )
+        inventory_payload = _core_inventory_payload(
+            run_config=run_config, summary_payload=summary_payload
+        )
+        _validate_run_summary(summary_payload, run_config)
+        _validate_run_inventory(
+            inventory_payload,
+            run_config=run_config,
+            summary_payload=summary_payload,
+        )
+
+        manifest_path.rename(staging_output / "private_full_run_manifest.jsonl")
+        _write_new(
+            staging_output / "private_full_run_metrics.json",
+            _canonical_json_bytes(metrics),
+            maximum=RUN_PRIVATE_OUTPUT_POLICY["private_full_run_metrics.json"],
+        )
+        _write_new(
+            staging_output / "private_cohort_plan.json",
+            plan_payload,
+            maximum=RUN_PRIVATE_OUTPUT_POLICY["private_cohort_plan.json"],
+        )
+        _write_new(
+            staging_output / "sanitized_summary.json",
+            summary_payload,
+            maximum=RUN_DOWNLOADABLE_OUTPUT_POLICY["sanitized_summary.json"][1],
+        )
+        _write_new(
+            staging_output / "sanitized_artifact_inventory.json",
+            inventory_payload,
+            maximum=RUN_DOWNLOADABLE_OUTPUT_POLICY["sanitized_artifact_inventory.json"][1],
+        )
+        staging_output.rename(output_root)
+    except BaseException:
+        if reconciliation is not None:
+            reconciliation.connection.close()
+        raise
+    finally:
+        if staging_parent is not None:
+            shutil.rmtree(staging_parent, ignore_errors=True)
+
+
+def _validated_comparison_proof(
+    payload: bytes,
+    *,
+    manifest_sha256: str,
+    cohort_plan_sha256: str,
+    metrics: Mapping[str, object],
+) -> dict[str, Any]:
+    value = _json_object(payload, "comparison_proof_invalid")
+    deterministic_metric_keys = [
+        "studies_processed",
+        "series_processed",
+        "files_processed",
+        "terminal_counts",
+        "model_eligible_series",
+        "logical_cache_bytes",
+        "manifest_sha256",
+        "qa_cohort_selection",
+        "cohort_plan_sha256",
+        "coverage_ledger_sha256",
+    ]
+    expected = {
+        "schema_version": 1,
+        "artifact_type": "private-dicom-run-comparison",
+        "status": "pass",
+        "exact_manifest_byte_equality": True,
+        "cohort_plan_byte_equality": True,
+        "cohort_plan_sha256": cohort_plan_sha256,
+        "manifest_sha256": manifest_sha256,
+        "studies": metrics.get("studies_processed"),
+        "series": metrics.get("series_processed"),
+        "files": metrics.get("files_processed"),
+        "terminal_counts": metrics.get("terminal_counts"),
+        "deterministic_metric_keys": deterministic_metric_keys,
+        "expected_nondeterministic_fields": [
+            "phase_timings",
+            "wall_time",
+            "cpu_time",
+            "cpu_utilization",
+            "throughput",
+            "peak_memory",
+        ],
+        "unresolved_mismatches": 0,
+    }
+    if payload != _canonical_json_bytes(value) or value != expected:
+        raise SafeRunError("comparison_proof_invalid")
+    return value
+
+
+def _selected_manifest_records(
+    path: Path,
+    *,
+    expected_sha256: str,
+    expected_run_config: Mapping[str, Any],
+    selected_study_uids: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    if _sha256_file(path) != expected_sha256:
+        raise SafeRunError("private_full_run_manifest_hash_mismatch")
+    selected = set(selected_study_uids)
+    if len(selected) != len(selected_study_uids):
+        raise SafeRunError("private_cohort_plan_invalid")
+    found: dict[str, dict[str, Any]] = {}
+    header_seen = False
+    footer_seen = False
+    total = 0
+    try:
+        with path.open("rb") as stream:
+            for raw in stream:
+                total += len(raw)
+                if total > RUN_PRIVATE_OUTPUT_POLICY["private_full_run_manifest.jsonl"]:
+                    raise SafeRunError("private_full_run_manifest_too_large")
+                record = _json_object(raw, "private_full_run_manifest_invalid")
+                if raw != _canonical_json_bytes(record):
+                    raise SafeRunError("private_full_run_manifest_invalid")
+                record_type = record.get("record_type")
+                if record_type == "header":
+                    provenance = record.get("provenance")
+                    if (
+                        header_seen
+                        or footer_seen
+                        or not isinstance(provenance, dict)
+                        or provenance.get("git_commit") != expected_run_config.get("code_commit")
+                        or provenance.get("bundle_sha256")
+                        != expected_run_config.get("bundle_sha256")
+                    ):
+                        raise SafeRunError("private_full_run_manifest_invalid")
+                    header_seen = True
+                elif record_type == "study":
+                    study_uid = record.get("study_uid")
+                    if (
+                        not header_seen
+                        or footer_seen
+                        or not isinstance(study_uid, str)
+                        or UID.fullmatch(study_uid) is None
+                    ):
+                        raise SafeRunError("private_full_run_manifest_invalid")
+                    if study_uid in selected:
+                        if study_uid in found:
+                            raise SafeRunError("private_full_run_manifest_invalid")
+                        found[study_uid] = record
+                elif record_type == "footer":
+                    if not header_seen or footer_seen:
+                        raise SafeRunError("private_full_run_manifest_invalid")
+                    footer_seen = True
                 else:
+                    raise SafeRunError("private_full_run_manifest_invalid")
+    except SafeRunError:
+        raise
+    except OSError as error:
+        raise SafeRunError("private_full_run_manifest_invalid") from error
+    if not header_seen or not footer_seen or set(found) != selected:
+        raise SafeRunError("private_full_run_manifest_invalid")
+    return found
+
+
+def _validated_preparation_smoke_summary(
+    payload: bytes,
+    *,
+    run_config: Mapping[str, Any],
+    inference_limit_seconds: int,
+) -> Mapping[str, object]:
+    value = _json_object(payload, "performance_smoke_summary_invalid")
+    provenance = value.get("provenance")
+    runtime = value.get("runtime")
+    performance = value.get("performance")
+    config_provenance = run_config.get("provenance")
+    expected_performance_keys = {
+        "production_path_exercised",
+        "authenticated_sample",
+        "admission_status",
+        "smoke_elapsed_seconds_ceiling",
+        "projected_full_run_seconds_ceiling",
+        "post_comparison_preparation_path_exercised",
+        "qa_replay_render_seconds_per_series_ceiling",
+        "representative_benchmark_seconds_ceiling",
+        "review_artifacts_per_series_ceiling",
+        "review_artifact_bytes_per_series_power_of_two_mib_ceiling",
+    }
+    if (
+        payload != _canonical_json_bytes(value)
+        or set(value)
+        != {
+            "schema_version",
+            "artifact_type",
+            "status",
+            "full_run_started",
+            "provenance",
+            "runtime",
+            "performance",
+            "privacy",
+        }
+        or value.get("schema_version") != 1
+        or value.get("artifact_type") != "dicom-qa-performance-smoke-sanitized-aggregate"
+        or value.get("status") != "pass"
+        or value.get("full_run_started") is not False
+        or not isinstance(config_provenance, Mapping)
+        or not isinstance(provenance, dict)
+        or set(provenance)
+        != {
+            "git_commit",
+            "bundle_sha256",
+            "runner_sha256",
+            "smoke_entrypoint_sha256",
+            "performance_smoke_policy_sha256",
+            "preprocessing_config_sha256",
+            "preprocessing_version",
+            "source_manifest_version",
+            "source_manifest_audit_id",
+            "input_binding_sha256",
+        }
+        or provenance.get("git_commit") != run_config.get("code_commit")
+        or provenance.get("bundle_sha256") != run_config.get("bundle_sha256")
+        or provenance.get("runner_sha256") != config_provenance.get("runner_sha256")
+        or provenance.get("smoke_entrypoint_sha256")
+        != config_provenance.get("performance_smoke_sha256")
+        or provenance.get("performance_smoke_policy_sha256")
+        != config_provenance.get("performance_smoke_policy_sha256")
+        or provenance.get("preprocessing_config_sha256")
+        != config_provenance.get("preprocessing_config_sha256")
+        or provenance.get("preprocessing_version") != config_provenance.get("preprocessing_version")
+        or provenance.get("source_manifest_version") != SOURCE_MANIFEST_VERSION
+        or provenance.get("source_manifest_audit_id") != SOURCE_MANIFEST_AUDIT_ID
+        or not isinstance(provenance.get("input_binding_sha256"), str)
+        or HEX_64.fullmatch(cast(str, provenance["input_binding_sha256"])) is None
+        or runtime
+        != {
+            "private_kernel": True,
+            "internet": False,
+            "accelerator": "cpu",
+            "self_deadline_seconds": 3_600,
+            "full_pass_budget_seconds": SELF_DEADLINE_SECONDS,
+            "competition_cpu_limit_seconds": inference_limit_seconds,
+        }
+        or not isinstance(performance, dict)
+        or set(performance) != expected_performance_keys
+        or performance.get("production_path_exercised") is not True
+        or performance.get("authenticated_sample") is not True
+        or performance.get("admission_status") != "pass"
+        or performance.get("post_comparison_preparation_path_exercised") is not True
+        or performance.get("review_artifacts_per_series_ceiling") != 7
+        or value.get("privacy")
+        != {
+            "identifiers_emitted": False,
+            "paths_emitted": False,
+            "pixels_emitted": False,
+            "reports_emitted": False,
+            "private_resource_locators_emitted": False,
+            "private_artifact_checksums_emitted": False,
+        }
+    ):
+        raise SafeRunError("performance_smoke_summary_invalid")
+    for key in (
+        "smoke_elapsed_seconds_ceiling",
+        "projected_full_run_seconds_ceiling",
+        "representative_benchmark_seconds_ceiling",
+    ):
+        item = performance.get(key)
+        if isinstance(item, bool) or not isinstance(item, int) or item < 60 or item % 60:
+            raise SafeRunError("performance_smoke_summary_invalid")
+    replay_seconds = performance.get("qa_replay_render_seconds_per_series_ceiling")
+    mib = performance.get("review_artifact_bytes_per_series_power_of_two_mib_ceiling")
+    if (
+        isinstance(replay_seconds, bool)
+        or not isinstance(replay_seconds, int)
+        or not 1 <= replay_seconds <= 3_600
+        or isinstance(mib, bool)
+        or not isinstance(mib, int)
+        or not 1 <= mib <= 256
+        or mib & (mib - 1)
+    ):
+        raise SafeRunError("performance_smoke_summary_invalid")
+    return cast(Mapping[str, object], performance)
+
+
+def _preparation_admission(
+    *,
+    certificate: Mapping[str, object],
+    cohort_plan_sha256: str,
+    eligible_series: int,
+    output_parent: Path,
+    deadline_at: float | None,
+    provenance: Mapping[str, object],
+) -> dict[str, object]:
+    required = {
+        "post_comparison_preparation_path_exercised",
+        "qa_replay_render_seconds_per_series_ceiling",
+        "representative_benchmark_seconds_ceiling",
+        "review_artifacts_per_series_ceiling",
+        "review_artifact_bytes_per_series_power_of_two_mib_ceiling",
+    }
+    if set(certificate) != required or not HEX_64.fullmatch(cohort_plan_sha256):
+        raise SafeRunError("qa_preparation_certificate_invalid")
+    replay_seconds = certificate.get("qa_replay_render_seconds_per_series_ceiling")
+    benchmark_seconds = certificate.get("representative_benchmark_seconds_ceiling")
+    files_per_series = certificate.get("review_artifacts_per_series_ceiling")
+    mib_per_series = certificate.get("review_artifact_bytes_per_series_power_of_two_mib_ceiling")
+    if (
+        certificate.get("post_comparison_preparation_path_exercised") is not True
+        or isinstance(replay_seconds, bool)
+        or not isinstance(replay_seconds, int)
+        or not 1 <= replay_seconds <= 3_600
+        or isinstance(benchmark_seconds, bool)
+        or not isinstance(benchmark_seconds, int)
+        or not 60 <= benchmark_seconds <= 3_600
+        or benchmark_seconds % 60
+        or files_per_series != 7
+        or isinstance(mib_per_series, bool)
+        or not isinstance(mib_per_series, int)
+        or not 1 <= mib_per_series <= 256
+        or mib_per_series & (mib_per_series - 1)
+        or isinstance(eligible_series, bool)
+        or not isinstance(eligible_series, int)
+        or eligible_series < MINIMUM_ELIGIBLE_STUDIES
+    ):
+        raise SafeRunError("qa_preparation_certificate_invalid")
+    projected_files = eligible_series * files_per_series
+    projected_bytes = eligible_series * mib_per_series * 1024**2
+    if (
+        projected_files > PRIVATE_REVIEW_MAX_FILES
+        or projected_bytes > PRIVATE_REVIEW_MAX_TOTAL_BYTES
+    ):
+        raise SafeRunError("qa_review_artifact_capacity_exceeded")
+    required_disk = (
+        projected_bytes
+        + files_per_series * PRIVATE_REVIEW_MAX_FILE_BYTES
+        + sum(PRIVATE_OUTPUT_POLICY.values())
+    )
+    try:
+        available_disk = shutil.disk_usage(output_parent).free
+    except OSError as error:
+        raise SafeRunError("qa_preparation_capacity_unavailable") from error
+    if available_disk < required_disk:
+        raise SafeRunError("qa_preparation_capacity_unavailable")
+    required_seconds = eligible_series * replay_seconds + benchmark_seconds + 600
+    remaining = deadline_at - time.monotonic() if deadline_at is not None else SELF_DEADLINE_SECONDS
+    if not math.isfinite(remaining) or remaining < required_seconds:
+        raise SafeRunError("qa_preparation_runtime_exceeds_budget")
+    return {
+        "schema_version": 1,
+        "artifact_type": "private-dicom-qa-preparation-capacity-certificate",
+        "status": "pass",
+        "provenance": dict(provenance),
+        "admission": {
+            "eligible_series": eligible_series,
+            "projected_review_files": projected_files,
+            "projected_review_bytes": projected_bytes,
+            "projected_replay_seconds": eligible_series * replay_seconds,
+            "projected_benchmark_seconds": benchmark_seconds,
+            "finalization_reserve_seconds": 600,
+            "required_seconds": required_seconds,
+            "remaining_seconds_at_gate": math.floor(remaining),
+            "available_working_disk_bytes_at_gate": available_disk,
+            "required_working_disk_bytes": required_disk,
+        },
+    }
+
+
+def prepare_private_review(
+    *,
+    competition_root: Path,
+    output_root: Path,
+    staging_parent: Path,
+    run_config: Mapping[str, Any],
+    preprocessing_config_path: Path,
+    full_manifest_path: Path,
+    full_metrics_path: Path,
+    cohort_plan_path: Path,
+    comparison_proof_path: Path,
+    performance_smoke_summary_payload: bytes,
+    review_plan_ref: str,
+    review_plan_version: int,
+    inference_limit_seconds: int,
+    deadline_at: float | None,
+) -> None:
+    """Materialize the authenticated Run-A cohort after independent comparison."""
+
+    from rsna_knee.data import series_slots as slots
+    from rsna_knee.dicom import benchmark as benchmark_module
+    from rsna_knee.dicom import pipeline
+    from rsna_knee.qa import preprocessing as qa
+
+    if (
+        output_root.exists()
+        or output_root.is_symlink()
+        or not staging_parent.is_dir()
+        or staging_parent.is_symlink()
+        or not isinstance(review_plan_ref, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}/[a-z0-9][a-z0-9_-]{0,99}", review_plan_ref)
+        is None
+        or review_plan_version != 1
+    ):
+        raise SafeRunError("qa_preparation_output_invalid")
+    metrics_payload = _read_bounded(
+        full_metrics_path,
+        RUN_PRIVATE_OUTPUT_POLICY["private_full_run_metrics.json"],
+        "private_full_run_metrics_invalid",
+    )
+    metrics = _json_object(metrics_payload, "private_full_run_metrics_invalid")
+    if (
+        metrics_payload != _canonical_json_bytes(metrics)
+        or metrics.get("schema_version") != 1
+        or metrics.get("artifact_type") != "private-dicom-full-run-metrics"
+    ):
+        raise SafeRunError("private_full_run_metrics_invalid")
+    cohort_payload = _read_bounded(
+        cohort_plan_path,
+        RUN_PRIVATE_OUTPUT_POLICY["private_cohort_plan.json"],
+        "private_cohort_plan_invalid",
+    )
+    cohort_plan = _validated_cohort_plan(cohort_payload, run_config=run_config, metrics=metrics)
+    cohort_plan_sha256 = _sha256_bytes(cohort_payload)
+    qa_selection = cast(Mapping[str, Any], metrics.get("qa_cohort_selection"))
+    if qa_selection.get("cohort_plan_sha256") != cohort_plan_sha256:
+        raise SafeRunError("private_cohort_plan_invalid")
+    comparison_payload = _read_bounded(
+        comparison_proof_path, 256 * 1024, "comparison_proof_invalid"
+    )
+    _validated_comparison_proof(
+        comparison_payload,
+        manifest_sha256=cast(str, metrics["manifest_sha256"]),
+        cohort_plan_sha256=cohort_plan_sha256,
+        metrics=metrics,
+    )
+    smoke_performance = _validated_preparation_smoke_summary(
+        performance_smoke_summary_payload,
+        run_config=run_config,
+        inference_limit_seconds=inference_limit_seconds,
+    )
+    selection = cast(Mapping[str, Any], cohort_plan["selection"])
+    eligible_series = selection["eligible_series"]
+    comparison_sha256 = _sha256_bytes(comparison_payload)
+    capacity_provenance = {
+        "git_commit": run_config["code_commit"],
+        "bundle_sha256": run_config["bundle_sha256"],
+        "review_plan_ref": review_plan_ref,
+        "review_plan_version": review_plan_version,
+        "performance_smoke_summary_sha256": _sha256_bytes(performance_smoke_summary_payload),
+        "full_run_manifest_sha256": metrics["manifest_sha256"],
+        "cohort_plan_sha256": cohort_plan_sha256,
+        "comparison_sha256": comparison_sha256,
+        "qa_renderer_version": qa.RENDERER_VERSION,
+        "qa_stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+        "qa_stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+    }
+    capacity_certificate = _preparation_admission(
+        certificate={
+            key: smoke_performance[key]
+            for key in (
+                "post_comparison_preparation_path_exercised",
+                "qa_replay_render_seconds_per_series_ceiling",
+                "representative_benchmark_seconds_ceiling",
+                "review_artifacts_per_series_ceiling",
+                "review_artifact_bytes_per_series_power_of_two_mib_ceiling",
+            )
+        },
+        cohort_plan_sha256=cohort_plan_sha256,
+        eligible_series=eligible_series,
+        output_parent=staging_parent,
+        deadline_at=deadline_at,
+        provenance=capacity_provenance,
+    )
+    capacity_certificate_sha256 = _sha256_bytes(_canonical_json_bytes(capacity_certificate))
+    metrics["qa_preparation_capacity_certificate"] = capacity_certificate
+    metrics["qa_preparation_capacity_certificate_sha256"] = capacity_certificate_sha256
+    selected_studies = cast(Sequence[Mapping[str, Any]], cohort_plan["studies"])
+    manifest_records = _selected_manifest_records(
+        full_manifest_path,
+        expected_sha256=cast(str, metrics["manifest_sha256"]),
+        expected_run_config=run_config,
+        selected_study_uids=[cast(str, item["study_uid"]) for item in selected_studies],
+    )
+    _decoder_preflight()
+    rows = _read_series_rows(competition_root / "train_series.csv")
+    row_by_identity = {(row.study_uid, row.series_uid): row for row in rows}
+    config = _preprocessing_config(preprocessing_config_path, pipeline)
+    versions = pipeline.PipelineVersions(
+        code_commit=str(run_config["code_commit"]),
+        source_manifest_version=SOURCE_MANIFEST_VERSION,
+    )
+    workers = run_config.get("workers")
+    if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
+        raise SafeRunError("worker_count_invalid")
+
+    staging_root = Path(tempfile.mkdtemp(prefix=".dicom-qa-review-plan-", dir=staging_parent))
+    final_staging = staging_root / OUTPUT_DIRECTORY
+    review_root = final_staging / PRIVATE_REVIEW_DIRECTORY
+    final_staging.mkdir()
+    review_root.mkdir()
+    preparation_started = time.perf_counter()
+    preparation_cpu_started = _cpu_seconds()
+    preparation_peak_rss_started = _peak_rss_bytes()
+    qa_generation_seconds = 0.0
+    private_cases: list[dict[str, object]] = []
+    rendered_series = 0
+    exact_artifact_files = 0
+    exact_artifact_bytes = 0
+    first_provenance: Any | None = None
+    try:
+        _safe_event("dicom_qa_plan_progress", phase="cohort_replay", code="start")
+        for case_ordinal, planned_study in enumerate(selected_studies):
+            _check_deadline(deadline_at)
+            study_uid = cast(str, planned_study["study_uid"])
+            manifest_study = manifest_records[study_uid]
+            series_records = manifest_study.get("series")
+            missing_mask = manifest_study.get("missing_series_mask")
+            if not isinstance(series_records, list) or not isinstance(missing_mask, list):
+                raise SafeRunError("private_full_run_manifest_invalid")
+            eligible_uids = cast(list[str], planned_study["eligible_series_uids"])
+            eligible_set = set(eligible_uids)
+            private_series: list[dict[str, object]] = []
+            observed_eligible: set[str] = set()
+            for series_ordinal, record in enumerate(series_records):
+                if not isinstance(record, dict):
+                    raise SafeRunError("private_full_run_manifest_invalid")
+                series_uid = record.get("series_uid")
+                source = record.get("source")
+                if (
+                    not isinstance(series_uid, str)
+                    or UID.fullmatch(series_uid) is None
+                    or not isinstance(source, dict)
+                ):
+                    raise SafeRunError("private_full_run_manifest_invalid")
+                row = row_by_identity.get((study_uid, series_uid))
+                if row is None or source != {
+                    "plane": row.plane,
+                    "fluid_sensitive": row.fluid_sensitive,
+                    "fat_suppression": row.fat_suppression,
+                }:
+                    raise SafeRunError("private_full_run_manifest_invalid")
+                model_eligible = series_uid in eligible_set
+                if (record.get("terminal_state") == "model_eligible") != model_eligible:
+                    raise SafeRunError("private_cohort_plan_invalid")
+                model_reconstruction = record.get("model_output_reconstruction")
+                qa_reconstruction: Mapping[str, object] | None = None
+                ordered: Any | None = None
+                quality = record.get("quality")
+                physical_plane = "unknown"
+                laterality = "unknown"
+                if model_eligible:
+                    observed_eligible.add(series_uid)
+                    if not isinstance(model_reconstruction, Mapping):
+                        raise SafeRunError("private_full_run_manifest_invalid")
                     paths = _series_files(competition_root, row)
-                    first_pass = _decode_order_pass(paths, pipeline, deadline_at=deadline_at)
-                    repeat_pass = _decode_order_pass(paths, pipeline, deadline_at=deadline_at)
-                    if _canonical_json_bytes(
-                        _series_pass_record(first_pass)
-                    ) != _canonical_json_bytes(_series_pass_record(repeat_pass)):
-                        raise SafeRunError("full_cohort_replay_mismatch")
-                    decoded = first_pass.decoded
-                    ordered = first_pass.ordered
-                    repeat_ordered = repeat_pass.ordered
-                    decode_failures = first_pass.decode_failures
-                    order_failure = first_pass.order_failure
-                    quality = _quality(
-                        total=len(paths),
-                        decoded=len(decoded),
-                        ordered=ordered,
+                    if len(paths) != record.get("files"):
+                        raise SafeRunError("representative_profile_source_changed")
+                    (
+                        repeated_model_reconstruction,
+                        qa_reconstruction,
+                        replay_quality,
+                        ordered,
+                        artifact_records,
+                        replay_seconds,
+                    ) = _replay_render_series(
+                        row=row,
+                        paths=paths,
+                        case_ordinal=case_ordinal,
+                        series_ordinal=series_ordinal,
+                        config=config,
+                        versions=versions,
+                        pipeline_module=pipeline,
+                        qa_module=qa,
                         slots_module=slots,
+                        first_output_dir=review_root,
+                        repeat_parent=staging_root,
+                        deadline_at=deadline_at,
+                        expected_model_reconstruction=model_reconstruction,
                     )
-                    repeat_quality = _quality(
-                        total=len(paths),
-                        decoded=len(repeat_pass.decoded),
-                        ordered=repeat_ordered,
-                        slots_module=slots,
-                    )
-                    if quality != repeat_quality:
+                    if quality != {
+                        "blocked_reasons": [
+                            reason.value for reason in replay_quality.blocked_reasons
+                        ],
+                        "components": asdict(replay_quality.components),
+                    }:
                         raise SafeRunError("full_cohort_replay_mismatch")
-                    base_terminal = (
-                        "decode_blocked"
-                        if decode_failures or not decoded
-                        else "ordering_blocked"
-                        if order_failure is not None or ordered is None
-                        else "quality_blocked"
-                        if quality.blocked or not ordered.model_eligible
-                        else "preprocessing_candidate"
+                    model_reconstruction = repeated_model_reconstruction
+                    qa_generation_seconds += replay_seconds
+                    rendered_series += 1
+                    exact_artifact_files += len(artifact_records)
+                    exact_artifact_bytes += sum(
+                        cast(int, item["bytes"]) for item in artifact_records
                     )
-                terminal_state, preprocessing_failure = _selected_replay_terminal(
-                    base_terminal, full_evidence
-                )
-                orientation = (
-                    ordered.slices[0].metadata.image_orientation
-                    if ordered is not None
-                    else decoded[0].metadata.image_orientation
-                    if decoded
+                    if (
+                        exact_artifact_files > PRIVATE_REVIEW_MAX_FILES
+                        or exact_artifact_bytes > PRIVATE_REVIEW_MAX_TOTAL_BYTES
+                    ):
+                        raise SafeRunError("qa_review_artifact_capacity_exceeded")
+                    orientation = ordered.slices[0].metadata.image_orientation
+                    physical_plane = _physical_plane_value(orientation, slots)
+                    laterality = {
+                        "L": "left",
+                        "R": "right",
+                        "B": "bilateral",
+                    }.get(str(ordered.laterality or ""), "unknown")
+                    if first_provenance is None:
+                        first_provenance = cast(Mapping[str, Any], model_reconstruction)[
+                            "provenance"
+                        ]
+                transformation = (
+                    cast(Mapping[str, object], model_reconstruction).get("transformation_ledger")
+                    if isinstance(model_reconstruction, Mapping)
                     else None
                 )
-                series_key = f"case_{case_ordinal:06d}_series_{series_ordinal:03d}"
-                candidate = slots.SeriesCandidate(
-                    series_key=series_key,
-                    tie_break_key=hashlib.sha256(row.series_uid.encode("ascii")).hexdigest(),
-                    organizer_plane=None if row.plane == "missing" else row.plane,
-                    organizer_fluid_sensitive=(
-                        True
-                        if row.fluid_sensitive == "present"
-                        else False
-                        if row.fluid_sensitive == "absent"
-                        else None
-                    ),
-                    image_orientation_patient=orientation,
-                    quality=quality,
-                )
-                candidates.append(candidate)
-                states.append(
-                    {
-                        "row": row,
-                        "paths": paths,
-                        "series_ordinal": series_ordinal,
-                        "ordered": ordered,
-                        "repeat_ordered": repeat_ordered,
-                        "quality": quality,
-                        "source_failure": source_failure,
-                        "decode_failures": decode_failures,
-                        "order_failure": order_failure,
-                        "preprocessing_failure": preprocessing_failure,
-                        "terminal_state": terminal_state,
-                        "candidate": candidate,
-                        "model_reconstruction": None,
-                        "qa_reconstruction": None,
-                        "model_eligible": False,
-                        "slot": None,
-                        "retention_reasons": (),
-                    }
-                )
-            assignment = slots.assign_series_slots(tuple(candidates))
-            primary_slots = {
-                selection.primary.candidate.series_key: selection.slot.value
-                for selection in assignment.primary_slots
-                if selection.primary is not None
-            }
-            additional = {
-                item.candidate.series_key: tuple(reason.value for reason in item.reasons)
-                for item in assignment.additional_or_duplicate
-            }
-            study_eligible = False
-            for state in states:
-                candidate = state["candidate"]
-                state["slot"] = primary_slots.get(candidate.series_key, "additional_or_duplicate")
-                state["retention_reasons"] = additional.get(candidate.series_key, ())
-                ordered = state["ordered"]
-                repeat_ordered = state["repeat_ordered"]
-                if state["terminal_state"] != "model_eligible":
-                    continue
-                if ordered is None or repeat_ordered is None:
-                    raise SafeRunError("full_cohort_replay_mismatch")
-                try:
-                    model_result = pipeline.preprocess_series(ordered, config, versions)
-                    qa_result = pipeline.preprocess_series(
-                        ordered, replace(config, sample_count=None), versions
-                    )
-                    repeated_model_result = pipeline.preprocess_series(
-                        repeat_ordered, config, versions
-                    )
-                    repeated_qa_result = pipeline.preprocess_series(
-                        repeat_ordered, replace(config, sample_count=None), versions
-                    )
-                except pipeline.PipelineError:
-                    raise SafeRunError("full_cohort_replay_mismatch") from None
-                if (
-                    not np.array_equal(model_result.tensor, repeated_model_result.tensor)
-                    or model_result.provenance != repeated_model_result.provenance
-                    or not np.array_equal(qa_result.tensor, repeated_qa_result.tensor)
-                    or qa_result.provenance != repeated_qa_result.provenance
-                    or _private_reconstruction_record(model_result)
-                    != _private_reconstruction_record(repeated_model_result)
-                    or _private_reconstruction_record(qa_result)
-                    != _private_reconstruction_record(repeated_qa_result)
-                ):
-                    raise SafeRunError("full_cohort_replay_mismatch")
-                state["model_reconstruction"] = _private_reconstruction_record(model_result)
-                state["qa_reconstruction"] = _private_reconstruction_record(qa_result)
-                state["model_eligible"] = True
-                study_eligible = True
-                eligible_series += 1
-
-                qa_started = time.perf_counter()
-                metadata = _qa_metadata(
-                    case_ordinal=case_ordinal,
-                    series_ordinal=state["series_ordinal"],
-                    row=state["row"],
-                    ordered=ordered,
-                    qa_result=qa_result,
-                    qa_module=qa,
-                    slots_module=slots,
-                )
-                source = np.stack([item.pixels for item in ordered.slices], axis=0)
-                repeated_source = np.stack([item.pixels for item in repeat_ordered.slices], axis=0)
-                processed = qa_result.tensor[:, 0, :, :]
-                contact_count = min(qa.CONTACT_MAX_SLICES, len(ordered.slices))
-                contact = tuple(
-                    sorted(
-                        set(
-                            pipeline.deterministic_slice_indices(
-                                ordered.geometry.projected_positions_mm, contact_count
-                            )
-                        )
-                    )
-                )
-                qa.render_private_qa(
-                    source,
-                    processed,
-                    metadata=metadata,
-                    output_dir=first_render,
-                    contact_slice_indices=contact,
-                )
-                qa.render_private_qa(
-                    repeated_source,
-                    repeated_qa_result.tensor[:, 0, :, :],
-                    metadata=metadata,
-                    output_dir=repeat_render,
-                    contact_slice_indices=contact,
-                )
-                qa_generation_seconds += time.perf_counter() - qa_started
-                rendered_series += 1
-            if study_eligible:
-                eligible_studies += 1
-                eligible_strata.add(selected_study.stratum)
-
-            private_series: list[dict[str, object]] = []
-            for state in states:
-                terminal_state = str(state["terminal_state"])
                 private_series.append(
                     {
-                        "series_ordinal": state["series_ordinal"],
-                        "series_uid": state["row"].series_uid,
-                        **_review_plane_context(
-                            state["row"],
-                            state["candidate"].image_orientation_patient,
-                            slots,
+                        "series_ordinal": series_ordinal,
+                        "series_uid": series_uid,
+                        "organizer_plane": row.plane,
+                        "physical_plane": physical_plane,
+                        "slot": record.get("slot"),
+                        "laterality": laterality,
+                        "laterality_transform": (
+                            cast(Mapping[str, object], transformation).get("laterality_transform")
+                            if isinstance(transformation, Mapping)
+                            else "not_processed"
                         ),
-                        "slot": state["slot"],
-                        "retention_reasons": list(state["retention_reasons"]),
-                        "quality": {
-                            "blocked_reasons": [
-                                reason.value for reason in state["quality"].blocked_reasons
-                            ],
-                            "components": asdict(state["quality"].components),
-                        },
-                        "source_failure": state["source_failure"],
-                        "decode_failures": list(state["decode_failures"]),
-                        "ordering_failure": state["order_failure"],
-                        "preprocessing_failure": state["preprocessing_failure"],
-                        "terminal_state": terminal_state,
-                        "model_eligible": state["model_eligible"],
-                        "model_output_reconstruction": state["model_reconstruction"],
-                        "qa_output_reconstruction": state["qa_reconstruction"],
+                        "horizontal_flip_applied": (
+                            cast(Mapping[str, object], transformation).get(
+                                "horizontal_flip_applied"
+                            )
+                            if isinstance(transformation, Mapping)
+                            else None
+                        ),
+                        "retention_reasons": record.get("retention_reasons"),
+                        "quality": quality,
+                        "source_failure": record.get("source_failure"),
+                        "decode_failures": record.get("decode_failures"),
+                        "ordering_failure": record.get("ordering_failure"),
+                        "preprocessing_failure": record.get("preprocessing_failure"),
+                        "terminal_state": record.get("terminal_state"),
+                        "model_eligible": model_eligible,
+                        "model_output_reconstruction": model_reconstruction,
+                        "qa_output_reconstruction": qa_reconstruction,
                     }
                 )
+            if observed_eligible != eligible_set:
+                raise SafeRunError("private_cohort_plan_invalid")
             private_cases.append(
                 {
                     "case_ordinal": case_ordinal,
-                    "study_uid": selected_study.study_uid,
-                    "selection_stratum": list(selected_study.stratum),
-                    "review_eligible": study_eligible,
-                    "missing_series_mask": list(assignment.missing_mask),
+                    "study_uid": study_uid,
+                    "selection_stratum": planned_study["selection_stratum"],
+                    "registry_memberships": planned_study["memberships"],
+                    "review_eligible": True,
+                    "missing_series_mask": missing_mask,
                     "series": private_series,
                 }
             )
-
-        if eligible_studies < MINIMUM_ELIGIBLE_STUDIES:
-            raise SafeRunError("eligible_study_gate_failed")
-        material_strata = {item.stratum for item in selection_plan.census if item.material}
-        if not material_strata.issubset(eligible_strata):
-            raise SafeRunError("eligible_material_strata_coverage_failed")
-        if eligible_series < eligible_studies or rendered_series != eligible_series:
+        if rendered_series != eligible_series or first_provenance is None:
             raise SafeRunError("eligible_series_render_incomplete")
-        cohort_replay_seconds = time.perf_counter() - cohort_replay_started
-        first_records = _directory_records(first_render)
-        repeat_records = _directory_records(repeat_render)
-        if first_records != repeat_records:
-            raise SafeRunError("repeat_render_nondeterministic")
-        if not representative_inputs or first_provenance is None:
-            raise SafeRunError("benchmark_input_missing")
-        _safe_event("dicom_qa_progress", phase="cohort_replay", code="complete")
+        _safe_event("dicom_qa_plan_progress", phase="cohort_replay", code="complete")
 
-        _safe_event("dicom_qa_progress", phase="benchmark", code="start")
-        worker_ceiling = min(workers, os.cpu_count() or 1, 8)
-        requested_worker_counts = REPRESENTATIVE_WORKER_COUNTS
-        worker_counts = tuple(value for value in requested_worker_counts if value <= worker_ceiling)
-        summary_profile_index = len(representative_inputs) // 2
+        _safe_event("dicom_qa_plan_progress", phase="benchmark", code="start")
+        representatives = cast(Sequence[Mapping[str, Any]], cohort_plan["representatives"])
+        representative_inputs: list[RepresentativeSeriesInput] = []
+        for item in representatives:
+            row = row_by_identity.get((item["study_uid"], item["series_uid"]))
+            if row is None:
+                raise SafeRunError("benchmark_input_missing")
+            paths = _series_files(competition_root, row)
+            if len(paths) != item["slice_count"]:
+                raise SafeRunError("representative_profile_source_changed")
+            representative_inputs.append(
+                RepresentativeSeriesInput(
+                    profile=item["profile"],
+                    slice_count=item["slice_count"],
+                    study_uid=item["study_uid"],
+                    series_uid=item["series_uid"],
+                    paths=paths,
+                )
+            )
+        if not representative_inputs:
+            raise SafeRunError("benchmark_input_missing")
+        worker_counts = tuple(
+            value
+            for value in REPRESENTATIVE_WORKER_COUNTS
+            if value <= min(workers, os.cpu_count() or 1, 8)
+        )
         representative_reports: list[tuple[RepresentativeSeriesInput, Any, dict[str, object]]] = []
+        summary_profile_index = len(representative_inputs) // 2
         for profile_index, representative in enumerate(representative_inputs):
             report = benchmark_module.benchmark_dicom_pipeline(
                 representative.paths,
@@ -5249,51 +6287,66 @@ def _run_private_qa(
             representative_reports.append((representative, report, _rounded_benchmark(report)))
         benchmark_report = representative_reports[summary_profile_index][1]
         benchmark = _rounded_benchmark(benchmark_report)
-        _safe_event("dicom_qa_progress", phase="benchmark", code="complete")
-        timings = cast(dict[str, float], full_run_metrics["timings_seconds"])
+        _safe_event("dicom_qa_plan_progress", phase="benchmark", code="complete")
+
+        preparation_seconds = time.perf_counter() - preparation_started
+        preparation_cpu_seconds = max(0.0, _cpu_seconds() - preparation_cpu_started)
+        preparation_peak_rss = _peak_rss_bytes()
+        timings = cast(dict[str, float], metrics["timings_seconds"])
         timings["qa_generation_seconds"] = qa_generation_seconds
-        timings["selected_cohort_replay_seconds"] = cohort_replay_seconds
-        full_dataset_wall_seconds = float(cast(Any, full_run_metrics["total_wall_seconds"]))
-        full_run_metrics["full_dataset_wall_seconds"] = full_dataset_wall_seconds
-        total_wall_seconds = time.perf_counter() - private_run_started
-        full_run_metrics["total_wall_seconds"] = total_wall_seconds
-        timings["total_seconds"] = total_wall_seconds
-        process_cpu_seconds = max(0.0, _cpu_seconds() - private_run_cpu_started)
-        full_run_metrics["process_cpu_seconds"] = process_cpu_seconds
-        cpu_capacity = int(cast(Any, full_run_metrics["cpu_capacity_threads"]))
-        full_run_metrics["cpu_utilization_percent"] = min(
+        timings["selected_cohort_replay_seconds"] = qa_generation_seconds
+        metrics["qa_preparation_wall_seconds"] = preparation_seconds
+        metrics["qa_preparation_process_cpu_seconds"] = preparation_cpu_seconds
+        metrics["total_wall_seconds"] = (
+            float(cast(int | float, metrics["total_wall_seconds"])) + preparation_seconds
+        )
+        timings["total_seconds"] = float(cast(int | float, metrics["total_wall_seconds"]))
+        metrics["process_cpu_seconds"] = (
+            float(cast(int | float, metrics["process_cpu_seconds"])) + preparation_cpu_seconds
+        )
+        metrics["process_peak_rss_bytes"] = max(
+            cast(int, metrics["process_peak_rss_bytes"]), preparation_peak_rss
+        )
+        metrics["process_peak_rss_increase_bytes"] = max(
+            cast(int, metrics["process_peak_rss_increase_bytes"]),
+            max(0, preparation_peak_rss - preparation_peak_rss_started),
+        )
+        cpu_capacity = cast(int, metrics["cpu_capacity_threads"])
+        metrics["cpu_utilization_percent"] = min(
             100.0,
-            100.0 * process_cpu_seconds / max(total_wall_seconds * cpu_capacity, 1e-12),
+            100.0
+            * float(cast(int | float, metrics["process_cpu_seconds"]))
+            / max(
+                float(cast(int | float, metrics["total_wall_seconds"])) * cpu_capacity,
+                1e-12,
+            ),
         )
-        process_peak_rss_bytes = _peak_rss_bytes()
-        full_run_metrics["process_peak_rss_bytes"] = process_peak_rss_bytes
-        full_run_metrics["process_peak_rss_increase_bytes"] = max(
-            0, process_peak_rss_bytes - private_run_peak_rss_started
+        review_records = _directory_records(review_root)
+        if (
+            len(review_records) != exact_artifact_files
+            or sum(cast(int, item["bytes"]) for item in review_records) != exact_artifact_bytes
+        ):
+            raise SafeRunError("private_artifact_inventory_invalid")
+        metrics["private_review_artifact_bytes"] = exact_artifact_bytes
+        metrics["peak_private_working_disk_bytes"] = max(
+            int(metrics["peak_private_working_disk_bytes"]),
+            int(metrics["manifest_bytes"]) + exact_artifact_bytes,
         )
-        review_bytes = sum(int(cast(Any, item["bytes"])) for item in first_records)
-        repeated_review_bytes = sum(int(cast(Any, item["bytes"])) for item in repeat_records)
-        full_run_metrics["private_review_artifact_bytes"] = review_bytes
-        full_run_metrics["peak_private_working_disk_bytes"] = max(
-            int(cast(Any, full_run_metrics["peak_private_working_disk_bytes"])),
-            int(cast(Any, full_run_metrics["manifest_bytes"]))
-            + review_bytes
-            + repeated_review_bytes,
+        metrics["peak_private_working_disk_observation"] = (
+            "full_manifest_plus_streamed_single_repeat_series_and_final_review_artifacts"
         )
-        full_run_metrics["peak_private_working_disk_observation"] = (
-            "full_manifest_plus_first_and_repeat_review_artifacts_before_repeat_deletion"
-        )
-        full_run_metrics["qa_generation_measurement"] = {
-            "scope": "selected_post_full_pass_cohort",
+        metrics["qa_generation_measurement"] = {
+            "scope": "authenticated_run_a_post_comparison_cohort",
             "render_passes": 2,
             "series_rendered_per_pass": rendered_series,
-            "separately_timed": True,
+            "repeat_artifacts_deleted_per_series": True,
         }
-        full_run_metrics["representative_scaling"] = {
+        metrics["representative_scaling"] = {
             "selection_method": "model_eligible_slice_count_rank_small_median_large_v1",
-            "requested_worker_counts": list(requested_worker_counts),
+            "requested_worker_counts": list(REPRESENTATIVE_WORKER_COUNTS),
             "available_worker_counts": list(worker_counts),
             "unavailable_worker_counts": [
-                value for value in requested_worker_counts if value not in worker_counts
+                value for value in REPRESENTATIVE_WORKER_COUNTS if value not in worker_counts
             ],
             "profiles": [
                 {
@@ -5312,65 +6365,81 @@ def _run_private_qa(
                 for representative, report, rounded in representative_reports
             ],
         }
-        full_run_metrics["end_to_end_throughput"] = {
-            "files_per_second": int(cast(Any, full_run_metrics["files_processed"]))
-            / max(total_wall_seconds, 1e-12),
-            "series_per_second": int(cast(Any, full_run_metrics["series_processed"]))
-            / max(total_wall_seconds, 1e-12),
-            "studies_per_second": int(cast(Any, full_run_metrics["studies_processed"]))
-            / max(total_wall_seconds, 1e-12),
+        metrics["end_to_end_throughput"] = {
+            "files_per_second": int(metrics["files_processed"])
+            / max(float(metrics["total_wall_seconds"]), 1e-12),
+            "series_per_second": int(metrics["series_processed"])
+            / max(float(metrics["total_wall_seconds"]), 1e-12),
+            "studies_per_second": int(metrics["studies_processed"])
+            / max(float(metrics["total_wall_seconds"]), 1e-12),
         }
-        performance = _sanitized_performance(full_run_metrics, inference_limit_seconds)
-        runner_sha256 = _sha256_file(Path(__file__).resolve(strict=True))
+        performance = _sanitized_performance(metrics, inference_limit_seconds)
         provenance_config = cast(Mapping[str, Any], run_config["provenance"])
-        qa_cohort_selection = cast(dict[str, object], full_run_metrics["qa_cohort_selection"])
-        integrity_status = cast(Mapping[str, object], full_run_metrics["integrity_gate"])["status"]
+        provenance = {
+            "git_commit": run_config["code_commit"],
+            "bundle_sha256": run_config["bundle_sha256"],
+            "runner_sha256": _sha256_file(Path(__file__).resolve(strict=True)),
+            "review_finalizer_sha256": provenance_config["review_finalizer_sha256"],
+            "full_run_manifest_sha256": metrics["manifest_sha256"],
+            "cohort_plan_sha256": cohort_plan_sha256,
+            "comparison_sha256": comparison_sha256,
+            "review_plan_ref": review_plan_ref,
+            "review_plan_version": review_plan_version,
+            "qa_stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+            "qa_stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
+            "qa_renderer_version": qa.RENDERER_VERSION,
+        }
         summary = {
             "schema_version": 1,
             "artifact_type": "dicom-qa-sanitized-aggregate",
-            "status": (
-                "complete_pending_human_review"
-                if integrity_status == "pass"
-                else "blocked_unresolved_integrity"
-            ),
+            "status": "complete_pending_human_review",
             "provenance": {
                 "git_commit": run_config["code_commit"],
                 "bundle_sha256": run_config["bundle_sha256"],
-                "runner_sha256": runner_sha256,
-                "review_finalizer_sha256": provenance_config["review_finalizer_sha256"],
+                "runner_sha256": provenance["runner_sha256"],
+                "review_finalizer_sha256": provenance["review_finalizer_sha256"],
                 "preprocessing_config_file_sha256": provenance_config[
                     "preprocessing_config_sha256"
                 ],
-                "preprocessing_configuration_hash": first_provenance.configuration_hash,
-                "preprocessing_version": first_provenance.preprocessing_version,
-                "source_manifest_version": first_provenance.source_manifest_version,
+                "preprocessing_configuration_hash": cast(Mapping[str, Any], first_provenance)[
+                    "configuration_hash"
+                ],
+                "preprocessing_version": cast(Mapping[str, Any], first_provenance)[
+                    "preprocessing_version"
+                ],
+                "source_manifest_version": cast(Mapping[str, Any], first_provenance)[
+                    "source_manifest_version"
+                ],
                 "qa_cohort_selection_version": QA_COHORT_SELECTION_VERSION,
                 "dicom_library_versions": [
                     {"package": package, "version": version}
-                    for package, version in first_provenance.dicom_library_versions
+                    for package, version in cast(
+                        Sequence[Sequence[str]],
+                        cast(Mapping[str, Any], first_provenance)["dicom_library_versions"],
+                    )
                 ],
             },
             "selection": {
-                "source": "full_run_terminal_records_plus_authenticated_manifest_v2",
-                "target_studies": TARGET_STUDIES,
-                "maximum_studies": MAX_TARGET_STUDIES,
-                "selected_studies": "between_120_and_240",
-                "minimum_eligible_studies": MINIMUM_ELIGIBLE_STUDIES,
+                "source": "authenticated_run_a_cohort_plan_v1",
+                "minimum_studies": MINIMUM_ELIGIBLE_STUDIES,
+                "minimum_is_not_maximum": True,
+                "selected_studies": "at_least_100",
                 "eligible_studies": "at_least_100",
                 "stratified": True,
-                "slice_count_stratified": True,
-                "material_strata_covered": True,
-                "bounded_deterministic_expansion": True,
+                "all_required_represented_registry_values_satisfy_quotas": True,
+                "deterministic_constrained_greedy": True,
                 "selected_after_full_pass": True,
                 "source_manifest_authenticated": True,
-                "available_required_strata_dispositioned": True,
+                "represented_value_quota": REPRESENTED_VALUE_QUOTA,
                 "cohort_selection_version": QA_COHORT_SELECTION_VERSION,
+                "stratum_registry_version": QA_STRATUM_REGISTRY_VERSION,
+                "stratum_registry_sha256": QA_STRATUM_REGISTRY_SHA256,
             },
             "pipeline": {
                 "full_training_dataset_processed": True,
                 "all_series_terminal": True,
-                "integrity_gate": integrity_status,
-                "unresolved_blockers": ("zero" if integrity_status == "pass" else "one_or_more"),
+                "integrity_gate": "pass",
+                "unresolved_blockers": "zero",
                 "series_slot_system_exercised": True,
                 "model_eligible_series": "at_least_100",
                 "failure_reporting": "fixed_codes_with_case_details_private",
@@ -5406,115 +6475,76 @@ def _run_private_qa(
         _scan_downloadable(
             benchmark_payload, str(cast(Mapping[str, Any], run_config["privacy"])["canary"])
         )
-        sanitized_inventory = {
-            "schema_version": 1,
-            "artifact_type": "dicom-qa-sanitized-artifact-inventory",
-            "provenance": {
-                "git_commit": run_config["code_commit"],
-                "bundle_sha256": run_config["bundle_sha256"],
+        inventory_payload = _core_inventory_payload(
+            run_config=run_config, summary_payload=summary_payload
+        )
+        inventory_value = _json_object(inventory_payload, "sanitized_inventory_invalid")
+        inventory_value["artifact_type"] = "dicom-qa-sanitized-artifact-inventory"
+        inventory_value["artifacts"].insert(
+            0,
+            {
+                "name": "benchmark.md",
+                "kind": "aggregate_documentation",
+                "bytes": len(benchmark_payload),
+                "sha256": _sha256_bytes(benchmark_payload),
             },
-            "artifacts": [
-                {
-                    "name": "benchmark.md",
-                    "kind": "aggregate_documentation",
-                    "bytes": len(benchmark_payload),
-                    "sha256": _sha256_bytes(benchmark_payload),
-                },
-                {
-                    "name": "sanitized_summary.json",
-                    "kind": "aggregate_json",
-                    "bytes": len(summary_payload),
-                    "sha256": _sha256_bytes(summary_payload),
-                },
-            ],
-        }
-        sanitized_inventory_payload = _canonical_json_bytes(sanitized_inventory)
+        )
+        inventory_payload = _canonical_json_bytes(inventory_value)
         _validate_inventory(
-            sanitized_inventory_payload,
+            inventory_payload,
             run_config=run_config,
             summary_payload=summary_payload,
             benchmark_payload=benchmark_payload,
         )
-        if (
-            _case_index_cohort_sha256(private_cases) != qa_cohort_selection["cohort_sha256"]
-            or qa_cohort_selection["selected_studies"] != len(private_cases)
-            or qa_cohort_selection["eligible_series"] != eligible_series
-        ):
-            raise SafeRunError("qa_cohort_identity_mismatch")
-        private_status = (
-            "pending_private_human_review"
-            if integrity_status == "pass"
-            else "blocked_unresolved_integrity"
-        )
-        private_input_identity = {
-            "source_manifest": {
-                "audit_id": source_manifest_identity["audit_id"],
-                "version": source_manifest_identity["manifest_version"],
-                "source_manifest_artifact_sha256": source_manifest_identity[
-                    "source_manifest_artifact_sha256"
-                ],
-            },
-            "official_competition": {
-                "slug": COMPETITION_SLUG,
-                "official_input_snapshot_sha256": source_manifest_identity[
-                    "official_input_snapshot_sha256"
-                ],
-            },
-        }
-        private_case_payload = _canonical_json_bytes(
+        case_selection = dict(qa_selection)
+        case_selection["coverage_ledger"] = cohort_plan["coverage"]["ledger"]
+        metrics["qa_cohort_selection"] = case_selection
+        case_payload = _canonical_json_bytes(
             {
                 "schema_version": 1,
                 "artifact_type": "private-dicom-qa-case-index",
-                "status": private_status,
-                "provenance": {
-                    "git_commit": run_config["code_commit"],
-                    "bundle_sha256": run_config["bundle_sha256"],
-                    "runner_sha256": runner_sha256,
-                    "review_finalizer_sha256": provenance_config["review_finalizer_sha256"],
-                },
-                "input_identity": private_input_identity,
-                "qa_cohort_selection": qa_cohort_selection,
-                "selection_census": [asdict(item) for item in selection_plan.census],
-                "represented_review_strata": [list(item) for item in sorted(eligible_strata)],
+                "status": "pending_private_human_review",
+                "provenance": provenance,
+                "input_identity": cast(Mapping[str, Any], metrics["input_identity"]),
+                "qa_cohort_selection": case_selection,
+                "capacity_certificate": capacity_certificate,
+                "capacity_certificate_sha256": capacity_certificate_sha256,
+                "represented_review_strata": [
+                    list(item)
+                    for item in sorted(
+                        {
+                            tuple(cast(Sequence[str], study["selection_stratum"]))
+                            for study in selected_studies
+                        }
+                    )
+                ],
                 "studies": private_cases,
                 "benchmark": asdict(benchmark_report),
-                "full_run": full_run_metrics,
+                "full_run": metrics,
             }
         )
         private_inventory_payload = _canonical_json_bytes(
             {
                 "schema_version": 1,
                 "artifact_type": "private-dicom-qa-artifact-inventory",
-                "status": private_status,
+                "status": "pending_private_human_review",
                 "provenance": {
-                    "git_commit": run_config["code_commit"],
-                    "bundle_sha256": run_config["bundle_sha256"],
-                    "runner_sha256": runner_sha256,
-                    "review_finalizer_sha256": provenance_config["review_finalizer_sha256"],
-                    "private_case_index_sha256": _sha256_bytes(private_case_payload),
+                    **provenance,
+                    "private_case_index_sha256": _sha256_bytes(case_payload),
                 },
-                "artifacts": list(first_records),
+                "artifacts": list(review_records),
             }
         )
-        if len(private_case_payload) > PRIVATE_OUTPUT_POLICY["private_case_index.json"]:
+        if len(case_payload) > PRIVATE_OUTPUT_POLICY["private_case_index.json"]:
             raise SafeRunError("private_case_index_too_large")
         if (
             len(private_inventory_payload)
             > PRIVATE_OUTPUT_POLICY["private_artifact_inventory.json"]
         ):
             raise SafeRunError("private_artifact_inventory_too_large")
-
-        shutil.rmtree(repeat_render)
-        first_render.rename(final_staging / PRIVATE_REVIEW_DIRECTORY)
-        full_manifest_staging.rename(final_staging / "private_full_run_manifest.jsonl")
-        _write_new(
-            final_staging / "private_full_run_metrics.json",
-            _canonical_json_bytes(full_run_metrics),
-            maximum=PRIVATE_OUTPUT_POLICY["private_full_run_metrics.json"],
-        )
         _write_new(
             final_staging / "private_case_index.json",
-            private_case_payload,
+            case_payload,
             maximum=PRIVATE_OUTPUT_POLICY["private_case_index.json"],
         )
         _write_new(
@@ -5534,15 +6564,14 @@ def _run_private_qa(
         )
         _write_new(
             final_staging / "sanitized_artifact_inventory.json",
-            sanitized_inventory_payload,
+            inventory_payload,
             maximum=DOWNLOADABLE_OUTPUT_POLICY["sanitized_artifact_inventory.json"][1],
         )
         final_staging.rename(output_root)
     except BaseException:
-        source_manifest_reconciliation.connection.close()
-        shutil.rmtree(staging_parent, ignore_errors=True)
+        shutil.rmtree(staging_root, ignore_errors=True)
         raise
-    shutil.rmtree(staging_parent, ignore_errors=True)
+    shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def main() -> int:
@@ -5579,7 +6608,7 @@ def main() -> int:
                 del sys.modules[name]
             runtime_modules_active = True
             phase = "processing"
-            _run_private_qa(
+            _run_private_core(
                 input_root=input_root,
                 competition_root=competition_root,
                 output_root=output_root,

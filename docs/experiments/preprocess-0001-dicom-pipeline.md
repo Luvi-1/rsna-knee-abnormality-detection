@@ -1,7 +1,8 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **Run A performance recovery in progress; current candidate has focused local evidence
-only; private execution and visual review not complete; Chunk 5 not passed**.
+Status: **two-stage Run A/Run B recovery in progress; exact 29-file staged 507-test final local gate
+and independent red-team passed; freeze, private reruns, and visual review remain pending; Chunk 5
+not passed**.
 
 ## Objective
 
@@ -16,7 +17,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; freezes `a5a44ac`, `e6e5b35`, and `60df41c` are superseded-pending and the next freeze is not yet created |
+| Code | `feat/chunk-5-dicom-pipeline`; every earlier freeze is superseded and the next freeze is not yet created |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -26,21 +27,20 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | Loss | Not applicable; no labels, optimization, or model exist |
 | Augmentation | None |
 | Seed | `20260809` |
-| Compute estimate | Approval-gated private Kaggle CPU: two complete full-data runs, each admitted only after an authenticated stratified production-path throughput projection and bounded by a 27,000-second self-deadline and 28,800-second outer kill under the verified 32,400-second ceiling, plus representative 1/2/4/8-worker profiles where available; no accelerator or paid external service |
-| Expected information gain | Determine whether the full authorized input can be decoded and transformed with complete terminal accounting, exact independent replay, no systematic anatomical error in stratified human review, and a measured preprocessing contribution compatible with the current runtime ceiling |
+| Compute estimate | Approval-gated private Kaggle CPU: one authenticated smoke with separate full-pass and post-comparison preparation estimates; two complete independent full-data passes; one later capacity-gated selected-series replay, double render, and representative 1/2/4/8-worker benchmark stage in the existing review-plan kernel; all stages retain the verified competition margin; no accelerator or paid external service |
+| Expected information gain | Determine whether the full authorized input can be decoded and transformed with complete terminal accounting, byte-exact independent manifests and cohort plans, exact deterministic metrics, no systematic anatomical error in bound human review, and measured preprocessing costs compatible with the current runtime ceiling |
 | Internet | Disabled |
 | Training/inference/submission | Forbidden in this run |
 
 ## Registry state
 
-The ignored private SQLite registry remains the authority for the experiment contract. Freeze
-`a5a44ac` / bundle `7cf43...` failed with `source_manifest_version_mismatch`; replacement freeze
-`e6e5b35` / bundle `3a361...` passed input authentication and then failed with
-`source_manifest_input_invalid`; freeze `60df41c` / bundle `3dc575...` passed input authentication
-and Run A `r3` later failed with `self_deadline_exceeded`. All three rows remain terminal failed and
-append-only. Run B, comparison, human review, and attestation remain `not_started`. The next freeze
-and bundle are pending a new complete local gate; record successful results only after authenticated
-execution.
+The ignored private SQLite registry remains the authority for the experiment contract. Four Run A
+rows remain terminal failed and append-only: two stopped at source-manifest boundaries, one at the
+former processing deadline, and the fourth after its full-data pass at the superseded capped joint-
+material selector with `material_strata_coverage_impossible`. Run B, comparison, QA materialization,
+human review, and attestation remain `not_started`. Every earlier freeze and bundle is superseded.
+The exact 29-file staged candidate passed the complete final local gate. The next freeze and bundle
+remain pending; record successful remote results only after authenticated execution.
 
 ## Frozen controls
 
@@ -64,29 +64,33 @@ execution.
 
 1. Freeze one clean, dependency-locked, offline bundle and authenticate its cryptographic binding
    to the completed `audit-0002-manifest-remediation` / `manifest-v2` private source outputs.
-2. Before each full pass, execute at most 120 studies from the existing authenticated priority-1
-   stratified source-manifest sample through the production series, cache, and source-reconciliation
-   path. Admit the full pass only when the sample elapsed time plus the larger series- or file-scaled
-   projection plus a 3,600-second post-pass reserve fits the remaining budget. Then execute distinct
-   private Run A and Run B version-1 kernels. Each independently processes the entire authorized
-   training set and records every discovered study, series, and
-   DICOM in exactly one terminal state together with private decode, order, slot, quality,
-   normalization, sampling, transform, checksum, cache, and failure evidence. Each run also exactly
-   reconciles train-series membership, `source_row_count`, and organizer `plane`, `fluid_sensitive`,
-   and `fat_suppression` fields. Every regular DICOM must match its keyed relative `file_key`,
-   `file_size_bytes`, and `raw_file_exact_key` in authenticated `manifest-v2`.
-3. Use a separate version-1 comparator to require byte-exact equality of the canonical
-   deterministic manifests and exact equality of deterministic aggregate metrics. Timing and
-   resource fields are predeclared non-comparison fields; investigate every other mismatch.
-4. Measure total runtime, decode, preprocessing, slot, QA, and cache phases; peak memory; disk/cache
-   size; CPU utilization; files/series/studies throughput; and representative 1/2/4/8-worker scaling
-   where technically reasonable without repeating the full dataset unnecessarily.
-5. After the full pass, run `qa-cohort-selection-v2` across the complete eligible population.
-   Select at least 100 reviewable studies and every materially represented available stratum, then
-   include every eligible diagnostic series from each selected study. Generate contact sheets,
-   physically meaningful orthogonal views, intensity histograms, slice-order animations, metadata
-   summaries, and before/after panels privately.
-6. Create the authenticated private review plan and safe UI template. The authorized human uses
+2. Run one authenticated pre-run smoke that exercises the production full-pass path and the post-
+   comparison preparation path separately. Require conservative, independently recorded estimates
+   for both stages before starting unusually large compute.
+3. Execute distinct private Run A and Run B version-1 kernels. Each independently processes the
+   entire authorized training set once, records every discovered study, series, and DICOM in exactly
+   one terminal state, and emits a canonical manifest, deterministic metrics, and deterministic
+   cohort plan. Each run exactly reconciles train-series membership, `source_row_count`, organizer
+   `plane`, `fluid_sensitive`, and `fat_suppression` fields, plus every regular DICOM's keyed
+   relative `file_key`, `file_size_bytes`, and `raw_file_exact_key` in authenticated `manifest-v2`.
+4. Selector v3 uses exact incremental greedy selection with a minimum of 100 studies and no
+   arbitrary study maximum. Continue until every required represented value quota is satisfied in
+   bounded semantic registries, including bounded site-domain buckets. Do not compute or publish a
+   legacy joint-material census. Physical file, byte, time, and disk gates fail closed. The only
+   public registry-coverage token is
+   `all_required_represented_registry_values_satisfy_quotas`.
+5. Use the separate version-1 comparator to require byte-exact equality of both canonical manifests
+   and cohort plans plus exact equality of deterministic metrics. Timing and resource fields are
+   predeclared non-comparison fields; investigate every other mismatch.
+6. In the existing review-plan kernel, authenticate the capacity certificate against the freeze,
+   bundle, manifest, Run A, Run B, cohort plan, and renderer before pixel decode. Replay every
+   selected series, render each twice, run representative decode/preprocessing/resource benchmarks
+   once, and materialize the private review plan. Measure total runtime, decode, preprocessing,
+   slot, QA, and cache phases; peak memory; disk/cache size; CPU utilization; files/series/studies
+   throughput; and representative 1/2/4/8-worker scaling where technically reasonable. Include
+   every eligible diagnostic series from each selected study. No new kernel or data reference is
+   introduced.
+7. Use the authenticated private review plan and safe UI template. The authorized human uses
    Chrome Copy & Edit to create a distinct private review-session version 1, enters `START` before
    any artifact access, and records the frozen checks `slice_order`, `anatomical_orientation`,
    `laterality_preservation`, `no_unintended_mirroring`, `intensity_polarity`,
@@ -97,7 +101,7 @@ execution.
    `retention_reasons`, the six-boolean `missing_series_mask`, and ordinal-ordered `sibling_series`
    records with `series_ordinal`, `slot`, `terminal_state`, `model_eligible`, `retention_reasons`, and
    `quality_blocked_reasons`; artifacts resolve only under authenticated Run A.
-7. Run the version-1 finalizer against the exact Run A, Run B, comparator, plan, and completed review
+8. Run the version-1 finalizer against the exact Run A, Run B, comparator, plan, and completed review
    session. It authenticates the complete private identity chain, derives completion from the
    private ledger, writes the required aggregate private completion/attestation inside Kaggle,
    requires every check terminal and zero `BLOCK`, and releases only approved disclosure-controlled
@@ -106,43 +110,33 @@ execution.
 
 ## Current recovery evidence
 
-- The first recovery used freeze `a5a44ac` / bundle `7cf43...`; the second used freeze `e6e5b35` /
-  bundle `3a361...`. Both are superseded-pending and cannot support a Chunk 5 pass.
-- The first Run A stopped with `source_manifest_version_mismatch`; the second input chain
-  authenticated and Run A stopped with `source_manifest_input_invalid`. Both failed before DICOM
-  preprocessing, QA generation, and benchmarking. Run B was not started. Mode-0600 ignored failure
-  logs were retrieved only under exact allowlists for diagnosis; only fixed sanitized runner events
-  were exposed outside that protected metadata boundary. No DICOM, pixel, report, or patient
-  identifier was exported.
-- Root cause was a namespace conflation: the promoted governance audit ID and the source producer's
-  execution ID were both represented by the name `audit_id`, and the consumer compared the database
-  producer value with the governance constant.
-- The two-file correction preserves the outer governance identity while authenticating the producer
-  tuple through the already bound code commit, full source-bundle hash, producer-ID derivation,
-  common owner, and exact derived source references. It passed 32 focused tests plus Ruff and strict
-  mypy. The exact 12-file staged replacement candidate then passed the complete 404-test, isolated-
-  wheel, typing, privacy, security, dependency, contract, and clean-tree gate.
-- The second root cause is an exact source-schema mismatch: the consumer queried nonexistent
-  `manifest_issue.study_key` instead of the producer's shared `entity_key`, and it also included
-  singleton protected components in the duplicate stratum. The two-line correction plus one
-  real-schema regression passes all 33 focused full-run tests, Ruff, and strict mypy.
-- The exact seven-file recovery candidate passed the complete 405-test build, typing, privacy,
-  security, dependency, contract, and clean-tree gate and produced freeze `60df41c` / bundle
-  `3dc575...`. That input chain authenticated and Run A `r3` passed both earlier source-manifest
-  boundaries, then failed closed with `self_deadline_exceeded` at 21,664 seconds during processing.
-  Run B was not started. No completed full-pass, deterministic, benchmark, review-plan, or human-
-  review evidence was produced.
-- The performance-recovery candidate removes two semantics-neutral repeated costs: it computes the
-  canonical NPY checksum during the single ephemeral cache write instead of forcing durability and
-  rereading the file, and it caches invariant installed-package versions once per process. It adds
-  only fixed safe phase/quarter progress events, the authenticated stratified production-path
-  projection described above, and 27,000-second self / 28,800-second outer limits. The outer limit
-  remains 3,600 seconds below the verified competition ceiling and the outer handler retains 1,800
-  seconds after the runner deadline.
-- The performance-recovery working tree has focused regression evidence only. Its complete exact-
-  set gate, clean freeze, immutable bundle, input authentication, and Run A retry remain pending.
-  Run B, comparison, visual review, finalization, push, and hosted CI remain pending. The projection
-  is an admission control, not evidence that either full run will finish.
+- Three earlier Run A attempts failed closed at source identity, source schema, and the former
+  processing deadline. Their append-only registry rows and exact diagnosis remain historical; all
+  associated freezes and bundles are superseded.
+- The fourth Run A attempt authenticated its inputs and completed the full-data pass, then failed
+  closed with `material_strata_coverage_impossible`. Run B was not started. The failure came from
+  the superseded selector's legacy joint-material coverage contract and arbitrary cap, so no
+  admissible Run A package, deterministic comparison, benchmark, review plan, or human-review
+  evidence exists.
+- The designated checkpoint reviewer classified the checkpoint `REMEDIATION REQUIRED` and advised
+  two independent full-pass outputs with deterministic cohort plans, exact three-artifact
+  comparison, one later QA preparation in the existing review-plan kernel, selector coverage over
+  bounded semantic registries with no arbitrary maximum, and an identity-bound capacity
+  certificate. D-023 records the adopted design.
+- The exact 29-file staged candidate implements selector v3 and the two-stage flow and passed the
+  complete final local gate: staged inventory and clean-tree checks, locked offline reinstall/check,
+  isolated wheel build/install/import, MIME checks, Ruff, strict mypy over 25 package and nine
+  trust-boundary files, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
+  sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
+  source-graph red-teams found no remaining P0/P1. The new freeze, immutable bundle, authenticated
+  smoke, Run A, validation, Run B, comparison, QA
+  materialization, visual review, finalization, push, and hosted CI remain pending.
+- A broad search of ignored local artifacts printed obsolete canary sentinel strings, local
+  artifact paths, commit and bundle hashes, and the public competition slug into an internal tool
+  transcript. It printed no credentials, key bytes, authentication tokens, pixels, DICOM headers,
+  reports, or patient, study, or series identifiers. The search stopped immediately; there was no
+  repository or user-facing disclosure. The fresh bundle must rotate its canary and private
+  identities, and future ignored-artifact searches must use exact bounded allowlists.
 
 ## Private dataset pre-push gate
 
@@ -161,15 +155,17 @@ inside Kaggle and never enter repository documents or command output.
   parser, geometry, or provenance states fail closed.
 - Both independent full private runs cover the entire authorized training set, reconcile all
   discovered entities to terminal states, exactly match the authenticated source series/file/size/
-  raw-digest population, and match each other for every declared deterministic artifact and
-  aggregate.
+  raw-digest population, and match each other byte for byte for the canonical manifests and cohort
+  plans and exactly for deterministic metrics.
 - The performance report is complete and stays within the approved Kaggle runtime/memory limits.
-- Both runs pass the authenticated throughput admission control, the complete safe progress
-  sequence, the self-deadline, and the outer competition-margin gate; projection alone is not
-  runtime acceptance.
+- The authenticated smoke separately admits full-pass and post-comparison preparation capacity;
+  both runs retain the complete safe progress sequence and competition margin, and the existing
+  review-plan kernel passes its identity-bound physical file, byte, time, and disk gates. Projection
+  alone is not runtime acceptance.
 - At least 100 private studies have complete visual-review rows with no systematic ordering,
-  orientation, inversion, laterality, clipping, or aspect error; every represented material stratum
-  and every eligible series for each reviewed study is covered.
+  orientation, inversion, laterality, clipping, or aspect error;
+  `all_required_represented_registry_values_satisfy_quotas` is validated and every eligible series
+  for each reviewed study is covered.
 - Every private input and kernel passes authenticated ready/private/offline, exact-source,
   exact-version, exact-listing, and identity checks; the finalizer binds the completed private
   review session directly to the exact runs, comparison, plan, UI parent, cohort, preprocessing,
@@ -187,11 +183,11 @@ inside Kaggle and never enter repository documents or command output.
 
 ## After attempted Run A
 
-Recovery pending. Three Run A attempts failed closed: first on source identity, then on source-
-schema consumption, and finally at the old processing self-deadline after authenticated input and
-source-manifest checks. Run B was not started. No successful runtime result, Run A/Run B comparison,
+Recovery pending. Four Run A attempts failed closed: first on source identity, then on source-schema
+consumption, then at the former processing deadline, and finally after a completed full-data pass at
+the superseded selector. Run B was not started. No admissible Run A result, Run A/Run B comparison,
 QA image review, completed review session, human attestation, or finalizer result is claimed. The
 incidents are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record new identities and
-actual results only after the next complete gate, freeze/bundle, authenticated retry, independent
-Run B, comparison, and review. Do not start ontology, folds, labels, training, inference, or
-submission.
+actual results only after the next complete gate, freeze/bundle, authenticated smoke, independent
+Run A and Run B, exact comparison, QA materialization, and review. Do not start ontology, folds,
+labels, training, inference, or submission.

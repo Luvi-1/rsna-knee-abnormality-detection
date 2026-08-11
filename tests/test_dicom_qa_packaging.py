@@ -264,6 +264,7 @@ def _bundle_inputs(tmp_path: Path) -> dict[str, Any]:
         "competition_contract_path": contract,
         "uv_lock_path": lock,
         "kernel_runner_path": ROOT / "kaggle/dicom_qa/run.py",
+        "performance_smoke_path": ROOT / "kaggle/dicom_qa/performance_smoke.py",
         "comparison_path": ROOT / "kaggle/dicom_qa/compare_runs.py",
         "review_finalizer_path": ROOT / "kaggle/dicom_qa/finalize_review.py",
         "review_ui_path": ROOT / "kaggle/dicom_qa/review_ui.py",
@@ -328,16 +329,88 @@ def test_bundle_is_deterministic_private_offline_and_identity_bound(tmp_path: Pa
         "self_deadline_seconds": 27_000,
         "outer_kill_seconds": 28_800,
     }
+    assert run_config["output_policy"] == {
+        "run_private_remote_only": list(packager.RUN_PRIVATE_OUTPUTS),
+        "run_downloadable": list(packager.RUN_DOWNLOADABLE_OUTPUTS),
+        "review_private_remote_only": list(packager.REVIEW_PRIVATE_OUTPUTS),
+        "review_private_remote_patterns": list(packager.REVIEW_PRIVATE_PATTERN_OUTPUTS),
+        "review_downloadable": list(packager.REVIEW_DOWNLOADABLE_OUTPUTS),
+        "session_log": packager.SESSION_LOG_POLICY,
+        "run_max_remote_bytes": 548 * 1024**2 + 384 * 1024,
+        "run_max_download_bytes": 384 * 1024,
+        "review_max_remote_bytes": 8 * 1024**3 + 66 * 1024**2 + 512 * 1024,
+        "review_max_download_bytes": 512 * 1024,
+    }
     competition_limit = json.loads((first / "dataset/competition-contract.json").read_text())[
         "runtime"
     ]["cpu_limit_seconds"]
     assert packager.OUTER_KILL_SECONDS - packager.SELF_DEADLINE_SECONDS >= 1_800
     assert competition_limit - 3_600 >= packager.OUTER_KILL_SECONDS
-    assert "orientation_obliquity_profile" in run_config["selection"]["strata"]
-    assert "slice_count_profile" in run_config["selection"]["strata"]
+    assert run_config["selection"] == {
+        "source": "full_run_terminal_records_plus_authenticated_manifest_v2",
+        "minimum_studies": 100,
+        "minimum_is_not_maximum": True,
+        "represented_value_quota": 2,
+        "stratum_registry_version": packager.QA_STRATUM_REGISTRY_VERSION,
+        "stratum_registry_sha256": packager.QA_STRATUM_REGISTRY_SHA256,
+        "cohort_selection_version": packager.QA_COHORT_SELECTION_VERSION,
+        "dimensions": list(packager.REQUIRED_REVIEW_DIMENSIONS),
+    }
+    assert len(run_config["selection"]["dimensions"]) == 25
+    assert run_config["review_policy"] == {
+        "protocol_version": packager.REVIEW_PROTOCOL_VERSION,
+        "instructions_version": packager.REVIEW_INSTRUCTIONS_VERSION,
+        "cohort_selection_version": packager.QA_COHORT_SELECTION_VERSION,
+        "stratum_registry_version": packager.QA_STRATUM_REGISTRY_VERSION,
+        "stratum_registry_sha256": packager.QA_STRATUM_REGISTRY_SHA256,
+        "kernel_version": 1,
+        "checks": list(packager.REVIEW_CHECKS),
+        "statuses": list(packager.REVIEW_STATUSES),
+        "artifact_presence_separate": True,
+        "minimum_reviewed_studies": 100,
+    }
     preflight_path = first / "dataset/synthetic-preflight.json"
     assert json.loads(preflight_path.read_text()) == packager.SYNTHETIC_PREFLIGHT_REPORT
     manifest = json.loads((first / "dataset/bundle-manifest.json").read_text())
+    smoke_source = (first / "dataset/performance_smoke.py").read_bytes()
+    smoke_policy_path = first / "dataset/performance-smoke-policy.json"
+    smoke_policy = json.loads(smoke_policy_path.read_text())
+    smoke_source_sha256 = hashlib.sha256(smoke_source).hexdigest()
+    smoke_policy_sha256 = hashlib.sha256(smoke_policy_path.read_bytes()).hexdigest()
+    assert set(path.name for path in (first / "performance-smoke-kernel").iterdir()) == {
+        "kernel-metadata.json",
+        "performance_smoke.py",
+    }
+    smoke_metadata = json.loads(
+        (first / "performance-smoke-kernel/kernel-metadata.json").read_text()
+    )
+    assert smoke_metadata["id"] == first_result["performance_smoke_ref"]
+    assert smoke_metadata["code_file"] == "performance_smoke.py"
+    assert smoke_metadata["is_private"] is True
+    assert smoke_metadata["enable_internet"] is False
+    assert smoke_metadata["enable_gpu"] is False
+    assert smoke_metadata["enable_tpu"] is False
+    assert smoke_metadata["dataset_sources"] == [first_result["dataset_ref"]]
+    assert smoke_metadata["kernel_sources"] == [first_result["source_manifest_kernel_ref"]]
+    assert smoke_metadata["competition_sources"] == [packager.COMPETITION_SLUG]
+    assert smoke_metadata["model_sources"] == []
+    assert (first / "performance-smoke-kernel/performance_smoke.py").read_bytes() == smoke_source
+    assert smoke_policy == packager._performance_smoke_policy(smoke_source_sha256)
+    assert manifest["performance_smoke"] == {
+        "code_file": "performance_smoke.py",
+        "sha256": smoke_source_sha256,
+        "policy_file": "performance-smoke-policy.json",
+        "policy_sha256": smoke_policy_sha256,
+    }
+    assert run_config["provenance"]["performance_smoke_sha256"] == smoke_source_sha256
+    assert run_config["provenance"]["performance_smoke_policy_sha256"] == smoke_policy_sha256
+    records_by_role = {
+        record["role"]: record
+        for record in manifest["files"]
+        if record["role"] != "dependency_wheel"
+    }
+    assert records_by_role["performance_smoke_source"]["sha256"] == smoke_source_sha256
+    assert records_by_role["performance_smoke_policy"]["sha256"] == smoke_policy_sha256
     preflight_records = [
         record for record in manifest["files"] if record["role"] == "synthetic_preflight"
     ]
@@ -361,6 +434,24 @@ def test_bundle_is_deterministic_private_offline_and_identity_bound(tmp_path: Pa
         first_result["run_b_ref"],
         first_result["comparison_ref"],
         first_result["review_plan_ref"],
+    ]
+    plan_metadata = json.loads((first / "review-plan-kernel/kernel-metadata.json").read_text())
+    assert plan_metadata["kernel_sources"] == [
+        first_result["performance_smoke_ref"],
+        first_result["run_a_ref"],
+        first_result["run_b_ref"],
+        first_result["comparison_ref"],
+    ]
+    assert plan_metadata["competition_sources"] == [packager.COMPETITION_SLUG]
+    finalizer_metadata = json.loads(
+        (first / "review-finalizer-kernel/kernel-metadata.json").read_text()
+    )
+    assert finalizer_metadata["kernel_sources"] == [
+        first_result["run_a_ref"],
+        first_result["run_b_ref"],
+        first_result["comparison_ref"],
+        first_result["review_plan_ref"],
+        first_result["review_session_ref"],
     ]
     verified, _, manifest = validator.load_verified_policy(
         first / "dataset/run-config.json",
@@ -514,78 +605,64 @@ def test_bundle_requires_pillow_and_both_compressed_decoder_families(tmp_path: P
         packager._assemble_bundle(output=tmp_path / "missing", **inputs)
 
 
-class _FakePydicom:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def dcmread(self, path: Path, **kwargs: object) -> SimpleNamespace:
-        self.calls += 1
-        assert kwargs["stop_before_pixels"] is True
-        index = int(path.parents[1].name.rsplit(".", 1)[-1])
-        return SimpleNamespace(
-            BitsStored=8 if index % 2 else 16,
-            PhotometricInterpretation="MONOCHROME1" if index % 3 == 0 else "MONOCHROME2",
-            Rows=256 if index % 2 else 512,
-            Columns=256 if index % 2 else 512,
-            SliceThickness=2.0 if index % 2 else 4.0,
-            SpacingBetweenSlices=2.5 if index % 2 else 4.5,
-            ImageOrientationPatient=(1.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-            file_meta=SimpleNamespace(
-                TransferSyntaxUID=(
-                    "1.2.840.10008.1.2.4.70" if index % 2 else "1.2.840.10008.1.2.4.90"
-                )
-            ),
-        )
-
-
-def test_header_only_stratified_selection_is_deterministic(tmp_path: Path) -> None:
-    competition = tmp_path / "competition"
-    train = competition / "train_series"
-    train.mkdir(parents=True)
+def test_registry_selection_is_deterministic_and_minimum_is_not_a_maximum() -> None:
     runner = _runner()
-    rows: list[Any] = []
-    for index in range(180):
-        study = f"1.2.840.1000.{index + 1}"
-        series = f"1.2.840.2000.{index + 1}"
-        directory = train / study / series
-        directory.mkdir(parents=True)
-        (directory / "1.2.3.dcm").write_bytes(b"header-only-fixture")
-        rows.append(
-            runner.SeriesRow(
-                study,
-                series,
-                "present" if index % 2 else "absent",
-                "present" if index % 3 else "absent",
-                ("sagittal", "coronal", "axial")[index % 3],
-            )
+    studies = tuple(
+        runner.CohortStudy(
+            study_uid=f"1.2.840.1000.{index + 1}",
+            stratum=("common",) * 11,
+            dimensions=tuple(
+                (
+                    dimension,
+                    (f"model_{index:03d}" if dimension == "scanner_model" else "common",),
+                )
+                for dimension in runner.REQUIRED_REVIEW_DIMENSIONS
+            ),
+            eligible_series_uids=(f"1.2.840.2000.{index + 1}",),
         )
-    pydicom = _FakePydicom()
-    first = runner._select_studies(competition, tuple(rows), pydicom, target=120)
-    second = runner._select_studies(competition, tuple(reversed(rows)), pydicom, target=120)
+        for index in range(101)
+    )
+
+    first = runner._select_after_full_pass(
+        studies,
+        source_manifest_available=True,
+        target=100,
+        minimum_eligible=100,
+    )
+    second = runner._select_after_full_pass(
+        tuple(reversed(studies)),
+        source_manifest_available=True,
+        target=100,
+        minimum_eligible=100,
+    )
 
     assert first == second
-    assert len(first.studies) == 120
-    assert len({item.study_uid for item in first.studies}) == 120
-    assert len({item.stratum for item in first.studies}) > 1
-    assert sum(item.selected_studies for item in first.census) == 120
+    assert len(first.studies) == 101
+    assert set(first.coverage) == {
+        "rows",
+        "total_required_strata",
+        "total_satisfied",
+        "unsatisfied_strata",
+        "cohort_size",
+        "all_required_represented_registry_values_satisfy_quotas",
+        "registry_version",
+        "selector_version",
+        "manifest_version",
+    }
+    assert first.coverage["cohort_size"] == 101
+    assert first.coverage["all_required_represented_registry_values_satisfy_quotas"] is True
+    assert first.coverage["unsatisfied_strata"] == ()
+    assert first.coverage["registry_version"] == runner.QA_STRATUM_REGISTRY_VERSION
+    assert first.coverage["selector_version"] == runner.QA_COHORT_SELECTION_VERSION
+    assert first.coverage["manifest_version"] == runner.SOURCE_MANIFEST_VERSION
+    scanner_rows = [row for row in first.coverage["rows"] if row["dimension"] == "scanner_model"]
+    assert len(scanner_rows) == 101
     assert all(
-        item.selected_studies >= min(2, item.population_studies)
-        for item in first.census
-        if item.material
+        row["population"] == row["required_quota"] == row["selected"] == 1
+        and row["quota_met"] is True
+        for row in scanner_rows
     )
-    assert pydicom.calls == 360
-
-
-def test_deadline_cannot_be_swallowed_by_header_probe(tmp_path: Path) -> None:
-    runner = _runner()
-
-    class DeadlinePydicom:
-        @staticmethod
-        def dcmread(_path: Path, **_kwargs: object) -> None:
-            raise runner._DeadlineExceeded
-
-    with pytest.raises(runner._DeadlineExceeded):
-        runner._header_buckets(tmp_path / "synthetic.dcm", DeadlinePydicom())
+    assert first.cohort_sha256 == second.cohort_sha256
 
 
 def test_deadline_installs_handler_before_arm_and_disarms_before_restore(
@@ -707,6 +784,7 @@ def _remote_records(runner: Any) -> list[dict[str, object]]:
     ]
     suffixes = (
         "contact.png",
+        "orthogonal.png",
         "histogram.png",
         "animation.gif",
         "before_after.png",
@@ -727,6 +805,41 @@ def _remote_records(runner: Any) -> list[dict[str, object]]:
     return records
 
 
+def _remote_run_records(runner: Any) -> list[dict[str, object]]:
+    return [
+        {"name": f"{runner.OUTPUT_DIRECTORY}/{name}", "size": 896}
+        for name in (*runner.RUN_PRIVATE_OUTPUT_POLICY, *runner.RUN_DOWNLOADABLE_OUTPUT_POLICY)
+    ]
+
+
+def test_full_run_listing_is_core_only_and_cohort_plan_bound() -> None:
+    runner = _runner()
+    progress = validator._expected_progress_events(runner)
+    assert progress[0] == {"event": "dicom_qa_progress", "phase": "full_pass", "code": "start"}
+    assert all(event["phase"] != "performance_smoke" for event in progress)
+    assert set(runner.RUN_PRIVATE_OUTPUT_POLICY) == {
+        "private_full_run_manifest.jsonl",
+        "private_full_run_metrics.json",
+        "private_cohort_plan.json",
+    }
+    assert set(runner.RUN_DOWNLOADABLE_OUTPUT_POLICY) == {
+        "sanitized_summary.json",
+        "sanitized_artifact_inventory.json",
+    }
+    records = _remote_run_records(runner)
+    validator._validate_run_listing((json.dumps(records).encode(),), runner)
+
+    for stale in (
+        "private_case_index.json",
+        "private_artifact_inventory.json",
+        "private-review/case_000000_series_000_contact.png",
+        "benchmark.md",
+    ):
+        altered = [*records, {"name": f"{runner.OUTPUT_DIRECTORY}/{stale}", "size": 896}]
+        with pytest.raises(validator.OutputValidationError, match="remote_name_not_allowed"):
+            validator._validate_run_listing((json.dumps(altered).encode(),), runner)
+
+
 def test_paginated_remote_listing_checks_visible_private_review_without_download(
     tmp_path: Path,
 ) -> None:
@@ -742,6 +855,52 @@ def test_paginated_remote_listing_checks_visible_private_review_without_download
     second = json.dumps(records[300:]).encode()
     with pytest.raises(validator.OutputValidationError, match="remote_review_name_invalid"):
         validator.validate_remote_listing((first, second), run_config, runner)
+
+
+def test_review_plan_listing_owns_qa_artifacts_and_bound_plan() -> None:
+    runner = _runner()
+    finalizer = _finalizer()
+    records = [
+        *_remote_records(runner),
+        {
+            "name": (f"{finalizer.TEMPLATE_OUTPUT_DIRECTORY}/{finalizer.REVIEW_PLAN_BASENAME}"),
+            "size": 896,
+        },
+    ]
+    validator._validate_review_output_listing(
+        (json.dumps(records).encode(),), runner, finalizer=finalizer
+    )
+
+    missing_plan = records[:-1]
+    with pytest.raises(validator.OutputValidationError, match="remote_required_output_missing"):
+        validator._validate_review_output_listing(
+            (json.dumps(missing_plan).encode(),), runner, finalizer=finalizer
+        )
+
+    missing_orthogonal = [
+        record
+        for record in records
+        if not str(record["name"]).endswith("case_000000_series_000_orthogonal.png")
+    ]
+    with pytest.raises(validator.OutputValidationError, match="remote_review_output_incomplete"):
+        validator._validate_review_output_listing(
+            (json.dumps(missing_orthogonal).encode(),), runner, finalizer=finalizer
+        )
+
+    extra_cross_extension = [
+        *records,
+        {
+            "name": (
+                f"{runner.OUTPUT_DIRECTORY}/{runner.PRIVATE_REVIEW_DIRECTORY}/"
+                "case_000000_series_000_contact.gif"
+            ),
+            "size": 896,
+        },
+    ]
+    with pytest.raises(validator.OutputValidationError, match="remote_review_output_incomplete"):
+        validator._validate_review_output_listing(
+            (json.dumps(extra_cross_extension).encode(),), runner, finalizer=finalizer
+        )
 
 
 def _summary(run_config: dict[str, Any], runner: Any, runner_sha256: str) -> dict[str, Any]:
@@ -855,7 +1014,7 @@ def _summary(run_config: dict[str, Any], runner: Any, runner_sha256: str) -> dic
             "preprocessing_configuration_hash": "b" * 64,
             "preprocessing_version": "dicom-model-v1",
             "source_manifest_version": "manifest-v2",
-            "qa_cohort_selection_version": "qa-cohort-selection-v2",
+            "qa_cohort_selection_version": packager.QA_COHORT_SELECTION_VERSION,
             "dicom_library_versions": [
                 {"package": name, "version": "1.0.0"}
                 for name in (
@@ -868,20 +1027,20 @@ def _summary(run_config: dict[str, Any], runner: Any, runner_sha256: str) -> dic
             ],
         },
         "selection": {
-            "source": "full_run_terminal_records_plus_authenticated_manifest_v2",
-            "target_studies": 120,
-            "maximum_studies": 240,
-            "selected_studies": "between_120_and_240",
-            "minimum_eligible_studies": 100,
+            "source": "authenticated_run_a_cohort_plan_v1",
+            "minimum_studies": 100,
+            "minimum_is_not_maximum": True,
+            "selected_studies": "at_least_100",
             "eligible_studies": "at_least_100",
             "stratified": True,
-            "slice_count_stratified": True,
-            "material_strata_covered": True,
-            "bounded_deterministic_expansion": True,
+            "all_required_represented_registry_values_satisfy_quotas": True,
+            "deterministic_constrained_greedy": True,
             "selected_after_full_pass": True,
             "source_manifest_authenticated": True,
-            "available_required_strata_dispositioned": True,
-            "cohort_selection_version": "qa-cohort-selection-v2",
+            "represented_value_quota": 2,
+            "cohort_selection_version": packager.QA_COHORT_SELECTION_VERSION,
+            "stratum_registry_version": packager.QA_STRATUM_REGISTRY_VERSION,
+            "stratum_registry_sha256": packager.QA_STRATUM_REGISTRY_SHA256,
         },
         "pipeline": {
             "full_training_dataset_processed": True,
@@ -934,7 +1093,7 @@ def _review_summary(
         "review": {
             "reviewed_studies": "range_100_119",
             "eligible_series_reviewed": "range_100_119",
-            "represented_strata": "all_material_covered",
+            "represented_strata": "all_required_represented_registry_values_satisfy_quotas",
             "all_eligible_series_complete": True,
             "all_nine_checks_terminal": True,
             "artifact_presence_verified": True,
@@ -954,7 +1113,7 @@ def _review_summary(
     }
 
 
-def test_review_summary_rejects_exact_numeric_and_non_k20_disclosures(
+def test_review_summary_rejects_exact_numeric_and_non_k20_disclosures_without_240_cap(
     tmp_path: Path,
 ) -> None:
     bundle, result = _assembled(tmp_path)
@@ -965,18 +1124,20 @@ def test_review_summary_rejects_exact_numeric_and_non_k20_disclosures(
         expected_bundle=result["bundle_sha256"],
     )
     finalizer = _finalizer()
-    assert {
-        finalizer._count_token(count, public_cap=finalizer.MAX_REVIEWED_STUDIES)
-        for count in (220, 239, 240)
-    } == {"at_or_above_threshold"}
-    assert finalizer._reviewed_study_bounds("at_or_above_threshold") == (220, 240)
+    assert [finalizer._count_token(count) for count in (220, 239, 240, 259)] == [
+        "range_220_239",
+        "range_220_239",
+        "range_240_259",
+        "range_240_259",
+    ]
+    assert finalizer._reviewed_study_bounds("range_240_259") == (240, 259)
     summary = _review_summary(run_config, manifest, finalizer)
     for key, value in (
         ("reviewed_studies", 100),
         ("eligible_series_reviewed", 100),
         ("block_decisions", 0),
         ("reviewed_studies", "range_101_120"),
-        ("reviewed_studies", "range_240_259"),
+        ("reviewed_studies", "range_241_260"),
         ("eligible_series_reviewed", "at_least_100"),
         ("eligible_series_reviewed", "at_or_above_threshold"),
     ):
@@ -987,11 +1148,11 @@ def test_review_summary_rejects_exact_numeric_and_non_k20_disclosures(
                 packager._canonical_json_bytes(malformed), run_config, manifest, finalizer
             )
 
-    capped = deepcopy(summary)
-    capped["review"]["reviewed_studies"] = "at_or_above_threshold"
-    capped["review"]["eligible_series_reviewed"] = "range_240_259"
+    expanded = deepcopy(summary)
+    expanded["review"]["reviewed_studies"] = "range_240_259"
+    expanded["review"]["eligible_series_reviewed"] = "range_240_259"
     validator._validate_review_summary_payload(
-        packager._canonical_json_bytes(capped), run_config, manifest, finalizer
+        packager._canonical_json_bytes(expanded), run_config, manifest, finalizer
     )
 
     old_schema = deepcopy(summary)
@@ -1011,6 +1172,9 @@ def test_private_review_context_is_strict_and_bound_into_plan(
     context = {
         "organizer_plane": "sagittal",
         "physical_plane": "coronal",
+        "laterality": "unknown",
+        "laterality_transform": "none",
+        "horizontal_flip_applied": False,
         "assigned_slot": "additional_or_duplicate",
         "retention_reasons": ["conflicting_plane_metadata"],
         "missing_series_mask": [True, False, True, True, True, True],
@@ -1031,6 +1195,14 @@ def test_private_review_context_is_strict_and_bound_into_plan(
                 "retention_reasons": ["blocked_quality"],
                 "quality_blocked_reasons": ["duplicate_slices"],
             },
+        ],
+        "check_9_applicable": True,
+        "check_9_reason_codes": [
+            "missing_diagnostic_slot",
+            "additional_or_duplicate_series",
+            "non_model_eligible_sibling",
+            "retention_reason",
+            "quality_block_reason",
         ],
     }
     assert finalizer._validate_review_context(context, 0) == context
@@ -1064,6 +1236,7 @@ def test_private_review_context_is_strict_and_bound_into_plan(
     missing_assigned_slot["retention_reasons"] = []
     missing_assigned_slot["sibling_series"][0]["slot"] = "sagittal_fluid_sensitive"
     missing_assigned_slot["sibling_series"][0]["retention_reasons"] = []
+    missing_assigned_slot["missing_series_mask"][0] = True
     malformed_contexts.append(missing_assigned_slot)
     skipped_ordinal = deepcopy(context)
     skipped_ordinal["sibling_series"][1]["series_ordinal"] = 2
@@ -1071,6 +1244,9 @@ def test_private_review_context_is_strict_and_bound_into_plan(
     free_text = deepcopy(context)
     free_text["sibling_series"][1]["quality_blocked_reasons"] = ["reviewer_note"]
     malformed_contexts.append(free_text)
+    transformed_laterality = deepcopy(context)
+    transformed_laterality["laterality_transform"] = "inferred_from_filename"
+    malformed_contexts.append(transformed_laterality)
     for malformed in malformed_contexts:
         with pytest.raises(finalizer.ReviewFinalizationError, match="private_case_index_invalid"):
             finalizer._validate_review_context(malformed, 0)
@@ -1084,8 +1260,7 @@ def _comparison_summary() -> dict[str, Any]:
         "independent_runs_compared": True,
         "exact_manifest_byte_equality": True,
         "deterministic_metrics_equal": True,
-        "case_index_deterministic_projection_equal": True,
-        "qa_artifact_inventory_equal": True,
+        "cohort_plan_byte_equality": True,
         "unresolved_mismatches": "zero",
         "private_case_details_downloaded": False,
     }
@@ -1157,7 +1332,11 @@ def test_local_validator_accepts_only_three_sanitized_files(tmp_path: Path) -> N
             packager._canonical_json_bytes(event)
             for event in [
                 {"event": "dicom_qa_started"},
-                *validator._expected_progress_events(runner),
+                *validator._expected_progress_events(
+                    runner,
+                    sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+                    event_name="dicom_qa_plan_progress",
+                ),
                 {"event": "dicom_qa_complete"},
             ]
         )
@@ -1179,6 +1358,96 @@ def test_local_validator_accepts_only_three_sanitized_files(tmp_path: Path) -> N
     (output / "private_case_index.json").write_text("{}")
     with pytest.raises(validator.OutputValidationError, match="local_output_allowlist_invalid"):
         validator.validate_local_output(output, run_config, runner, manifest)
+
+
+def test_local_core_run_validator_accepts_only_two_safe_files_and_exact_gate(
+    tmp_path: Path,
+) -> None:
+    runner_sha256 = "a" * 64
+    summary = {
+        "status": "complete_pending_comparison",
+        "provenance": {"runner_sha256": runner_sha256},
+        "pipeline": {
+            "full_training_dataset_processed": True,
+            "all_series_terminal": True,
+            "integrity_gate": "pass",
+            "unresolved_blockers": "zero",
+        },
+        "selection": {
+            "cohort_plan_status": "complete",
+            "all_required_represented_registry_values_satisfy_quotas": True,
+        },
+    }
+    summary_payload = b'{"safe":"summary"}\n'
+    inventory_payload = b'{"safe":"inventory"}\n'
+    calls: list[tuple[str, bytes]] = []
+
+    def validate_summary(payload: bytes, received_config: object) -> dict[str, Any]:
+        assert received_config == {"privacy": {"canary": "safe-canary"}}
+        calls.append(("summary", payload))
+        return summary
+
+    def validate_inventory(payload: bytes, *, run_config: object, summary_payload: bytes) -> None:
+        assert run_config == {"privacy": {"canary": "safe-canary"}}
+        assert summary_payload == b'{"safe":"summary"}\n'
+        calls.append(("inventory", payload))
+
+    runner = SimpleNamespace(
+        OUTPUT_DIRECTORY="dicom-qa-output",
+        SESSION_LOG_PATTERN=r"[a-z0-9][a-z0-9_-]{0,99}\.log",
+        RUN_DOWNLOADABLE_OUTPUT_POLICY={
+            "sanitized_summary.json": ("aggregate_json", 1024),
+            "sanitized_artifact_inventory.json": ("aggregate_json", 1024),
+        },
+        _validate_run_summary=validate_summary,
+        _validate_run_inventory=validate_inventory,
+    )
+    run_config = {"privacy": {"canary": "safe-canary"}}
+    output = tmp_path / "core"
+    output.mkdir()
+    (output / "sanitized_summary.json").write_bytes(summary_payload)
+    (output / "sanitized_artifact_inventory.json").write_bytes(inventory_payload)
+
+    validated = validator.validate_local_run_output(
+        output, run_config, runner, {"kernel": {"sha256": runner_sha256}}
+    )
+    validator._validate_run_exit_gate(validated)
+    assert calls == [
+        ("summary", summary_payload),
+        ("inventory", inventory_payload),
+    ]
+
+    for forbidden in ("benchmark.md", "private_case_index.json"):
+        forbidden_path = output / forbidden
+        forbidden_path.write_text("forbidden")
+        with pytest.raises(validator.OutputValidationError, match="local_output_allowlist_invalid"):
+            validator.validate_local_run_output(
+                output, run_config, runner, {"kernel": {"sha256": runner_sha256}}
+            )
+        forbidden_path.unlink()
+
+    for altered in (
+        {**summary, "status": "complete_pending_human_review"},
+        {
+            **summary,
+            "pipeline": {**summary["pipeline"], "unresolved_blockers": "present"},
+        },
+        {
+            **summary,
+            "selection": {**summary["selection"], "cohort_plan_status": "pending"},
+        },
+        {
+            **summary,
+            "selection": {
+                **summary["selection"],
+                "all_required_represented_registry_values_satisfy_quotas": False,
+            },
+        },
+    ):
+        with pytest.raises(
+            validator.OutputValidationError, match="dicom_integrity_exit_gate_failed"
+        ):
+            validator._validate_run_exit_gate(altered)
 
 
 @pytest.mark.parametrize(
@@ -1568,6 +1837,75 @@ def test_template_kernel_metadata_is_exact_private_offline_and_source_bound(
             )
 
 
+def test_review_plan_and_finalizer_metadata_bind_the_split_qa_stage(tmp_path: Path) -> None:
+    bundle, result = _assembled(tmp_path)
+    plan = json.loads((bundle / "review-plan-kernel/kernel-metadata.json").read_text())
+    plan.update({"id_no": 1729, "keywords": [], "docker_image": ""})
+    plan_sources = [
+        result["performance_smoke_ref"],
+        result["run_a_ref"],
+        result["run_b_ref"],
+        result["comparison_ref"],
+    ]
+    validator._validate_exact_kernel_metadata(
+        plan,
+        ref=result["review_plan_ref"],
+        expected_code_file="finalize_review.py",
+        expected_kernel_type="script",
+        expected_dataset_sources=[result["dataset_ref"]],
+        expected_kernel_sources=plan_sources,
+        expected_competition_sources=[packager.COMPETITION_SLUG],
+    )
+    for mutation in (
+        {"competition_sources": []},
+        {"kernel_sources": [*plan_sources, result["source_manifest_kernel_ref"]]},
+    ):
+        with pytest.raises(validator.OutputValidationError, match="kernel_metadata_invalid"):
+            validator._validate_exact_kernel_metadata(
+                {**plan, **mutation},
+                ref=result["review_plan_ref"],
+                expected_code_file="finalize_review.py",
+                expected_kernel_type="script",
+                expected_dataset_sources=[result["dataset_ref"]],
+                expected_kernel_sources=plan_sources,
+                expected_competition_sources=[packager.COMPETITION_SLUG],
+            )
+
+    finalizer = json.loads((bundle / "review-finalizer-kernel/kernel-metadata.json").read_text())
+    finalizer.update({"id_no": 1730, "keywords": [], "docker_image": ""})
+    finalizer_sources = [
+        result["run_a_ref"],
+        result["run_b_ref"],
+        result["comparison_ref"],
+        result["review_plan_ref"],
+        result["review_session_ref"],
+    ]
+    validator._validate_exact_kernel_metadata(
+        finalizer,
+        ref=result["review_finalizer_ref"],
+        expected_code_file="finalize_review.py",
+        expected_kernel_type="script",
+        expected_dataset_sources=[result["dataset_ref"]],
+        expected_kernel_sources=finalizer_sources,
+        expected_competition_sources=[],
+    )
+    with pytest.raises(validator.OutputValidationError, match="kernel_metadata_invalid"):
+        validator._validate_exact_kernel_metadata(
+            {
+                **finalizer,
+                "kernel_sources": [
+                    source for source in finalizer_sources if source != result["review_plan_ref"]
+                ],
+            },
+            ref=result["review_finalizer_ref"],
+            expected_code_file="finalize_review.py",
+            expected_kernel_type="script",
+            expected_dataset_sources=[result["dataset_ref"]],
+            expected_kernel_sources=finalizer_sources,
+            expected_competition_sources=[],
+        )
+
+
 def test_full_private_workflow_kernel_refs_are_exact_and_content_addressed(
     tmp_path: Path,
 ) -> None:
@@ -1575,6 +1913,7 @@ def test_full_private_workflow_kernel_refs_are_exact_and_content_addressed(
     run_config = json.loads((bundle / "dataset/run-config.json").read_text())
     suffix = f"{COMMIT[:7]}-{result['bundle_sha256'][:12]}"
     expected_prefixes = {
+        "performance_smoke": "rsna-knee-dqa-smoke",
         "run_a": "rsna-knee-dqa-a",
         "run_b": "rsna-knee-dqa-b",
         "comparator": "rsna-knee-dqa-cmp",
@@ -1933,9 +2272,9 @@ def test_real_size_listing_never_compensates_for_wrong_authentication_factor(
     monkeypatch.setattr(
         validator,
         "_authenticated_listing",
-        lambda *_args: (json.dumps(_remote_records(_runner())).encode(),),
+        lambda *_args: (json.dumps(_remote_run_records(_runner())).encode(),),
     )
-    monkeypatch.setattr(validator, "_retrieve_safe_qa_output", lambda *_args: None)
+    monkeypatch.setattr(validator, "_retrieve_safe_run_output", lambda *_args: None)
 
     arguments = {
         "ref": ref,
@@ -2005,8 +2344,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
             "independent_runs_compared": True,
             "exact_manifest_byte_equality": True,
             "deterministic_metrics_equal": True,
-            "case_index_deterministic_projection_equal": True,
-            "qa_artifact_inventory_equal": True,
+            "cohort_plan_byte_equality": True,
             "unresolved_mismatches": "zero",
             "private_case_details_downloaded": False,
         }
@@ -2019,8 +2357,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
     for field in (
         "exact_manifest_byte_equality",
         "deterministic_metrics_equal",
-        "case_index_deterministic_projection_equal",
-        "qa_artifact_inventory_equal",
+        "cohort_plan_byte_equality",
     ):
         altered = json.loads(summary)
         altered[field] = False
@@ -2032,16 +2369,38 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
     ("stage", "expected_calls"),
     [
         ("inputs", ["source_manifest_kernel"]),
-        ("run-a", ["source_manifest_kernel", "qa_run"]),
-        ("run-b", ["source_manifest_kernel", "qa_run", "qa_run"]),
+        (
+            "performance-smoke",
+            ["source_manifest_kernel", "performance_smoke_kernel"],
+        ),
+        (
+            "run-a",
+            ["source_manifest_kernel", "performance_smoke_kernel", "qa_run"],
+        ),
+        (
+            "run-b",
+            [
+                "source_manifest_kernel",
+                "performance_smoke_kernel",
+                "qa_run",
+                "qa_run",
+            ],
+        ),
         (
             "comparison",
-            ["source_manifest_kernel", "qa_run", "qa_run", "comparison_kernel"],
+            [
+                "source_manifest_kernel",
+                "performance_smoke_kernel",
+                "qa_run",
+                "qa_run",
+                "comparison_kernel",
+            ],
         ),
         (
             "plan",
             [
                 "source_manifest_kernel",
+                "performance_smoke_kernel",
                 "qa_run",
                 "qa_run",
                 "comparison_kernel",
@@ -2052,6 +2411,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
             "ui",
             [
                 "source_manifest_kernel",
+                "performance_smoke_kernel",
                 "qa_run",
                 "qa_run",
                 "comparison_kernel",
@@ -2063,6 +2423,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
             "review",
             [
                 "source_manifest_kernel",
+                "performance_smoke_kernel",
                 "qa_run",
                 "qa_run",
                 "comparison_kernel",
@@ -2075,6 +2436,7 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
             "final",
             [
                 "source_manifest_kernel",
+                "performance_smoke_kernel",
                 "qa_run",
                 "qa_run",
                 "comparison_kernel",
@@ -2101,6 +2463,8 @@ def test_authenticated_workflow_routes_every_immutable_v1_stage(
     )
     calls: list[tuple[str, dict[str, object]]] = []
     dataset_calls: list[tuple[str, dict[str, int]]] = []
+    kernel_version_calls: list[tuple[str, int]] = []
+    kernel_status_calls: list[str] = []
 
     monkeypatch.setattr(
         validator,
@@ -2115,13 +2479,25 @@ def test_authenticated_workflow_routes_every_immutable_v1_stage(
     monkeypatch.setattr(validator, "_authenticated_dataset_snapshot", fake_dataset)
 
     def recorder(name: str) -> Any:
-        def record(**kwargs: object) -> None:
+        def record(**kwargs: object) -> dict[str, object] | None:
             calls.append((name, kwargs))
+            if name == "source_manifest_kernel":
+                source = kwargs["source"]
+                assert isinstance(source, dict)
+                return {
+                    "dataset_id": 1729,
+                    "version": 1,
+                    "files": tuple(
+                        sorted(validator._source_manifest_dataset_files(source).items())
+                    ),
+                }
+            return None
 
         return record
 
     for name in (
         "source_manifest_kernel",
+        "performance_smoke_kernel",
         "qa_run",
         "comparison_kernel",
         "review_plan_kernel",
@@ -2130,6 +2506,16 @@ def test_authenticated_workflow_routes_every_immutable_v1_stage(
         "review_finalizer_kernel",
     ):
         monkeypatch.setattr(validator, f"_authenticate_{name}", recorder(name))
+    monkeypatch.setattr(
+        validator,
+        "_authenticate_kernel_api_version",
+        lambda ref, version: kernel_version_calls.append((ref, version)) or {},
+    )
+    monkeypatch.setattr(
+        validator,
+        "_kernel_status_complete",
+        lambda ref: kernel_status_calls.append(ref),
+    )
 
     validator.validate_authenticated_workflow(
         expected_version=1,
@@ -2142,20 +2528,128 @@ def test_authenticated_workflow_routes_every_immutable_v1_stage(
     assert [name for name, _kwargs in calls] == expected_calls
     expected_run_refs = [result["run_a_ref"], result["run_b_ref"]][: expected_calls.count("qa_run")]
     assert [kwargs["ref"] for name, kwargs in calls if name == "qa_run"] == expected_run_refs
+    if "performance_smoke_kernel" in expected_calls:
+        smoke = next(kwargs for name, kwargs in calls if name == "performance_smoke_kernel")
+        assert smoke["ref"] == result["performance_smoke_ref"]
+        assert smoke["dataset_ref"] == result["dataset_ref"]
+        assert smoke["source_manifest_ref"] == result["source_manifest_kernel_ref"]
+        assert smoke["competition_slug"] == packager.COMPETITION_SLUG
     if "review_session_kernel" in expected_calls:
         session = next(kwargs for name, kwargs in calls if name == "review_session_kernel")
         assert session["ref"] == result["review_session_ref"]
         assert session["parent_ref"] == result["review_ui_template_ref"]
+    if "review_plan_kernel" in expected_calls:
+        plan = next(kwargs for name, kwargs in calls if name == "review_plan_kernel")
+        assert plan["kernel_sources"] == [
+            result["performance_smoke_ref"],
+            result["run_a_ref"],
+            result["run_b_ref"],
+            result["comparison_ref"],
+        ]
+        assert plan["competition_slug"] == packager.COMPETITION_SLUG
     if "review_finalizer_kernel" in expected_calls:
         finalizer = next(kwargs for name, kwargs in calls if name == "review_finalizer_kernel")
         assert finalizer["kernel_sources"] == [
             result["run_a_ref"],
             result["run_b_ref"],
             result["comparison_ref"],
+            result["review_plan_ref"],
             result["review_session_ref"],
         ]
-    assert len(dataset_calls) == 2
-    assert all(ref == result["dataset_ref"] for ref, _files in dataset_calls)
+    source_identity = run_config["input_identity"]["source_manifest"]
+    source_dataset_ref = source_identity["bundle_dataset_ref"]
+    assert [ref for ref, _files in dataset_calls] == [
+        result["dataset_ref"],
+        source_dataset_ref,
+        result["dataset_ref"],
+    ]
+    expected_kernel_refs: list[str] = []
+    for name, kwargs in calls:
+        if name == "source_manifest_kernel":
+            source = kwargs["source"]
+            assert isinstance(source, dict)
+            expected_kernel_refs.append(source["kernel_ref"])
+        else:
+            expected_kernel_refs.append(kwargs["ref"])
+    assert kernel_status_calls == expected_kernel_refs
+    assert kernel_version_calls == [(ref, 1) for ref in expected_kernel_refs]
+
+
+@pytest.mark.parametrize(
+    ("race", "expected_error"),
+    [
+        ("source_dataset", "dataset_version_race"),
+        ("upstream_kernel", "kernel_api_metadata_invalid"),
+    ],
+)
+def test_authenticated_workflow_rejects_end_of_chain_version_race(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    race: str,
+    expected_error: str,
+) -> None:
+    bundle, result = _assembled(tmp_path)
+    run_config, runner, manifest = validator.load_verified_policy(
+        bundle / "dataset/run-config.json",
+        bundle / "dataset/bundle-manifest.json",
+        expected_commit=COMMIT,
+        expected_bundle=result["bundle_sha256"],
+    )
+    source = run_config["input_identity"]["source_manifest"]
+    source_dataset_ref = source["bundle_dataset_ref"]
+    source_snapshot = {
+        "dataset_id": 1729,
+        "version": 1,
+        "files": tuple(sorted(validator._source_manifest_dataset_files(source).items())),
+    }
+    advanced = False
+
+    monkeypatch.setattr(
+        validator,
+        "_supported_kaggle_cli_interpreter",
+        lambda: Path(sys.executable),
+    )
+
+    def fake_dataset(ref: str, files: dict[str, int]) -> dict[str, object]:
+        if ref == source_dataset_ref:
+            if race == "source_dataset" and advanced:
+                return {**source_snapshot, "version": 2}
+            return source_snapshot
+        return {"dataset_id": 2718, "version": 1, "files": tuple(sorted(files.items()))}
+
+    def advance_during_comparison(**_kwargs: object) -> None:
+        nonlocal advanced
+        advanced = True
+
+    def final_kernel_version(ref: str, _version: int) -> dict[str, object]:
+        if race == "upstream_kernel" and advanced and ref == result["run_a_ref"]:
+            raise validator.OutputValidationError("kernel_api_metadata_invalid")
+        return {"ref": ref, "current_version_number": 1}
+
+    monkeypatch.setattr(validator, "_authenticated_dataset_snapshot", fake_dataset)
+    monkeypatch.setattr(
+        validator,
+        "_authenticate_source_manifest_kernel",
+        lambda **_kwargs: source_snapshot,
+    )
+    monkeypatch.setattr(validator, "_authenticate_performance_smoke_kernel", lambda **_kwargs: None)
+    monkeypatch.setattr(validator, "_authenticate_qa_run", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        validator,
+        "_authenticate_comparison_kernel",
+        advance_during_comparison,
+    )
+    monkeypatch.setattr(validator, "_kernel_status_complete", lambda _ref: None)
+    monkeypatch.setattr(validator, "_authenticate_kernel_api_version", final_kernel_version)
+
+    with pytest.raises(validator.OutputValidationError, match=rf"\A{expected_error}\Z"):
+        validator.validate_authenticated_workflow(
+            expected_version=1,
+            stage="comparison",
+            run_config=run_config,
+            runner=runner,
+            manifest=manifest,
+        )
 
 
 def test_workflow_stage_is_required_only_with_remote_workflow(
@@ -2655,30 +3149,65 @@ def test_finalizer_listing_requires_final_performance_artifact() -> None:
     validator._validate_review_listing((json.dumps(records).encode(),), finalizer)
 
 
-def test_review_ledger_requires_at_least_one_pass_for_every_check() -> None:
+def test_review_ledger_check9_na_and_attestation_binding() -> None:
     finalizer = _finalizer()
+    clean_context = {
+        "organizer_plane": "sagittal",
+        "physical_plane": "sagittal",
+        "laterality": "unknown",
+        "laterality_transform": "none",
+        "horizontal_flip_applied": False,
+        "assigned_slot": "sagittal_fluid_sensitive",
+        "retention_reasons": [],
+        "missing_series_mask": [False] * 6,
+        "sibling_series": [
+            {
+                "series_ordinal": 0,
+                "slot": "sagittal_fluid_sensitive",
+                "terminal_state": "model_eligible",
+                "model_eligible": True,
+                "retention_reasons": [],
+                "quality_blocked_reasons": [],
+            }
+        ],
+        "check_9_applicable": False,
+        "check_9_reason_codes": [],
+    }
     plan = {
+        "schema_version": 2,
+        "artifact_type": "private-dicom-qa-review-plan",
+        "status": "pending_private_human_review",
+        "review_identity": {"review_bundle_id": "c5qa-test"},
         "rows": [
             {
                 "case_ordinal": 0,
                 "series_ordinal": 0,
+                "review_context": clean_context,
+                "decisions": {check: "not_reviewed" for check in finalizer.REVIEW_CHECKS},
+                "artifacts": [],
             },
-            {
-                "case_ordinal": 1,
-                "series_ordinal": 0,
-            },
-        ]
+        ],
     }
     ledger = {
-        "schema_version": 1,
+        "schema_version": 2,
         "artifact_type": "private-dicom-qa-completed-review-ledger",
         "status": "complete",
-        "review_identity": None,
+        "review_identity": plan["review_identity"],
         "plan_sha256": hashlib.sha256(finalizer._canonical_json_bytes(plan)).hexdigest(),
+        "started_at_utc": "2026-08-09T01:00:00Z",
         "completed_at_utc": "2026-08-09T01:02:03Z",
+        "human_attestation": {
+            "schema_version": 1,
+            "instructions_version": finalizer.REVIEW_INSTRUCTIONS_VERSION,
+            "statement": finalizer.HUMAN_ATTESTATION_STATEMENT,
+            "authorized_human_reviewer": True,
+            "direct_visual_review": True,
+            "no_llm_or_browser_automation_pixel_access": True,
+            "attested_at_utc": "2026-08-09T01:02:03Z",
+        },
         "rows": [
             {
-                "case_ordinal": ordinal,
+                "case_ordinal": 0,
                 "series_ordinal": 0,
                 "artifact_hashes_verified": True,
                 "decisions": {
@@ -2690,11 +3219,25 @@ def test_review_ledger_requires_at_least_one_pass_for_every_check() -> None:
                     for check in finalizer.REVIEW_CHECKS
                 },
             }
-            for ordinal in range(2)
         ],
     }
-    with pytest.raises(finalizer.ReviewFinalizationError, match="review_ledger_invalid"):
-        finalizer._validated_ledger(finalizer._canonical_json_bytes(ledger), plan)
-
-    ledger["rows"][1]["decisions"]["duplicate_missing_abnormal_handling"] = "PASS"
     finalizer._validated_ledger(finalizer._canonical_json_bytes(ledger), plan)
+
+    applicable_plan = deepcopy(plan)
+    applicable_context = applicable_plan["rows"][0]["review_context"]
+    applicable_context["missing_series_mask"][1] = True
+    applicable_context["check_9_applicable"] = True
+    applicable_context["check_9_reason_codes"] = ["missing_diagnostic_slot"]
+    applicable_ledger = deepcopy(ledger)
+    applicable_ledger["plan_sha256"] = hashlib.sha256(
+        finalizer._canonical_json_bytes(applicable_plan)
+    ).hexdigest()
+    with pytest.raises(finalizer.ReviewFinalizationError, match="review_ledger_invalid"):
+        finalizer._validated_ledger(
+            finalizer._canonical_json_bytes(applicable_ledger), applicable_plan
+        )
+
+    stale = deepcopy(ledger)
+    stale["human_attestation"]["attested_at_utc"] = "2026-08-09T01:01:59Z"
+    with pytest.raises(finalizer.ReviewFinalizationError, match="review_ledger_invalid"):
+        finalizer._validated_ledger(finalizer._canonical_json_bytes(stale), plan)
