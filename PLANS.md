@@ -146,12 +146,12 @@ unauthorized.
 
 ## Chunk 5 - deterministic DICOM-to-model pipeline
 
-Status: Chunk 5 recovery is active and not passed. The fourth private Run A attempt completed its
-full-data pass but failed closed in the superseded capped joint-material selector; Run B was not
-started. Every earlier freeze and bundle is superseded. The exact 29-file staged candidate implements
-the D-023 two-stage design and passed the complete final local gate, including pytest 507/507 and
-independent end-to-end and source-graph red-teams. The new freeze, bundle, private executions, human
-review, commit, and push remain pending.
+Status: Chunk 5 recovery is active and not passed. Recovery iteration 5 produced freeze `01ea270`,
+bundle `4127dcc...`, and an authenticated private input chain. Its standalone smoke completed in
+35 minutes 5 seconds, but validation failed closed on the observed Kaggle wrapper-log layout before
+Run A. The minimal D-024 correction is focused-green and now requires the complete exact-set gate,
+replacement freeze/bundle/version-1 chain, smoke retry, Run A, Run B, comparison, human review,
+commit, and push.
 This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
 request #10 remains unmerged.
 
@@ -206,6 +206,10 @@ Local evidence:
   Ruff, strict typing, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
   sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
   source-graph red-teams found no remaining P0/P1.
+- Recovery iteration 5 authenticated its new private inputs and completed the standalone smoke,
+  then failed only at the local wrapper-log retrieval layout. The D-024 two-file correction passed
+  11 focused tests, strict static checks, and the observed-output probe; its complete gate remains
+  pending before a replacement freeze.
 
 Exit evidence still required:
 

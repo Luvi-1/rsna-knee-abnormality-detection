@@ -113,7 +113,10 @@ selector, and Run B was not started. The exact 29-file staged D-023 candidate su
 the complete final local gate, including pytest 507/507 and the locked install/build, lint, format,
 typing, CLI/config/submission/contract, pre-commit, privacy, dependency, contract-drift, diff,
 inventory, and clean-tree checks. Independent end-to-end/source-graph red-teams found no remaining
-P0/P1. The freeze, bundle, and all private/remote gates remain pending.
+P0/P1. Recovery iteration 5 then created freeze `01ea270` and bundle `4127dcc...`, authenticated
+its private inputs, and completed the standalone smoke in 35 minutes 5 seconds. Validation failed
+closed on the official CLI wrapper-log layout before Run A. The bounded D-024 correction is
+focused-green; its complete gate and replacement private chain remain pending.
 
 The exact clean candidate must bind to the completed private
 `audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct

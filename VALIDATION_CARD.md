@@ -83,6 +83,12 @@ locked install/build, lint, format, typing, CLI/config/submission/contract, pre-
 dependency, contract-drift, diff, inventory, and clean-tree checks. Independent end-to-end/source-
 graph red-teams found no remaining P0/P1.
 
+Recovery iteration 5 subsequently authenticated a fresh private input chain and completed the
+standalone smoke in 35 minutes 5 seconds. The workflow validator failed closed before Run A because
+official Kaggle CLI 2.2.4 materialized one root execution log beside the requested safe summary.
+The D-024 correction admits only that bounded, canary-scanned log and passed focused static/tests
+plus an observed-output probe. A complete gate and replacement immutable chain remain required.
+
 This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
 the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
 superseded audit. Distinct private version-1 Run A and Run B kernels must independently process the

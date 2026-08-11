@@ -166,10 +166,20 @@ sensitive-file checks, dependency audit with no known vulnerabilities, fresh con
 diff checks. Independent end-to-end and source-graph red-teams found no remaining P0/P1. No local
 gate or smoke projection is remote completion evidence.
 
+Recovery iteration 5 produced freeze `01ea270` and immutable bundle `4127dcc...`. The new private
+version-1 input chain authenticated, and its standalone smoke reached `COMPLETE` in 35 minutes 5
+seconds. Workflow validation then failed closed with `performance_smoke_output_layout_invalid`
+before Run A. A bounded probe showed that official Kaggle CLI 2.2.4 always materializes one root
+execution log beside the matched safe summary; the authenticated listing already allowed it, while
+the local retrieval layout incorrectly required one file total. D-024 now permits at most that one
+safe-pattern root log, reads at most 2 MiB, scans it with the bound canary and sensitive-data policy,
+and rejects every other layout. Eleven focused tests, Ruff, formatting, strict mypy, and the
+completed-smoke probe pass. The correction still requires a complete gate and new immutable chain.
+
 ## Remaining gates
 
-1. Create a clean implementation-freeze commit from the exactly gated 29-file staged candidate,
-   then build the immutable private bundle.
+1. Run the complete exact-set gate over D-024, create a replacement clean implementation freeze,
+   and build a new immutable private bundle; do not reuse recovery iteration 5.
 2. Re-authenticate the private/offline/version-bound input chain.
 3. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
    run and validate full Run A before starting independent Run B.

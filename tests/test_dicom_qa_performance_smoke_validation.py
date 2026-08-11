@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -116,6 +117,37 @@ def _runner() -> SimpleNamespace:
     )
 
 
+def _privacy_runner() -> ModuleType:
+    path = ROOT / "kaggle/dicom_qa/run.py"
+    runner: ModuleType = validator._runner_module(
+        hashlib.sha256(path.read_bytes()).hexdigest(), path
+    )
+    return runner
+
+
+def _mock_smoke_download(
+    monkeypatch: pytest.MonkeyPatch,
+    summary: bytes,
+    *,
+    log: bytes | None = None,
+    include_summary: bool = True,
+    extra: bool = False,
+) -> None:
+    def download(arguments: tuple[str, ...], **_kwargs: Any) -> bytes:
+        root = Path(arguments[arguments.index("--path") + 1])
+        if include_summary:
+            output = root / validator.PERFORMANCE_SMOKE_OUTPUT_DIRECTORY
+            output.mkdir()
+            (output / validator.PERFORMANCE_SMOKE_SUMMARY).write_bytes(summary)
+        if log is not None:
+            (root / "kernel.log").write_bytes(log)
+        if extra:
+            (root / "unexpected.txt").write_bytes(b"unexpected")
+        return b""
+
+    monkeypatch.setattr(validator, "_run_kaggle_cli", download)
+
+
 def test_performance_smoke_summary_is_exact_and_never_allows_full_run() -> None:
     run_config, manifest = _identity()
     payload = _summary(run_config, manifest)
@@ -199,6 +231,71 @@ def test_performance_smoke_listing_allows_only_summary_and_one_safe_log() -> Non
     invalid = [*valid, {"name": "private.json", "size": 896}]
     with pytest.raises(validator.OutputValidationError, match="remote_name_not_allowed"):
         validator._validate_performance_smoke_listing((json.dumps(invalid).encode(),))
+
+
+def test_performance_smoke_retrieval_allows_privacy_safe_wrapper_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_config, manifest = _identity()
+    _mock_smoke_download(
+        monkeypatch,
+        _summary(run_config, manifest),
+        log=b"Kernel run completed\n",
+    )
+
+    validator._retrieve_performance_smoke_summary(
+        "test-owner/performance-smoke/1",
+        run_config=run_config,
+        runner=_privacy_runner(),
+        manifest=manifest,
+    )
+
+
+@pytest.mark.parametrize(
+    "log",
+    [b"RSNA_PRIVATE_CANARY_test\n", b"PatientID=private\n"],
+)
+def test_performance_smoke_retrieval_rejects_sensitive_wrapper_log(
+    monkeypatch: pytest.MonkeyPatch,
+    log: bytes,
+) -> None:
+    run_config, manifest = _identity()
+    _mock_smoke_download(monkeypatch, _summary(run_config, manifest), log=log)
+
+    with pytest.raises(validator.OutputValidationError, match="performance_smoke_log_invalid"):
+        validator._retrieve_performance_smoke_summary(
+            "test-owner/performance-smoke/1",
+            run_config=run_config,
+            runner=_privacy_runner(),
+            manifest=manifest,
+        )
+
+
+@pytest.mark.parametrize(("include_summary", "extra"), [(False, False), (True, True)])
+def test_performance_smoke_retrieval_rejects_missing_summary_or_extra_file(
+    monkeypatch: pytest.MonkeyPatch,
+    include_summary: bool,
+    extra: bool,
+) -> None:
+    run_config, manifest = _identity()
+    _mock_smoke_download(
+        monkeypatch,
+        _summary(run_config, manifest),
+        log=b"Kernel run completed\n",
+        include_summary=include_summary,
+        extra=extra,
+    )
+
+    with pytest.raises(
+        validator.OutputValidationError,
+        match="performance_smoke_output_layout_invalid",
+    ):
+        validator._retrieve_performance_smoke_summary(
+            "test-owner/performance-smoke/1",
+            run_config=run_config,
+            runner=_privacy_runner(),
+            manifest=manifest,
+        )
 
 
 def test_performance_smoke_authentication_is_v1_bound_and_race_checked(

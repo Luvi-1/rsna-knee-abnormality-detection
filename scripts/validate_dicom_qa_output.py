@@ -1861,17 +1861,33 @@ def _retrieve_performance_smoke_summary(
             entries = list(root.rglob("*"))
         except OSError as error:
             raise OutputValidationError("performance_smoke_output_layout_invalid") from error
+        directories = [path for path in entries if path.is_dir()]
         files = [path for path in entries if path.is_file()]
+        expected_summaries = {
+            root / PERFORMANCE_SMOKE_SUMMARY,
+            root / PERFORMANCE_SMOKE_OUTPUT_DIRECTORY / PERFORMANCE_SMOKE_SUMMARY,
+        }
+        summaries = [path for path in files if path in expected_summaries]
+        logs = [
+            path for path in files if path.parent == root and SAFE_LOG_PATTERN.fullmatch(path.name)
+        ]
+        expected_directories = (
+            {root / PERFORMANCE_SMOKE_OUTPUT_DIRECTORY}
+            if summaries and summaries[0].parent == root / PERFORMANCE_SMOKE_OUTPUT_DIRECTORY
+            else set()
+        )
         if (
             any(path.is_symlink() for path in entries)
             or any(not path.is_file() and not path.is_dir() for path in entries)
-            or len(files) != 1
-            or files[0].name != PERFORMANCE_SMOKE_SUMMARY
+            or len(summaries) != 1
+            or len(logs) > 1
+            or set(files) != {*summaries, *logs}
+            or set(directories) != expected_directories
         ):
             raise OutputValidationError("performance_smoke_output_layout_invalid")
         _validate_performance_smoke_summary(
             _read_bounded(
-                files[0],
+                summaries[0],
                 PERFORMANCE_SMOKE_SUMMARY_MAX_BYTES,
                 "performance_smoke_summary_invalid",
             ),
@@ -1879,6 +1895,16 @@ def _retrieve_performance_smoke_summary(
             runner=runner,
             manifest=manifest,
         )
+        if logs:
+            try:
+                runner._scan_downloadable(
+                    _read_bounded(logs[0], 2 * 1024 * 1024, "performance_smoke_log_invalid"),
+                    str(cast(Mapping[str, Any], run_config["privacy"])["canary"]),
+                )
+            except OutputValidationError:
+                raise
+            except Exception as error:
+                raise OutputValidationError("performance_smoke_log_invalid") from error
 
 
 def _retrieve_safe_qa_output(

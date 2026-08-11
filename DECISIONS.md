@@ -524,16 +524,13 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   file, byte, time, and disk limits remain fail-closed admission gates. The only public registry-
   coverage claim is `all_required_represented_registry_values_satisfy_quotas`; the legacy joint-
   material census and coverage claim are removed.
-- Current evidence: the exact 29-file staged two-stage redesign and selector v3 candidate passed the
-  complete final local gate: staged inventory and clean-tree checks, locked offline reinstall/check,
-  isolated Python 3.11 wheel build/install/import, MIME checks, Ruff, strict mypy over 25 package and
-  nine trust-boundary files, pytest 507/507, CLI/config/submission/contract checks, all pre-commit
-  hooks, full candidate secret and sensitive-file checks, dependency audit with no known
-  vulnerabilities, fresh contract drift, and diff checks. Independent end-to-end and source-graph
-  red-teams found no remaining P0/P1. The clean freeze, immutable bundle, authenticated pre-run
-  smoke, Run A, validation, independent Run B,
-  exact comparison, QA materialization, human review, and final validation remain pending. All
-  earlier freezes and bundles are superseded and Run B has never started.
+- Current evidence: freeze `01ea270` and bundle `4127dcc...` were produced from the exact 29-file
+  507-test candidate. Their private version-1 inputs authenticated and the standalone smoke
+  completed in 35 minutes 5 seconds, but validation failed closed with
+  `performance_smoke_output_layout_invalid` before Run A. The two-file compatibility correction
+  passed 11 focused tests, Ruff, formatting, strict mypy, and a bounded probe against the completed
+  output. Its complete exact-set gate, replacement freeze/bundle, smoke retry, Run A, independent
+  Run B, comparison, QA materialization, human review, and final validation remain pending.
 - Risks: an eligible population can legitimately require more than the minimum review count; a
   physical capacity gate can still block QA materialization; a mismatch in any of the three
   deterministic outputs blocks the review stage; and sampled smoke estimates may miss a slower
@@ -541,4 +538,21 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: replace only with a workflow that preserves two independent complete
   full-data proofs, exact plan comparison, every required represented bounded-registry quota, the
   same physical and privacy gates, and equally strong human-review binding.
-- Commit/experiment: new freeze pending; `preprocess-0001-dicom-pipeline`.
+- Commit/experiment: `01ea270` is superseded-pending by the smoke-layout correction;
+  `preprocess-0001-dicom-pipeline-r5` is terminal failed.
+
+## D-024 - Admit only the observed Kaggle wrapper log beside smoke output
+
+- Date: 2026-08-11
+- Decision: when official Kaggle CLI 2.2.4 retrieves the allowlisted performance-smoke summary,
+  accept at most one additional root file whose basename matches the existing safe-log pattern.
+  Bound that log to 2 MiB and scan it with the exact run canary and downloadable sensitive-data
+  policy. Continue to require exactly one summary and reject every symlink, nonregular entry,
+  nested log, extra file, or extra directory.
+- Reason: the authenticated remote listing already allowed one execution log, and observed CLI
+  behavior always materialized it even when a file pattern requested only the summary. Requiring
+  exactly one local file therefore rejected a valid completed smoke without strengthening privacy.
+- Evidence: the corrected boundary passed 11 focused tests and a privacy-safe probe against the
+  completed recovery-iteration-5 smoke; canary and patient-identifier log fixtures fail closed.
+- Reversal condition: replace only if a pinned official client provides a stronger exact-output
+  retrieval primitive without the wrapper log.
