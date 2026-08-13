@@ -3150,7 +3150,15 @@ def _select_after_full_pass(
     selected_order = result.selected_study_keys
     return SelectionPlan(
         studies=tuple(
-            SelectedStudy(uid, by_uid[uid].stratum, by_uid[uid].dimensions)
+            SelectedStudy(
+                uid,
+                by_uid[uid].stratum,
+                tuple(
+                    (dimension, values)
+                    for dimension, values in by_uid[uid].dimensions
+                    if dimension in registry_dimensions
+                ),
+            )
             for uid in selected_order
         ),
         coverage=cast(dict[str, object], asdict(result.coverage)),
@@ -3629,7 +3637,17 @@ def _run_full_dataset_pass(
         raise SafeRunError("private_full_run_manifest_hash_mismatch")
     if not eligible_profile_rows or first_provenance is None:
         raise SafeRunError("full_run_has_no_model_eligible_series")
-    ordered_profiles = sorted(eligible_profile_rows, key=lambda item: (item[0], item[1]))
+    selection_plan = _select_after_full_pass(
+        cohort_studies,
+        source_manifest_available=source_manifest_facts is not None,
+        target=selection_target,
+        minimum_eligible=selection_minimum_eligible,
+    )
+    selected_studies = {item.study_uid for item in selection_plan.studies}
+    ordered_profiles = sorted(
+        (item for item in eligible_profile_rows if item[2].study_uid in selected_studies),
+        key=lambda item: (item[0], item[1]),
+    )
     requested_profiles = (
         ("small", 0),
         ("median", (len(ordered_profiles) - 1) // 2),
@@ -3655,12 +3673,6 @@ def _run_full_dataset_pass(
                 paths=profile_paths,
             )
         )
-    selection_plan = _select_after_full_pass(
-        cohort_studies,
-        source_manifest_available=source_manifest_facts is not None,
-        target=selection_target,
-        minimum_eligible=selection_minimum_eligible,
-    )
     cohort_by_uid = {study.study_uid: study for study in cohort_studies}
     if selection_plan.coverage is None or selection_plan.cohort_sha256 is None:
         raise SafeRunError("qa_registry_coverage_incomplete")

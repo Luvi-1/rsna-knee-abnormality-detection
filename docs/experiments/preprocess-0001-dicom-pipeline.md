@@ -1,8 +1,9 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **two-stage recovery iteration 5 smoke completed but failed closed at wrapper-log layout;
-D-024 correction focused-green; replacement full gate, freeze, private reruns, and visual review
-pending; Chunk 5 not passed**.
+Status: **two-stage recovery iteration 6 inputs and smoke passed; Run A version 1 terminal `ERROR`
+with validated `phase=processing`, `code=private_cohort_plan_invalid`; D-025 correction focused-
+green; replacement full gate, freeze, private reruns, and visual review pending; Chunk 5 not
+passed**.
 
 ## Objective
 
@@ -17,7 +18,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; `01ea270` is superseded-pending by D-024 and the next freeze is not yet created |
+| Code | `feat/chunk-5-dicom-pipeline`; freeze `1c4470e8a9557141682a81737981271635db7fdc` and bundle `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4` are superseded-pending by D-025 |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -34,14 +35,17 @@ transformation, and produces model-ready tensors without starting ontology, fold
 
 ## Registry state
 
-The ignored private SQLite registry remains the authority for the experiment contract. Four Run A
-rows remain terminal failed and append-only: two stopped at source-manifest boundaries, one at the
-former processing deadline, and the fourth after its full-data pass at the superseded capped joint-
-material selector with `material_strata_coverage_impossible`. Run B, comparison, QA materialization,
-human review, and attestation remain `not_started`. Recovery iteration 5 is also terminal failed:
-its inputs authenticated and smoke completed in 35 minutes 5 seconds, but validation stopped at
-`performance_smoke_output_layout_invalid` before Run A. The D-024 fix is focused-green; its complete
-gate, replacement freeze, and bundle remain pending.
+The ignored private SQLite registry remains the authority for the experiment contract. Five Run A
+rows are terminal failed and append-only: two stopped at source-manifest boundaries, one at the
+former processing deadline, one after its full-data pass at the superseded capped joint-material
+selector, and recovery iteration 6 at private cohort-plan validation. Iteration 6 used freeze
+`1c4470e8a9557141682a81737981271635db7fdc` and bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its inputs and smoke passed,
+then Run A version 1 reached terminal `ERROR`. Separate bounded exact-reference failure-log
+classification passed with `phase=processing`, `code=private_cohort_plan_invalid`. Run B,
+comparison, QA materialization, human review, and attestation remain `not_started`. The D-025 fix is
+focused-green; its complete gate, replacement freeze, bundle, dataset chain, smoke, and Run A retry
+remain pending.
 
 ## Frozen controls
 
@@ -124,18 +128,22 @@ gate, replacement freeze, and bundle remain pending.
   comparison, one later QA preparation in the existing review-plan kernel, selector coverage over
   bounded semantic registries with no arbitrary maximum, and an identity-bound capacity
   certificate. D-023 records the adopted design.
-- The exact 29-file staged candidate implements selector v3 and the two-stage flow and passed the
-  complete final local gate: staged inventory and clean-tree checks, locked offline reinstall/check,
-  isolated wheel build/install/import, MIME checks, Ruff, strict mypy over 25 package and nine
-  trust-boundary files, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
-  sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
-  source-graph red-teams found no remaining P0/P1. The new freeze, immutable bundle, authenticated
-  smoke, Run A, validation, Run B, comparison, QA
-  materialization, visual review, finalization, push, and hosted CI remain pending.
-- Recovery iteration 5 proved the immutable input and smoke execution path, then exposed official
-  CLI 2.2.4's unconditional root wrapper log. The D-024 correction accepts only that single bounded,
-  canary-scanned log and passed 11 focused tests plus the observed-output probe. A complete exact-set
-  gate is required before the next freeze.
+- The exact replacement candidate passed its complete 512-test local gate and produced freeze
+  `1c4470e8a9557141682a81737981271635db7fdc` plus immutable bundle
+  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Recovery iteration 6 then
+  authenticated its private version-1 inputs and passed the standalone smoke, proving the D-024
+  wrapper-log correction remotely.
+- Run A version 1 reached terminal `ERROR`. The separately retrieved bounded exact-reference failure
+  log passed privacy classification and exposed only `phase=processing`,
+  `code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, visual review, and
+  finalization did not start.
+- Root-cause tracing found that `SelectedStudy` propagated legacy/internal `CohortStudy` dimensions
+  into a plan schema that permits exactly 25 registry dimensions. The same trace found a latent
+  cohort-binding defect: representative series were chosen from all globally eligible series rather
+  than the selected studies. The smallest two-file fix filters serialized dimensions through the
+  existing exact registry, selects the cohort first, and restricts representative profiles to it.
+  All 46 full-run tests, Ruff check/format, strict mypy on both files, and the diff check pass. A
+  complete exact-set gate is required before a replacement freeze.
 - A broad search of ignored local artifacts printed obsolete canary sentinel strings, local
   artifact paths, commit and bundle hashes, and the public competition slug into an internal tool
   transcript. It printed no credentials, key bytes, authentication tokens, pixels, DICOM headers,
@@ -188,11 +196,11 @@ inside Kaggle and never enter repository documents or command output.
 
 ## After attempted Run A
 
-Recovery pending. Four Run A attempts failed closed: first on source identity, then on source-schema
-consumption, then at the former processing deadline, and finally after a completed full-data pass at
-the superseded selector. Run B was not started. No admissible Run A result, Run A/Run B comparison,
-QA image review, completed review session, human attestation, or finalizer result is claimed. The
-incidents are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Record new identities and
-actual results only after the next complete gate, freeze/bundle, authenticated smoke, independent
-Run A and Run B, exact comparison, QA materialization, and review. Do not start ontology, folds,
-labels, training, inference, or submission.
+Recovery pending. Five Run A attempts failed closed: first on source identity, then on source-schema
+consumption, then at the former processing deadline, then after a completed full-data pass at the
+superseded selector, and recovery iteration 6 at private cohort-plan validation. Run B was not
+started. No admissible Run A result, Run A/Run B comparison, QA image review, completed review
+session, human attestation, or finalizer result is claimed. The incidents are recorded in
+`docs/postmortems/chunk-5-dicom-pipeline.md`. Run the complete gate over D-025, replace the freeze,
+bundle, and private version-1 dataset chain, rerun smoke, and retry Run A before recording any new
+completion evidence. Do not start ontology, folds, labels, training, inference, or submission.

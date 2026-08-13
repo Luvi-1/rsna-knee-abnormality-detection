@@ -948,6 +948,7 @@ def test_post_full_pass_selection_includes_represented_singleton_value() -> None
                     if rule.dimension != "scanner_model"
                 ),
                 ("scanner_model", ("singleton_model" if uid == singleton_uid else "common",)),
+                ("legacy_internal_dimension", ("diagnostic_only",)),
             ),
             eligible_series_uids=(f"{uid}.1",),
         )
@@ -962,6 +963,11 @@ def test_post_full_pass_selection_includes_represented_singleton_value() -> None
     assert first == second
     assert len(first.studies) == runner.TARGET_STUDIES
     assert singleton_uid in {study.study_uid for study in first.studies}
+    assert all(
+        {dimension for dimension, _values in study.dimensions}
+        == set(runner.REQUIRED_REVIEW_DIMENSIONS)
+        for study in first.studies
+    )
     assert first.coverage is not None
     coverage = {(item["dimension"], item["value"]): item for item in first.coverage["rows"]}
     singleton = coverage[("scanner_model", "singleton_model")]
@@ -1179,6 +1185,8 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
         ("median", 2),
         ("large", 5),
     ]
+    selected_studies = {item.study_uid for item in first_selection.studies}
+    assert {item.study_uid for item in first_representatives} <= selected_studies
 
     records = _manifest_records(first_path)
     assert [record["record_type"] for record in records] == [
@@ -1306,6 +1314,38 @@ def test_full_run_is_permutation_deterministic_private_and_terminally_reconciled
     assert all(row.series_uid not in metrics_text for row in rows)
 
     assert first_selection.cohort_sha256 == first_metrics["qa_cohort_selection"]["cohort_sha256"]
+
+
+def test_full_run_representatives_are_selected_cohort_members(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    competition = tmp_path / "competition"
+    rows, requested_states = _rows_and_files(competition)
+    monkeypatch.setattr(runner, "_full_series_state", _fake_series_state_factory(requested_states))
+
+    def select_subset(studies: Any, **_kwargs: Any) -> Any:
+        chosen = tuple(
+            runner.SelectedStudy(item.study_uid, item.stratum, item.dimensions)
+            for item in studies
+            if item.study_uid in {"1.2.826.0.1.1002", "1.2.826.0.1.1004"}
+        )
+        return runner.SelectionPlan(
+            chosen,
+            {"all_required_represented_registry_values_satisfy_quotas": True},
+            "f" * 64,
+        )
+
+    monkeypatch.setattr(runner, "_select_after_full_pass", select_subset)
+    _metrics, representatives, selection = _run_full(
+        competition_root=competition,
+        rows=rows,
+        manifest_path=tmp_path / "manifest.jsonl",
+        source_available=True,
+    )
+
+    selected = {item.study_uid for item in selection.studies}
+    assert selected
+    assert {item.study_uid for item in representatives} <= selected
 
 
 def test_file_terminal_records_preserve_success_and_mixed_failure_ordinals() -> None:
@@ -1955,7 +1995,7 @@ def _stage_b_inputs(tmp_path: Path) -> SimpleNamespace:
         runner.CohortStudy(
             study_uid=row.study_uid,
             stratum=tuple(f"stratum-{value}" for value in range(11)),
-            dimensions=_registry_dimensions(),
+            dimensions=(*_registry_dimensions(), ("plane", ("axial",))),
             eligible_series_uids=(row.series_uid,),
         )
         for row in rows
@@ -1965,6 +2005,11 @@ def _stage_b_inputs(tmp_path: Path) -> SimpleNamespace:
         source_manifest_available=True,
         target=100,
         minimum_eligible=100,
+    )
+    assert all(
+        {dimension for dimension, _values in study.dimensions}
+        == set(runner.REQUIRED_REVIEW_DIMENSIONS)
+        for study in selection_plan.studies
     )
     quality_payload = {
         "blocked_reasons": [reason.value for reason in quality.blocked_reasons],

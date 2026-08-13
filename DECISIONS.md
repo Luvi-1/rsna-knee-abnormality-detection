@@ -524,13 +524,14 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   file, byte, time, and disk limits remain fail-closed admission gates. The only public registry-
   coverage claim is `all_required_represented_registry_values_satisfy_quotas`; the legacy joint-
   material census and coverage claim are removed.
-- Current evidence: freeze `01ea270` and bundle `4127dcc...` were produced from the exact 29-file
-  507-test candidate. Their private version-1 inputs authenticated and the standalone smoke
-  completed in 35 minutes 5 seconds, but validation failed closed with
-  `performance_smoke_output_layout_invalid` before Run A. The two-file compatibility correction
-  passed 11 focused tests, Ruff, formatting, strict mypy, and a bounded probe against the completed
-  output. Its complete exact-set gate, replacement freeze/bundle, smoke retry, Run A, independent
-  Run B, comparison, QA materialization, human review, and final validation remain pending.
+- Current evidence: recovery iteration 6 used fully gated freeze
+  `1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Its private version-1 inputs
+  authenticated and its standalone smoke passed. Run A version 1 then reached terminal `ERROR`; a
+  separately retrieved bounded exact-reference failure log passed privacy classification and
+  reported only `phase=processing`, `code=private_cohort_plan_invalid`. Run B, comparison, QA
+  materialization, human review, and final validation were not started. D-025 records the required
+  source correction and new immutable-chain requirement.
 - Risks: an eligible population can legitimately require more than the minimum review count; a
   physical capacity gate can still block QA materialization; a mismatch in any of the three
   deterministic outputs blocks the review stage; and sampled smoke estimates may miss a slower
@@ -538,8 +539,8 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: replace only with a workflow that preserves two independent complete
   full-data proofs, exact plan comparison, every required represented bounded-registry quota, the
   same physical and privacy gates, and equally strong human-review binding.
-- Commit/experiment: `01ea270` is superseded-pending by the smoke-layout correction;
-  `preprocess-0001-dicom-pipeline-r5` is terminal failed.
+- Commit/experiment: `1c4470e8a9557141682a81737981271635db7fdc` is superseded-pending by
+  D-025; recovery iteration 6 is terminal failed.
 
 ## D-024 - Admit only the observed Kaggle wrapper log beside smoke output
 
@@ -554,5 +555,35 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   exactly one local file therefore rejected a valid completed smoke without strengthening privacy.
 - Evidence: the corrected boundary passed 11 focused tests and a privacy-safe probe against the
   completed recovery-iteration-5 smoke; canary and patient-identifier log fixtures fail closed.
+- Remote result: the complete replacement gate produced freeze
+  `1c4470e8a9557141682a81737981271635db7fdc` and bundle
+  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; recovery iteration 6 then
+  authenticated its inputs and passed the standalone smoke-output workflow. The later Run A error
+  is a separate cohort-plan defect.
 - Reversal condition: replace only if a pinned official client provides a stronger exact-output
   retrieval primitive without the wrapper log.
+
+## D-025 - Bind cohort-plan dimensions and representatives to the selected cohort
+
+- Date: 2026-08-13
+- Owner: Luvi-1 and Codex
+- Question: How should recovery proceed after the iteration-6 Run A failure classified as
+  `phase=processing`, `code=private_cohort_plan_invalid`?
+- Evidence: the bounded exact-reference failure-log classification passed without releasing private
+  rows or identifiers. Source tracing found that `SelectedStudy` serialized every dimension carried
+  by the internal `CohortStudy`, including legacy/internal dimensions outside the exact 25-dimension
+  review-plan schema. The same trace found a latent binding defect: small/median/large representative
+  series were selected from the global eligible population rather than the selected study cohort.
+- Decision: filter each serialized selected-study dimension through the existing exact review
+  registry, select the cohort before representative profiles, and restrict the representative pool
+  to selected study identifiers. Preserve the selector, quotas, plan schema, and all fail-closed
+  validation; do not widen the schema or relax the validator.
+- Verification: the two source/test files pass all 46 full-run tests, Ruff check and format, strict
+  mypy, and the diff check. The complete exact-set gate has not run, so no new freeze or remote
+  execution may be accepted yet.
+- Consequence: freeze `1c4470e8a9557141682a81737981271635db7fdc`, bundle
+  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`, and their failed recovery-
+  iteration-6 chain are superseded-pending. Run the complete gate, create a new freeze and bundle,
+  create a fresh private version-1 dataset chain, rerun smoke, and retry Run A before Run B.
+- Reversal condition: replace only with an equally strict solution that emits exactly the frozen
+  25-dimension schema and proves every representative belongs to the selected cohort.

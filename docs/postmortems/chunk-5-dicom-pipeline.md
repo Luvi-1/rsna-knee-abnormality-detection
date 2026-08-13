@@ -2,16 +2,19 @@
 
 Status: **recovery open; Chunk 5 not passed**
 
-Date: 2026-08-11
+Date: 2026-08-13
 
 ## Summary
 
-Four private Run A attempts failed closed. The first stopped at source-manifest identity, the second
-at source-schema consumption, and the third at the former processing deadline. The fourth
-authenticated its inputs and completed the full-data pass, then stopped with
-`material_strata_coverage_impossible` in the superseded capped joint-material selector. Run B was
-not started. None of the four chains is completion evidence, and every associated freeze and bundle
-is superseded.
+Five private Run A attempts failed closed. The first stopped at source-manifest identity, the second
+at source-schema consumption, the third at the former processing deadline, and the fourth after a
+completed full-data pass in the superseded capped joint-material selector. Recovery iteration 6
+used fully gated freeze `1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its inputs and standalone
+smoke passed, but Run A version 1 reached terminal `ERROR`. A separate bounded exact-reference
+failure-log classification passed with `phase=processing`, `code=private_cohort_plan_invalid`. Run B,
+comparison, review-plan materialization, and human review were not started. None of the five chains
+is completion evidence, and every associated freeze and bundle is superseded or superseded-pending.
 
 Mode-0600 ignored Run A failure logs were retrieved only under exact allowlists for diagnosis and
 remain inside the protected project boundary. Only fixed sanitized runner events were exposed
@@ -73,6 +76,25 @@ can be high cardinality and do not form a bounded, interpretable semantic regist
 site-domain membership must be bucketed before it participates in required coverage. The failure
 does not establish that a cohort satisfying bounded semantic quotas is impossible.
 
+## Fifth root cause
+
+Recovery iteration 6 authenticated the replacement input chain and passed the standalone smoke,
+then Run A failed closed while producing its private cohort plan. The exact-reference failure log
+was retrieved separately under the bounded allowlist and passed privacy classification; its fixed
+classification was `phase=processing`, `code=private_cohort_plan_invalid`.
+
+Source tracing found that the selected-study plan serializer copied every dimension carried by the
+internal cohort record. That record intentionally retained legacy and diagnostic dimensions for
+local computation, but the downstream plan contract permits exactly the frozen 25-dimension review
+registry. The extra dimensions therefore crossed an internal schema boundary and the validator
+correctly rejected the plan.
+
+The same trace found a latent binding defect before the retry: small, median, and large
+representative series were chosen from the global eligible population. They must be chosen only
+from studies in the selected cohort so the later capacity certificate, benchmarks, and review plan
+refer to one coherent cohort. This second defect was not used to reinterpret the remote failure; it
+was corrected because the same source path made it directly observable.
+
 ## Internal transcript control incident
 
 During diagnosis, one broad search crossed into ignored local artifacts and printed obsolete canary
@@ -86,13 +108,13 @@ ignored artifacts are limited to exact bounded allowlists and fixed sanitized ou
 ## Impact
 
 - No Run A produced an admissible completed package, determinism comparison, performance report, or
-  visual-QA evidence. The fourth attempt's full pass is operational evidence only because its run
-  terminated at the selector.
+  visual-QA evidence. The fourth attempt's full pass and iteration 6's authenticated inputs/smoke are
+  operational evidence only because their runs did not produce a valid Run A package.
 - Run B and comparison did not start; review planning did not complete; human review and
   finalization did not start.
 - No Chunk 6 work, folds, weak labels, model training, inference, prediction, ensemble, or
   submission occurred.
-- All four run failures preserved the medical-data boundary; the third consumed the old processing
+- All five run failures preserved the medical-data boundary; the third consumed the old processing
   budget before failing closed. The separate transcript incident exposed only operational metadata
   categories internally and requires the controls recorded above.
 
@@ -176,11 +198,24 @@ safe-pattern root log, reads at most 2 MiB, scans it with the bound canary and s
 and rejects every other layout. Eleven focused tests, Ruff, formatting, strict mypy, and the
 completed-smoke probe pass. The correction still requires a complete gate and new immutable chain.
 
+Recovery iteration 6 completed that gate, producing freeze
+`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Its replacement private
+version-1 inputs authenticated and the standalone smoke passed. Run A version 1 then ended in
+terminal `ERROR`; the separately classified bounded failure log returned
+`phase=processing`, `code=private_cohort_plan_invalid`.
+
+The smallest correction changes only the shared runner and its full-run regression file. It filters
+serialized selected-study dimensions through the existing exact review registry, selects the
+cohort before representative profiles, and restricts those profiles to selected study identifiers.
+All 46 tests in `tests/test_dicom_qa_full_run.py`, Ruff check and format, strict mypy on the two
+files, and the diff check pass. These focused checks are not the complete release gate.
+
 ## Remaining gates
 
-1. Run the complete exact-set gate over D-024, create a replacement clean implementation freeze,
-   and build a new immutable private bundle; do not reuse recovery iteration 5.
-2. Re-authenticate the private/offline/version-bound input chain.
+1. Run the complete exact-set gate over D-025, create a replacement clean implementation freeze,
+   and build a new immutable private bundle; do not reuse recovery iteration 6.
+2. Create and re-authenticate the replacement private/offline/version-bound dataset chain.
 3. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
    run and validate full Run A before starting independent Run B.
 4. Compare exact manifests, deterministic metrics, and cohort plans. Only then run the existing

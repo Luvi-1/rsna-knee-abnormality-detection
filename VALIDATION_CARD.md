@@ -14,8 +14,9 @@ Fold version: `unassigned`; no folds exist.
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed at `2026-08-09T03:00:03Z` with no material drift. Identity
-  verification and the recorded unresolved fields still fail closed.
+- The live contract refreshed through the official Kaggle MCP at `2026-08-13T19:20:34Z`. One
+  explained data-description fingerprint change was already covered by the canonical semantics;
+  identity verification and the recorded unresolved fields still fail closed.
 
 ## Correction to historical grouping evidence
 
@@ -83,11 +84,21 @@ locked install/build, lint, format, typing, CLI/config/submission/contract, pre-
 dependency, contract-drift, diff, inventory, and clean-tree checks. Independent end-to-end/source-
 graph red-teams found no remaining P0/P1.
 
-Recovery iteration 5 subsequently authenticated a fresh private input chain and completed the
-standalone smoke in 35 minutes 5 seconds. The workflow validator failed closed before Run A because
-official Kaggle CLI 2.2.4 materialized one root execution log beside the requested safe summary.
-The D-024 correction admits only that bounded, canary-scanned log and passed focused static/tests
-plus an observed-output probe. A complete gate and replacement immutable chain remain required.
+Recovery iteration 6 used fully gated freeze
+`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. The fresh private input chain
+authenticated and standalone smoke passed. Run A version 1 then reached terminal `ERROR`; a
+separate bounded exact-reference failure-log classification passed with `phase=processing` and
+`code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, human review, and
+finalization did not start.
+
+Root-cause tracing showed that `SelectedStudy` serialized legacy/internal dimensions outside the
+exact 25-dimension plan schema. It also found a latent binding defect: representative series were
+chosen from the global eligible population, not the selected cohort. The smallest source/test fix
+filters dimensions through the existing exact registry, selects the cohort before representative
+profiles, and restricts profiles to selected studies. All 46 full-run tests, Ruff check/format,
+strict mypy on both files, and the diff check pass. The complete gate and a replacement freeze,
+bundle, private dataset chain, smoke, and Run A retry remain required.
 
 This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
 the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
@@ -135,7 +146,7 @@ binds organizer/physical plane, assigned slot, retention reasons, the six-slot m
 ordinal sibling slot/terminal/model-eligibility/retention/quality-block context. The plan, review
 identity, cohort hash, artifact hashes, rows, decisions, pixels, paths, and case details remain inside
 Kaggle under
-`private-dicom-qa-human-review-v1`.
+`private-dicom-qa-human-review-v2`.
 
 The safe private UI template must be copied and edited in Chrome into a distinct private review
 session version 1, with `START` as the first operation before artifact access. The pinned private

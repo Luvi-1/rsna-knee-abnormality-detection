@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "retrieved_at_utc": "2026-08-11T21:41:12Z",
-  "retrieved_at_local": "2026-08-11T14:41:12-07:00",
+  "retrieved_at_utc": "2026-08-13T19:20:34Z",
+  "retrieved_at_local": "2026-08-13T12:20:34-07:00",
   "identity": {
     "competition_id": 154281,
     "slug": "rsna-knee-abnormality-detection",
@@ -78,7 +78,7 @@
     "max_submission_size_mb": 20480
   },
   "data": {
-    "description_fingerprint": "73ad166e0959a489deb425ba037e9c7c871f2a9d617dab8f79ec123c689cceeb",
+    "description_fingerprint": "316dcdf5409280e576f3814bee1ce26760aa9825908bf931162d5a126cc7ee83",
     "inventory": {
       "display_size": "569.76 GB",
       "total_files": 819640,
@@ -198,14 +198,14 @@
   ],
   "evidence": {
     "kaggle_cli_version": "2.2.4",
-    "kaggle_mcp": "configured_but_tools_not_exposed_used_official_cli",
+    "kaggle_mcp": "official_mcp_used_no_cli_fallback",
     "github_issue_transport": "official_connector_denied_private_repo_access_used_verified_owner_cli_fallback",
     "page_sha256": {
       "rules": "9105f8f81f96c02aca988197c175d699052be8c06419b21131dccdd426bc404d",
       "description": "812ccca01a1b01fdd99eda9be315c06a7f1df8053b532b6d3ae4a2af48339433",
       "evaluation": "2abd98e6882a9493ea19e0582acfe21b8fdeff6a3cb5c04575271245e8d539ba",
       "timeline": "077c171707c413423852a1d7155ac3784aaf3ffa5f3ad20c6b946deb1100d3f3",
-      "data_description": "73ad166e0959a489deb425ba037e9c7c871f2a9d617dab8f79ec123c689cceeb",
+      "data_description": "316dcdf5409280e576f3814bee1ce26760aa9825908bf931162d5a126cc7ee83",
       "prizes": "60abb2ea73f93e2ce3312b0f0c09c1b5bd9e3b3ffbcd24a5982edad56ef0040a",
       "code_requirements": "7717ab86668081aa7813ca9aa3067f8ed20b539515fa23129f65cd40b848cc8e",
       "abstract": "9aaa35cd00ffbe88f3d6a0e53481223e8c6b1fca83a4872f02cd6e8c27456247",

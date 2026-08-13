@@ -39,9 +39,9 @@ Delivered evidence:
 - Rules, metric, schema, dates, notebook/runtime and submission limits, data interface, external
   assets, team/sharing constraints, licenses, and contradictions are recorded with conservative
   defaults.
-- The latest live refresh at `2026-08-09T03:00:03Z` found no material payload or source-fingerprint
-  drift. Official Kaggle CLI/API was the approved fallback because the configured official Kaggle
-  MCP was not exposed.
+- The latest live refresh at `2026-08-13T19:20:34Z` used the official Kaggle MCP first. The current
+  data-description fingerprint changed only for three organizer clarifications already enforced by
+  the canonical contract; every other operational fingerprint and material gate was unchanged.
 
 Open gates:
 
@@ -146,12 +146,15 @@ unauthorized.
 
 ## Chunk 5 - deterministic DICOM-to-model pipeline
 
-Status: Chunk 5 recovery is active and not passed. Recovery iteration 5 produced freeze `01ea270`,
-bundle `4127dcc...`, and an authenticated private input chain. Its standalone smoke completed in
-35 minutes 5 seconds, but validation failed closed on the observed Kaggle wrapper-log layout before
-Run A. The minimal D-024 correction is focused-green and now requires the complete exact-set gate,
-replacement freeze/bundle/version-1 chain, smoke retry, Run A, Run B, comparison, human review,
-commit, and push.
+Status: Chunk 5 recovery is active and not passed. Recovery iteration 6 used freeze
+`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its private version-1 inputs
+authenticated and standalone smoke passed. Run A version 1 then reached terminal `ERROR`. A separate
+bounded exact-reference failure-log classification passed with `phase=processing` and
+`code=private_cohort_plan_invalid`. Run B, comparison, review-plan materialization, and human review
+did not start. The minimal D-025 source/test correction is focused-green and now requires the
+complete exact-set gate, replacement freeze/bundle/dataset chain, smoke retry, Run A, Run B,
+comparison, human review, commit, and push.
 This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
 request #10 remains unmerged.
 
@@ -206,15 +209,18 @@ Local evidence:
   Ruff, strict typing, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
   sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
   source-graph red-teams found no remaining P0/P1.
-- Recovery iteration 5 authenticated its new private inputs and completed the standalone smoke,
-  then failed only at the local wrapper-log retrieval layout. The D-024 two-file correction passed
-  11 focused tests, strict static checks, and the observed-output probe; its complete gate remains
-  pending before a replacement freeze.
+- Recovery iteration 6 authenticated its new private inputs and passed the standalone smoke. Run A
+  version 1 then failed closed at private cohort-plan validation. Root-cause tracing found that
+  selected studies serialized legacy/internal dimensions outside the exact 25-dimension plan schema;
+  the same trace found that representative series were selected globally rather than from the
+  selected cohort. The two-file D-025 correction filters the existing dimension registry and binds
+  representatives to selected studies. All 46 full-run tests, Ruff check/format, strict mypy on the
+  two files, and the diff check pass; the complete gate remains pending.
 
 Exit evidence still required:
 
-1. A clean implementation-freeze identity under the approval already granted, followed by a
-   deterministic offline bundle cryptographically bound to
+1. A complete exact-set gate over D-025, then a clean replacement implementation-freeze identity
+   under the approval already granted and a deterministic offline bundle cryptographically bound to
    `audit-0002-manifest-remediation` / `manifest-v2`.
 2. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
    dataset and every version-1 kernel; version 2 must be absent.

@@ -113,12 +113,19 @@ selector, and Run B was not started. The exact 29-file staged D-023 candidate su
 the complete final local gate, including pytest 507/507 and the locked install/build, lint, format,
 typing, CLI/config/submission/contract, pre-commit, privacy, dependency, contract-drift, diff,
 inventory, and clean-tree checks. Independent end-to-end/source-graph red-teams found no remaining
-P0/P1. Recovery iteration 5 then created freeze `01ea270` and bundle `4127dcc...`, authenticated
-its private inputs, and completed the standalone smoke in 35 minutes 5 seconds. Validation failed
-closed on the official CLI wrapper-log layout before Run A. The bounded D-024 correction is
-focused-green; its complete gate and replacement private chain remain pending.
+P0/P1. Recovery iteration 6 then used fully gated freeze
+`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
+`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Its private inputs
+authenticated and standalone smoke passed. Run A version 1 reached terminal `ERROR`; a separate
+bounded exact-reference failure-log classification passed with `phase=processing` and
+`code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, and review did not start.
+Source tracing showed that selected-study serialization leaked legacy/internal dimensions outside
+the exact 25-dimension plan schema and that representative profiles were chosen globally rather
+than from the selected cohort. The two-file D-025 correction passed all 46 full-run tests, Ruff
+check/format, strict mypy, and the diff check; its complete gate and replacement private chain remain
+pending.
 
-The exact clean candidate must bind to the completed private
+The replacement exact clean candidate must bind to the completed private
 `audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
 private Run A and Run B version-1 kernels must independently process the entire authorized training
 set from the same immutable bundle, configuration, competition input, and source-manifest input.
