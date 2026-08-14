@@ -524,14 +524,14 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   file, byte, time, and disk limits remain fail-closed admission gates. The only public registry-
   coverage claim is `all_required_represented_registry_values_satisfy_quotas`; the legacy joint-
   material census and coverage claim are removed.
-- Current evidence: recovery iteration 6 used fully gated freeze
-  `1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
-  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Its private version-1 inputs
-  authenticated and its standalone smoke passed. Run A version 1 then reached terminal `ERROR`; a
-  separately retrieved bounded exact-reference failure log passed privacy classification and
-  reported only `phase=processing`, `code=private_cohort_plan_invalid`. Run B, comparison, QA
-  materialization, human review, and final validation were not started. D-025 records the required
-  source correction and new immutable-chain requirement.
+- Current evidence: D-025 passed its complete gate and produced recovery-iteration-7 freeze
+  `e3c6334` and immutable bundle `5fe504...`. Its private version-1 inputs and standalone smoke
+  authenticated and passed. Independent full-data Run A and Run B then authenticated and passed.
+  The comparison kernel reached `COMPLETE` and the comparator producer was correct, but local
+  workflow validation failed closed with `comparison_output_layout_invalid` because Kaggle CLI
+  2.2.4 unconditionally retrieved one root wrapper log while the validator required one total file.
+  Review-plan materialization, UI/session creation, human review, and final validation were not
+  started. D-026 records the retrieval-boundary correction and new immutable-chain requirement.
 - Risks: an eligible population can legitimately require more than the minimum review count; a
   physical capacity gate can still block QA materialization; a mismatch in any of the three
   deterministic outputs blocks the review stage; and sampled smoke estimates may miss a slower
@@ -539,8 +539,8 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: replace only with a workflow that preserves two independent complete
   full-data proofs, exact plan comparison, every required represented bounded-registry quota, the
   same physical and privacy gates, and equally strong human-review binding.
-- Commit/experiment: `1c4470e8a9557141682a81737981271635db7fdc` is superseded-pending by
-  D-025; recovery iteration 6 is terminal failed.
+- Commit/experiment: `e3c6334` / `5fe504...` are superseded-pending by D-026; recovery iteration 7
+  is terminal failed even though its inputs, smoke, Run A, Run B, and comparator producer passed.
 
 ## D-024 - Admit only the observed Kaggle wrapper log beside smoke output
 
@@ -578,12 +578,41 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   registry, select the cohort before representative profiles, and restrict the representative pool
   to selected study identifiers. Preserve the selector, quotas, plan schema, and all fail-closed
   validation; do not widen the schema or relax the validator.
-- Verification: the two source/test files pass all 46 full-run tests, Ruff check and format, strict
-  mypy, and the diff check. The complete exact-set gate has not run, so no new freeze or remote
-  execution may be accepted yet.
-- Consequence: freeze `1c4470e8a9557141682a81737981271635db7fdc`, bundle
-  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`, and their failed recovery-
-  iteration-6 chain are superseded-pending. Run the complete gate, create a new freeze and bundle,
-  create a fresh private version-1 dataset chain, rerun smoke, and retry Run A before Run B.
+- Verification: the two source/test files passed all 46 focused full-run tests, Ruff check and
+  format, strict mypy, and the diff check, then passed the complete exact-set gate. Recovery-
+  iteration-7 freeze `e3c6334` / bundle `5fe504...` authenticated its inputs and smoke; independent
+  full-data Run A and Run B both passed. This verifies the D-025 correction remotely. The later
+  comparison-output layout failure is independent and does not reverse that diagnosis.
+- Consequence: preserve r7 as terminal historical provenance. D-026 requires a new complete gate,
+  freeze, bundle, private version-1 dataset chain, smoke, Run A, Run B, and comparison workflow
+  before QA materialization may start.
 - Reversal condition: replace only with an equally strict solution that emits exactly the frozen
   25-dimension schema and proves every representative belongs to the selected cohort.
+
+## D-026 - Admit one bounded Kaggle wrapper log beside the exact comparison summary
+
+- Date: 2026-08-13
+- Owner: Luvi-1 and Codex
+- Question: How should the comparison-output boundary handle the official Kaggle CLI 2.2.4
+  retrieval layout without weakening privacy or accepting ambiguous output?
+- Evidence: recovery iteration 7 used freeze `e3c6334` / bundle `5fe504...`; its private inputs,
+  smoke, Run A, and Run B authenticated and passed. The comparator kernel reached `COMPLETE` and
+  the producer was correct. Workflow validation nevertheless failed closed with
+  `comparison_output_layout_invalid` because the CLI unconditionally materialized one root wrapper
+  log beside the requested comparison summary while the local validator required one file total.
+  The append-only r7 registry row is terminal failed. Review-plan materialization, UI/session,
+  human review, and finalization were not started.
+- Decision: change only the comparison-output validator and its regression file. Require the exact
+  comparison-summary path. Permit at most one root wrapper log under the existing bounded-size and
+  privacy-scan policy. Reject every extra file or directory, wrong-path summary, symlink, special
+  file, oversized log, canary hit, or sensitive content. Do not relax comparison semantics or the
+  producer.
+- Verification required: focused positive and adversarial tests, the complete exact-set gate, a new
+  clean freeze and immutable bundle, and the full private input/smoke/Run A/Run B/comparison chain.
+  The r7 successes cannot be spliced into the replacement chain.
+- Reviewer state: the checkpoint relay could not connect to Chrome, so no new reviewer response or
+  decision exists. The user's standing authorization for Chunk 5 recovery remains controlling.
+- Consequence: Chunk 5 remains not passed. Review-plan materialization, UI/session creation, human
+  review, and finalization remain blocked until the replacement comparison workflow validates.
+- Reversal condition: replace only if a pinned official client supplies a stronger exact-output
+  retrieval primitive while preserving the same fail-closed privacy and layout checks.

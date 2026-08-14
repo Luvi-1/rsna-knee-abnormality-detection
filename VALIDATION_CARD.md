@@ -84,21 +84,25 @@ locked install/build, lint, format, typing, CLI/config/submission/contract, pre-
 dependency, contract-drift, diff, inventory, and clean-tree checks. Independent end-to-end/source-
 graph red-teams found no remaining P0/P1.
 
-Recovery iteration 6 used fully gated freeze
-`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
-`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. The fresh private input chain
-authenticated and standalone smoke passed. Run A version 1 then reached terminal `ERROR`; a
-separate bounded exact-reference failure-log classification passed with `phase=processing` and
-`code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, human review, and
-finalization did not start.
+Recovery iteration 6 exposed `private_cohort_plan_invalid`. Root-cause tracing showed that
+`SelectedStudy` serialized legacy/internal dimensions outside the exact 25-dimension plan schema
+and that representative series were chosen from the global eligible population rather than the
+selected cohort. The smallest source/test fix filters dimensions through the existing exact
+registry, selects the cohort before representative profiles, and restricts profiles to selected
+studies. D-025 passed its focused checks and complete exact-set gate, producing iteration-7 freeze
+`e3c6334` and immutable bundle `5fe504...`.
 
-Root-cause tracing showed that `SelectedStudy` serialized legacy/internal dimensions outside the
-exact 25-dimension plan schema. It also found a latent binding defect: representative series were
-chosen from the global eligible population, not the selected cohort. The smallest source/test fix
-filters dimensions through the existing exact registry, selects the cohort before representative
-profiles, and restricts profiles to selected studies. All 46 full-run tests, Ruff check/format,
-strict mypy on both files, and the diff check pass. The complete gate and a replacement freeze,
-bundle, private dataset chain, smoke, and Run A retry remain required.
+Recovery iteration 7 authenticated its private/offline/version-bound inputs and smoke. Independent
+full-data Run A and Run B both authenticated and passed. The comparison kernel reached `COMPLETE`
+and its comparator producer was correct, but local workflow validation failed closed with
+`comparison_output_layout_invalid`: Kaggle CLI 2.2.4 unconditionally retrieved one root wrapper log
+while the validator required one total file. The r7 append-only row is terminal failed. Review-plan
+materialization, UI/session creation, human review, and finalization did not start. The planned
+two-file D-026 correction requires the exact summary path, permits at most one size-bounded privacy-
+scanned root log, and rejects every other entry, wrong path, symlink, special file, oversized log,
+canary hit, or sensitive payload. Its focused checks, complete gate, replacement freeze/bundle, and
+full remote chain remain required. The checkpoint relay could not connect to Chrome, so no new
+reviewer decision exists; standing Chunk 5 authorization controls.
 
 This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
 the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
@@ -115,8 +119,9 @@ blocker.
 A separate version-1 comparator must require byte-exact equality of the canonical manifests and
 cohort plans plus exact equality of declared deterministic metrics. Timing and resource fields may
 differ only where excluded by the frozen comparison contract; no tolerance may be invented after a
-mismatch. Complete private runtime, decode, preprocessing, cache, disk, peak-memory, CPU-scaling,
-and throughput evidence is still required.
+mismatch. Its summary must pass the D-026 exact-path/optional-safe-log retrieval boundary. Complete
+private runtime, decode, preprocessing, cache, disk, peak-memory, CPU-scaling, and throughput
+evidence is still required.
 
 Selector v3 runs after each full pass with a minimum of 100 reviewable studies and no arbitrary
 study maximum. Exact incremental greedy selection continues until every required represented value
@@ -155,9 +160,10 @@ bundle, preprocessing configuration, runs, comparison, cohort, UI parent, and ke
 review artifacts resolve only under authenticated Run A. It may release only
 `human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
 release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
-A locally composed review attestation is neither required nor accepted. No admissible run,
-comparison, review, or finalizer evidence exists yet. No folds exist and no fold-feasibility claim
-is made.
+A locally composed review attestation is neither required nor accepted. Iteration 7 provides
+authenticated historical Run A/Run B and completed-producer evidence, but its terminal-failed chain
+is not an accepted comparison, review, or finalizer result and cannot be spliced into iteration 8.
+No folds exist and no fold-feasibility claim is made.
 
 ## Shift and subgroup limits
 

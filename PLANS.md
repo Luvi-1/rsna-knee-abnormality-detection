@@ -146,15 +146,15 @@ unauthorized.
 
 ## Chunk 5 - deterministic DICOM-to-model pipeline
 
-Status: Chunk 5 recovery is active and not passed. Recovery iteration 6 used freeze
-`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
-`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its private version-1 inputs
-authenticated and standalone smoke passed. Run A version 1 then reached terminal `ERROR`. A separate
-bounded exact-reference failure-log classification passed with `phase=processing` and
-`code=private_cohort_plan_invalid`. Run B, comparison, review-plan materialization, and human review
-did not start. The minimal D-025 source/test correction is focused-green and now requires the
-complete exact-set gate, replacement freeze/bundle/dataset chain, smoke retry, Run A, Run B,
-comparison, human review, commit, and push.
+Status: Chunk 5 recovery is active and not passed. D-025 passed its complete gate and recovery
+iteration 7 used freeze `e3c6334` and immutable bundle `5fe504...`. Its private version-1 inputs,
+standalone smoke, full-data Run A, and independent full-data Run B all authenticated and passed. The
+comparison kernel reached `COMPLETE` and its comparator producer was correct, but the workflow
+failed closed with `comparison_output_layout_invalid` because Kaggle CLI 2.2.4 unconditionally
+retrieved one root wrapper log while the local validator required one total file. The r7 append-only
+row is terminal failed. Review-plan materialization, UI/session creation, human review, and
+finalization did not start. D-026 defines the smallest two-file fail-closed correction; its complete
+gate, replacement freeze/bundle, full remote chain, human review, commit, and push remain pending.
 This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
 request #10 remains unmerged.
 
@@ -209,19 +209,21 @@ Local evidence:
   Ruff, strict typing, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
   sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
   source-graph red-teams found no remaining P0/P1.
-- Recovery iteration 6 authenticated its new private inputs and passed the standalone smoke. Run A
-  version 1 then failed closed at private cohort-plan validation. Root-cause tracing found that
-  selected studies serialized legacy/internal dimensions outside the exact 25-dimension plan schema;
-  the same trace found that representative series were selected globally rather than from the
-  selected cohort. The two-file D-025 correction filters the existing dimension registry and binds
-  representatives to selected studies. All 46 full-run tests, Ruff check/format, strict mypy on the
-  two files, and the diff check pass; the complete gate remains pending.
+- Recovery iteration 7 remotely verified the D-025 correction: the complete gate produced freeze
+  `e3c6334` / bundle `5fe504...`, then inputs, smoke, Run A, and Run B all authenticated and passed.
+  The later comparison kernel completed with a correct producer, but local retrieval validation
+  rejected the unconditional root wrapper log. D-026 changes only that consumer boundary: require
+  the exact summary path, permit at most one size-bounded privacy-scanned root log, and reject every
+  other entry, symlink, special file, or sensitive payload.
+- The checkpoint relay could not connect to Chrome. No new reviewer response or decision exists;
+  the user's standing Chunk 5 authorization remains controlling.
 
 Exit evidence still required:
 
-1. A complete exact-set gate over D-025, then a clean replacement implementation-freeze identity
-   under the approval already granted and a deterministic offline bundle cryptographically bound to
-   `audit-0002-manifest-remediation` / `manifest-v2`.
+1. Focused positive/adversarial checks and a complete exact-set gate over D-026, then a clean
+   replacement implementation-freeze identity under the approval already granted and a
+   deterministic offline bundle cryptographically bound to `audit-0002-manifest-remediation` /
+   `manifest-v2`. The terminal r7 chain cannot be spliced into the replacement.
 2. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
    dataset and every version-1 kernel; version 2 must be absent.
 3. A passing authenticated smoke with separate conservative full-pass and post-comparison
@@ -229,10 +231,10 @@ Exit evidence still required:
    authorized training set, complete terminal accounting, exact `manifest-v2` series/file/size/raw-
    digest reconciliation, deterministic cohort plans, and no unexplained DICOM or recoverable
    transfer-syntax blocker.
-4. Byte-exact manifest and cohort-plan comparison, exact deterministic metrics, then a passing
-   identity-bound physical capacity gate and one review-plan execution that supplies selected-series
-   replay, double-render, decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput,
-   and runtime evidence.
+4. Byte-exact manifest and cohort-plan comparison and exact deterministic metrics, retrieved only
+   through the D-026 exact-summary/optional-safe-log boundary; then a passing identity-bound physical
+   capacity gate and one review-plan execution that supplies selected-series replay, double-render,
+   decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput, and runtime evidence.
 5. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
    represented bounded-registry quota and including all eligible diagnostic series; all nine checks
    must be terminal with zero `BLOCK`.

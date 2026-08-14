@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-13 (Chunk 5 recovery iteration 6 terminal failure)
+Updated: 2026-08-13 (Chunk 5 recovery iteration 7 terminal comparison-workflow failure)
 
 ## Current checkpoint
 
@@ -8,12 +8,13 @@ Updated: 2026-08-13 (Chunk 5 recovery iteration 6 terminal failure)
 - Objective: validate deterministic, physically grounded `dicom-model-v1` decoding,
   preprocessing, series-slot assignment, private visual QA, and runtime evidence without ontology,
   folds, labels, model training, prediction, ensemble, or submission work.
-- Exit gate: Chunk 5 is **not passed**. It requires a newly gated implementation-freeze commit; an
-  immutable private bundle bound to `audit-0002-manifest-remediation` / `manifest-v2`; two distinct
-  complete private Kaggle executions over the entire authorized training set; exact deterministic
-  comparison; and an authorized human review of at least 100 post-run studies selected without an
-  arbitrary maximum until every required represented bounded-registry quota is met, including every
-  eligible diagnostic series in those studies, with all nine fixed checks terminal and zero `BLOCK`.
+- Exit gate: Chunk 5 is **not passed**. It requires a newly gated iteration-8 implementation-freeze
+  commit; an immutable private bundle bound to `audit-0002-manifest-remediation` / `manifest-v2`;
+  two distinct complete private Kaggle executions over the entire authorized training set; an
+  accepted exact deterministic comparison; and an authorized human review of at least 100 post-run
+  studies selected without an arbitrary maximum until every required represented bounded-registry
+  quota is met, including every eligible diagnostic series in those studies, with all nine fixed
+  checks terminal and zero `BLOCK`.
 - Private pixels, case details, identifiers, full manifests, review identities, cohort hashes,
   review rows, transform ledgers, and detailed performance artifacts remain inside Kaggle. Only
   explicitly allowlisted, disclosure-validated aggregates may leave that boundary.
@@ -22,11 +23,11 @@ Updated: 2026-08-13 (Chunk 5 recovery iteration 6 terminal failure)
 
 | State | Current evidence |
 |---|---|
-| Implemented | The current working tree separates deterministic proof from QA materialization. Run A and Run B each perform one complete full-data pass and produce a canonical manifest, deterministic metrics, and a deterministic cohort plan. The comparator requires exact manifest and plan bytes plus exact deterministic metrics. The existing review-plan kernel then performs the capacity-gated selected-series replay, double rendering, representative benchmarks, and private plan materialization once. Selector v3 has no arbitrary study maximum. The two-file iteration-7 correction now restricts serialized selected-study dimensions to the exact 25-dimension review registry and chooses representative series only from the selected cohort. |
-| Locally tested | Freeze `1c4470e8a9557141682a81737981271635db7fdc` passed its complete 512-test exact-set gate and produced immutable bundle `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. The subsequent two-file cohort-plan correction passed all 46 tests in `tests/test_dicom_qa_full_run.py`, Ruff check and format, strict mypy on both files, and the diff check. Because that correction postdates the freeze, its complete exact-set gate and replacement freeze remain pending. |
-| Executed privately on Kaggle | **Five Run A attempts are terminal failed.** Recovery iteration 6 authenticated the new private version-1 input chain for freeze `1c4470e8a9557141682a81737981271635db7fdc` / bundle `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`, and its standalone smoke passed. Run A version 1 then reached terminal `ERROR`. A separate bounded exact-reference failure-log retrieval and classification passed with `phase=processing` and `code=private_cohort_plan_invalid`. Run B, comparison, review-plan materialization, and human review were not started. No failed attempt is Chunk 5 evidence. |
-| Remotely tested | Recovery iteration 6 proves private/offline/version-bound input authentication and the corrected smoke-output path. Run A failed closed at private cohort-plan validation, before any admissible Run A package existed. The source/test correction is focused-green, but policy requires the complete gate, a new freeze, bundle, dataset chain, smoke, and Run A retry. |
-| Merge-ready | **No.** A newly gated replacement freeze and immutable bundle, authenticated smoke, successful Run A and Run B, comparison, human review, final remote validation, push, and exact-head hosted CI remain pending. |
+| Implemented | The frozen iteration-7 implementation separates deterministic proof from QA materialization. Run A and Run B each perform one complete full-data pass and produce a canonical manifest, deterministic metrics, and a deterministic cohort plan. The comparator producer requires exact manifest and plan bytes plus exact deterministic metrics. The existing review-plan kernel then performs the capacity-gated selected-series replay, double rendering, representative benchmarks, and private plan materialization once. Selector v3 has no arbitrary study maximum. D-025 restricts serialized selected-study dimensions to the exact 25-dimension review registry and chooses representative series only from the selected cohort. The pending D-026 two-file correction changes only the local comparison-output retrieval boundary. |
+| Locally tested | D-025 passed its complete exact-set gate and produced iteration-7 freeze `e3c6334` and immutable bundle `5fe504...`. The r7 chain is terminal failed, so those identities are historical evidence only. The smallest iteration-8 fix is planned for the comparison-output validator and its regression file; its focused checks, complete exact-set gate, replacement freeze, and immutable bundle remain pending. |
+| Executed privately on Kaggle | Recovery iteration 7 authenticated its private/offline/version-bound inputs and smoke. Independent full-data Run A and Run B both authenticated and passed. The comparison kernel reached `COMPLETE` and its comparator producer was correct, but the workflow failed closed with `comparison_output_layout_invalid`: Kaggle CLI 2.2.4 unconditionally retrieved one root wrapper log while the local validator required one total file. Review-plan materialization, UI/session creation, human review, and finalization were not started. The append-only r7 registry row is terminal failed. |
+| Remotely tested | Iteration 7 proves the D-025 cohort-plan correction through two independently completed authenticated full-data runs and a completed comparator producer. It does not prove an accepted comparison workflow, QA materialization, visual correctness, benchmarks, or human review. Policy requires the fail-closed D-026 fix, complete replacement gate and immutable chain, and a full remote rerun. |
+| Merge-ready | **No.** The D-026 fix, complete exact-set gate, replacement freeze/bundle, full authenticated remote chain, accepted comparison, private QA materialization, human review, final validation, push, and exact-head hosted CI remain pending. |
 | Merged into `main` | **No.** Merge is outside this checkpoint and requires explicit human approval. |
 
 ## Corrections to the prior status
@@ -76,14 +77,17 @@ Updated: 2026-08-13 (Chunk 5 recovery iteration 6 terminal failure)
 - The official interface confirms the account is entered but does not expose current identity-
   verification state, so submission and prize actions remain blocked. No team action, rules action,
   submission, public release, or model action occurred.
+- The checkpoint relay could not connect to Chrome during this recovery boundary. No new reviewer
+  response or decision exists; the user's standing Chunk 5 authorization remains controlling.
 
 ## Remaining checkpoint work
 
-1. Run the complete exact-set gate over the two-file cohort-plan correction, create a new clean
-   implementation-freeze commit, and build a new immutable offline private bundle. Freeze
-   `1c4470e8a9557141682a81737981271635db7fdc` and bundle
-   `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4` are superseded-pending and must
-   not be reused as current execution evidence. Bind the replacement
+1. Apply the smallest two-file D-026 comparison-output correction: require the exact summary path,
+   admit at most one size-bounded privacy-scanned root wrapper log, and reject every other entry,
+   symlink, special file, or sensitive payload. Run its focused checks and the complete exact-set
+   gate, create a new clean implementation-freeze commit, and build a new immutable offline private
+   bundle. Iteration-7 freeze `e3c6334`, bundle `5fe504...`, and their terminal-failed chain must not
+   be reused as current execution evidence. Bind the replacement
    cryptographically to the completed `audit-0002-manifest-remediation` source-manifest kernel and
    its private `manifest-v2` outputs; reject the superseded audit.
 2. Authenticate private/offline/version-1 metadata, exact input versions, expected file listings,
@@ -98,8 +102,9 @@ Updated: 2026-08-13 (Chunk 5 recovery iteration 6 terminal failure)
    train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every regular
    DICOM's keyed relative identity, byte size, and raw digest against authenticated `manifest-v2`.
 4. Run the separate comparator and require byte-exact equality of the canonical manifests and
-   cohort plans plus exact equality of every declared deterministic metric. Investigate every
-   mismatch; no unexplained mismatch may pass.
+   cohort plans plus exact equality of every declared deterministic metric. Accept retrieval only
+   through the D-026 exact-summary/optional-safe-log boundary. Investigate every mismatch; no
+   unexplained mismatch or invalid local layout may pass.
 5. In the existing review-plan kernel, authenticate the capacity certificate against the freeze,
    bundle, manifest, Run A, Run B, cohort plan, and renderer. Admit no work unless the physical
    file, byte, time, and disk gates fit. Replay each selected series, render twice, run the declared

@@ -1,4 +1,4 @@
-# Chunk 5 Run A source-manifest, runtime, and selector recovery incidents
+# Chunk 5 private-run and output-retrieval recovery incidents
 
 Status: **recovery open; Chunk 5 not passed**
 
@@ -6,15 +6,15 @@ Date: 2026-08-13
 
 ## Summary
 
-Five private Run A attempts failed closed. The first stopped at source-manifest identity, the second
-at source-schema consumption, the third at the former processing deadline, and the fourth after a
-completed full-data pass in the superseded capped joint-material selector. Recovery iteration 6
-used fully gated freeze `1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
-`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its inputs and standalone
-smoke passed, but Run A version 1 reached terminal `ERROR`. A separate bounded exact-reference
-failure-log classification passed with `phase=processing`, `code=private_cohort_plan_invalid`. Run B,
-comparison, review-plan materialization, and human review were not started. None of the five chains
-is completion evidence, and every associated freeze and bundle is superseded or superseded-pending.
+Five historical private Run A attempts failed closed: source-manifest identity, source-schema
+consumption, the former processing deadline, the superseded capped joint-material selector, and
+private cohort-plan validation. D-025 then passed its complete gate and recovery iteration 7 used
+freeze `e3c6334` and immutable bundle `5fe504...`. Its private inputs, standalone smoke, full-data
+Run A, and independent full-data Run B all authenticated and passed. The comparison kernel reached
+`COMPLETE` and its comparator producer was correct, but local workflow validation failed closed
+with `comparison_output_layout_invalid`: Kaggle CLI 2.2.4 unconditionally retrieved one root
+wrapper log while the validator required one total file. The append-only r7 row is terminal failed.
+Review-plan materialization, UI/session creation, human review, and finalization were not started.
 
 Mode-0600 ignored Run A failure logs were retrieved only under exact allowlists for diagnosis and
 remain inside the protected project boundary. Only fixed sanitized runner events were exposed
@@ -95,6 +95,19 @@ from studies in the selected cohort so the later capacity certificate, benchmark
 refer to one coherent cohort. This second defect was not used to reinterpret the remote failure; it
 was corrected because the same source path made it directly observable.
 
+## Sixth root cause
+
+Recovery iteration 7 authenticated and passed its input chain, standalone smoke, full-data Run A,
+and independent full-data Run B. The comparison kernel then reached `COMPLETE`; the comparator
+producer and its deterministic comparison semantics were correct. The failure occurred after remote
+execution, at the local output-retrieval boundary.
+
+Kaggle CLI 2.2.4 unconditionally materialized one root wrapper log beside the requested comparison
+summary. The validator required one total file, so it correctly failed closed with
+`comparison_output_layout_invalid` rather than inspecting an unallowlisted layout. This was a
+consumer retrieval-layout defect, not a deterministic mismatch, producer defect, DICOM failure, or
+private-input authentication failure.
+
 ## Internal transcript control incident
 
 During diagnosis, one broad search crossed into ignored local artifacts and printed obsolete canary
@@ -107,16 +120,17 @@ ignored artifacts are limited to exact bounded allowlists and fixed sanitized ou
 
 ## Impact
 
-- No Run A produced an admissible completed package, determinism comparison, performance report, or
-  visual-QA evidence. The fourth attempt's full pass and iteration 6's authenticated inputs/smoke are
-  operational evidence only because their runs did not produce a valid Run A package.
-- Run B and comparison did not start; review planning did not complete; human review and
-  finalization did not start.
+- Iteration 7 produced authenticated completed Run A and Run B packages and a completed comparator
+  producer. Its terminal-failed workflow is historical evidence only and cannot be spliced into the
+  replacement immutable chain. No accepted comparison workflow, performance report, or visual-QA
+  evidence exists.
+- Review planning did not start; UI/session creation, human review, and finalization did not start.
 - No Chunk 6 work, folds, weak labels, model training, inference, prediction, ensemble, or
   submission occurred.
-- All five run failures preserved the medical-data boundary; the third consumed the old processing
-  budget before failing closed. The separate transcript incident exposed only operational metadata
-  categories internally and requires the controls recorded above.
+- All five historical Run A failures and the r7 comparison-workflow failure preserved the medical-
+  data boundary; the third consumed the old processing budget before failing closed. The separate
+  transcript incident exposed only operational metadata categories internally and requires the
+  controls recorded above.
 
 ## Correction
 
@@ -209,18 +223,34 @@ The smallest correction changes only the shared runner and its full-run regressi
 serialized selected-study dimensions through the existing exact review registry, selects the
 cohort before representative profiles, and restricts those profiles to selected study identifiers.
 All 46 tests in `tests/test_dicom_qa_full_run.py`, Ruff check and format, strict mypy on the two
-files, and the diff check pass. These focused checks are not the complete release gate.
+files, and the diff check passed. D-025 subsequently passed the complete exact-set gate, producing
+iteration-7 freeze `e3c6334` and bundle `5fe504...`.
+
+Iteration 7 private inputs, standalone smoke, Run A, and Run B authenticated and passed. The
+comparison kernel completed with a correct producer, but the append-only workflow row is terminal
+failed at `comparison_output_layout_invalid`.
+
+The smallest D-026 correction changes only the comparison-output validator and its regression file.
+It requires the exact comparison-summary path and permits at most one root wrapper log under the
+existing bounded-size and privacy-scan policy. Every extra entry, wrong path, symlink, special file,
+oversized log, canary hit, or sensitive payload remains a hard failure. The comparator producer and
+comparison semantics are unchanged. Focused checks, the complete exact-set gate, a new immutable
+freeze/bundle, and the full private chain remain pending.
+
+The checkpoint relay could not connect to Chrome at this recovery boundary. No new reviewer
+response or decision exists; the user's standing Chunk 5 authorization remains controlling.
 
 ## Remaining gates
 
-1. Run the complete exact-set gate over D-025, create a replacement clean implementation freeze,
-   and build a new immutable private bundle; do not reuse recovery iteration 6.
+1. Run focused positive/adversarial checks and the complete exact-set gate over D-026, create a
+   replacement clean implementation freeze, and build a new immutable private bundle; do not reuse
+   or splice recovery iteration 7.
 2. Create and re-authenticate the replacement private/offline/version-bound dataset chain.
 3. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
    run and validate full Run A before starting independent Run B.
-4. Compare exact manifests, deterministic metrics, and cohort plans. Only then run the existing
-   review-plan kernel's identity-bound capacity gate, replay, double render, benchmarks, and plan
-   materialization.
+4. Compare exact manifests, deterministic metrics, and cohort plans, and validate retrieval through
+   the D-026 exact-summary/optional-safe-log boundary. Only then run the existing review-plan
+   kernel's identity-bound capacity gate, replay, double render, benchmarks, and plan materialization.
 5. Complete the unchanged private human review, finalization, and disclosure-controlled validation.
 6. Stop at the Chunk 5 gate; do not begin ontology, folds, labels, or model work.
 

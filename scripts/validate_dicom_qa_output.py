@@ -2345,7 +2345,13 @@ def _validate_comparison_summary(payload: bytes) -> None:
         raise OutputValidationError("comparison_summary_invalid")
 
 
-def _retrieve_comparison_summary(ref: str, comparator: ModuleType) -> None:
+def _retrieve_comparison_summary(
+    ref: str,
+    *,
+    run_config: Mapping[str, Any],
+    runner: ModuleType,
+    comparator: ModuleType,
+) -> None:
     pattern = (
         rf"^({re.escape(comparator.OUTPUT_DIRECTORY)}/)?"
         rf"{re.escape(comparator.SANITIZED_OUTPUT)}$"
@@ -2368,18 +2374,46 @@ def _retrieve_comparison_summary(ref: str, comparator: ModuleType) -> None:
         )
         try:
             entries = list(root.rglob("*"))
+            modes = {path: path.lstat().st_mode for path in entries}
         except OSError as error:
             raise OutputValidationError("comparison_output_layout_invalid") from error
-        files = [path for path in entries if path.is_file()]
+        directories = [path for path, mode in modes.items() if stat.S_ISDIR(mode)]
+        files = [path for path, mode in modes.items() if stat.S_ISREG(mode)]
+        expected_summaries = {
+            root / comparator.SANITIZED_OUTPUT,
+            root / comparator.OUTPUT_DIRECTORY / comparator.SANITIZED_OUTPUT,
+        }
+        summaries = [path for path in files if path in expected_summaries]
+        logs = [
+            path
+            for path in files
+            if path.parent == root and re.fullmatch(runner.SESSION_LOG_PATTERN, path.name)
+        ]
+        expected_directories = (
+            {root / comparator.OUTPUT_DIRECTORY}
+            if summaries and summaries[0].parent == root / comparator.OUTPUT_DIRECTORY
+            else set()
+        )
         if (
-            any(path.is_symlink() for path in entries)
-            or len(files) != 1
-            or files[0].name != comparator.SANITIZED_OUTPUT
+            any(not stat.S_ISREG(mode) and not stat.S_ISDIR(mode) for mode in modes.values())
+            or len(summaries) != 1
+            or len(logs) > 1
+            or set(files) != {*summaries, *logs}
+            or set(directories) != expected_directories
         ):
             raise OutputValidationError("comparison_output_layout_invalid")
         _validate_comparison_summary(
-            _read_bounded(files[0], 32 * 1024, "comparison_summary_invalid")
+            _read_bounded(summaries[0], 32 * 1024, "comparison_summary_invalid")
         )
+        if logs:
+            payload = _read_bounded(logs[0], 2 * 1024 * 1024, "comparison_log_invalid")
+            try:
+                runner._scan_downloadable(
+                    payload,
+                    cast(str, cast(Mapping[str, Any], run_config["privacy"])["canary"]),
+                )
+            except Exception as error:
+                raise OutputValidationError("comparison_log_invalid") from error
 
 
 def _validate_review_listing(pages: Sequence[bytes], finalizer: ModuleType) -> None:
@@ -2726,6 +2760,7 @@ def _authenticate_comparison_kernel(
     ref: str,
     dataset_ref: str,
     run_refs: Sequence[str],
+    run_config: Mapping[str, Any],
     runner: ModuleType,
     manifest: Mapping[str, Any],
 ) -> None:
@@ -2745,7 +2780,9 @@ def _authenticate_comparison_kernel(
         expected_competition_sources=[],
     )
     _validate_comparison_listing(_authenticated_listing(ref, 1), runner, comparator)
-    _retrieve_comparison_summary(f"{ref}/1", comparator)
+    _retrieve_comparison_summary(
+        f"{ref}/1", run_config=run_config, runner=runner, comparator=comparator
+    )
     _authenticate_kernel_api_version(ref, 1)
     _kernel_status_complete(ref)
     after = _pull_and_verify_exact_kernel(
@@ -3016,6 +3053,7 @@ def validate_authenticated_workflow(
             ref=refs["comparison"],
             dataset_ref=dataset_ref,
             run_refs=run_refs,
+            run_config=run_config,
             runner=runner,
             manifest=manifest,
         )

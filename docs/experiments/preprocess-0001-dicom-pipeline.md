@@ -1,9 +1,9 @@
 # PREPROCESS-0001 — Deterministic DICOM-to-model pipeline
 
-Status: **two-stage recovery iteration 6 inputs and smoke passed; Run A version 1 terminal `ERROR`
-with validated `phase=processing`, `code=private_cohort_plan_invalid`; D-025 correction focused-
-green; replacement full gate, freeze, private reruns, and visual review pending; Chunk 5 not
-passed**.
+Status: **recovery iteration 7 inputs, smoke, Run A, and Run B passed; comparison producer reached
+`COMPLETE`, but local workflow validation failed closed with `comparison_output_layout_invalid`;
+D-026 two-file correction, complete replacement gate and remote chain, QA materialization, and
+visual review pending; Chunk 5 not passed**.
 
 ## Objective
 
@@ -18,7 +18,7 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; freeze `1c4470e8a9557141682a81737981271635db7fdc` and bundle `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4` are superseded-pending by D-025 |
+| Code | `feat/chunk-5-dicom-pipeline`; iteration-7 freeze `e3c6334` and bundle `5fe504...` are superseded-pending by D-026 |
 | Source manifest | `audit-0002-manifest-remediation` / `manifest-v2`; superseded v1 rejected |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
@@ -35,17 +35,17 @@ transformation, and produces model-ready tensors without starting ontology, fold
 
 ## Registry state
 
-The ignored private SQLite registry remains the authority for the experiment contract. Five Run A
-rows are terminal failed and append-only: two stopped at source-manifest boundaries, one at the
-former processing deadline, one after its full-data pass at the superseded capped joint-material
-selector, and recovery iteration 6 at private cohort-plan validation. Iteration 6 used freeze
-`1c4470e8a9557141682a81737981271635db7fdc` and bundle
-`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`; its inputs and smoke passed,
-then Run A version 1 reached terminal `ERROR`. Separate bounded exact-reference failure-log
-classification passed with `phase=processing`, `code=private_cohort_plan_invalid`. Run B,
-comparison, QA materialization, human review, and attestation remain `not_started`. The D-025 fix is
-focused-green; its complete gate, replacement freeze, bundle, dataset chain, smoke, and Run A retry
-remain pending.
+The ignored private SQLite registry remains the authority for the experiment contract. Five
+historical Run A rows are terminal failed and append-only: two stopped at source-manifest
+boundaries, one at the former processing deadline, one after its full-data pass at the superseded
+capped joint-material selector, and recovery iteration 6 at private cohort-plan validation. D-025
+then passed its complete gate and produced iteration-7 freeze `e3c6334` / bundle `5fe504...`.
+Iteration 7 inputs, smoke, Run A, and Run B authenticated and passed; the comparison kernel reached
+`COMPLETE` with a correct producer. The workflow then failed closed with
+`comparison_output_layout_invalid` because Kaggle CLI 2.2.4 unconditionally retrieved one root
+wrapper log while the local validator required one total file. The append-only r7 row is terminal
+failed. Review-plan materialization, UI/session creation, human review, and finalization remain
+`not_started`. D-026 and the complete replacement immutable chain remain pending.
 
 ## Frozen controls
 
@@ -128,22 +128,32 @@ remain pending.
   comparison, one later QA preparation in the existing review-plan kernel, selector coverage over
   bounded semantic registries with no arbitrary maximum, and an identity-bound capacity
   certificate. D-023 records the adopted design.
-- The exact replacement candidate passed its complete 512-test local gate and produced freeze
-  `1c4470e8a9557141682a81737981271635db7fdc` plus immutable bundle
-  `9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Recovery iteration 6 then
-  authenticated its private version-1 inputs and passed the standalone smoke, proving the D-024
-  wrapper-log correction remotely.
-- Run A version 1 reached terminal `ERROR`. The separately retrieved bounded exact-reference failure
-  log passed privacy classification and exposed only `phase=processing`,
-  `code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, visual review, and
-  finalization did not start.
+- The iteration-6 replacement candidate passed its complete local gate and produced freeze
+  `1c4470e` plus immutable bundle `9e6be8...`. Its private version-1 inputs and standalone smoke
+  authenticated and passed, proving the D-024 wrapper-log correction remotely. Run A then failed
+  closed with the privacy-classified `private_cohort_plan_invalid` result.
 - Root-cause tracing found that `SelectedStudy` propagated legacy/internal `CohortStudy` dimensions
   into a plan schema that permits exactly 25 registry dimensions. The same trace found a latent
   cohort-binding defect: representative series were chosen from all globally eligible series rather
   than the selected studies. The smallest two-file fix filters serialized dimensions through the
   existing exact registry, selects the cohort first, and restricts representative profiles to it.
-  All 46 full-run tests, Ruff check/format, strict mypy on both files, and the diff check pass. A
-  complete exact-set gate is required before a replacement freeze.
+  All 46 full-run tests, Ruff check/format, strict mypy on both files, and the diff check passed.
+  D-025 then passed its complete exact-set gate and produced iteration-7 freeze `e3c6334` / bundle
+  `5fe504...`.
+- Recovery iteration 7 authenticated and passed its private inputs, standalone smoke, full-data Run
+  A, and independent full-data Run B. Its comparison kernel reached `COMPLETE` and the comparator
+  producer was correct. Local workflow validation failed closed with
+  `comparison_output_layout_invalid` only because Kaggle CLI 2.2.4 unconditionally materialized one
+  root wrapper log beside the requested summary while the validator required one total file. The
+  append-only r7 row is terminal failed; review-plan materialization, UI/session, human review, and
+  finalization did not start.
+- D-026 changes only the comparison-output validator and its regression file. It requires the exact
+  summary path, permits at most one size-bounded privacy-scanned root wrapper log, and rejects every
+  extra entry, wrong path, symlink, special file, oversized log, canary hit, or sensitive payload.
+  Focused checks, the complete gate, a new freeze/bundle, and the full replacement remote chain are
+  pending; r7 results cannot be spliced into r8.
+- The checkpoint relay could not connect to Chrome, so no new reviewer response or decision exists.
+  The user's standing Chunk 5 authorization remains controlling.
 - A broad search of ignored local artifacts printed obsolete canary sentinel strings, local
   artifact paths, commit and bundle hashes, and the public competition slug into an internal tool
   transcript. It printed no credentials, key bytes, authentication tokens, pixels, DICOM headers,
@@ -194,13 +204,13 @@ inside Kaggle and never enter repository documents or command output.
   `dicom-model-v1` and all downstream work.
 - Any need to change labels, construct folds, train, infer, ensemble, or submit stops this chunk.
 
-## After attempted Run A
+## After recovery iteration 7
 
-Recovery pending. Five Run A attempts failed closed: first on source identity, then on source-schema
-consumption, then at the former processing deadline, then after a completed full-data pass at the
-superseded selector, and recovery iteration 6 at private cohort-plan validation. Run B was not
-started. No admissible Run A result, Run A/Run B comparison, QA image review, completed review
-session, human attestation, or finalizer result is claimed. The incidents are recorded in
-`docs/postmortems/chunk-5-dicom-pipeline.md`. Run the complete gate over D-025, replace the freeze,
-bundle, and private version-1 dataset chain, rerun smoke, and retry Run A before recording any new
-completion evidence. Do not start ontology, folds, labels, training, inference, or submission.
+Recovery pending. Five earlier Run A attempts failed closed. Iteration 7 then authenticated and
+passed inputs, smoke, Run A, and Run B and completed the comparator producer, but its workflow row
+is terminal failed at `comparison_output_layout_invalid`. No accepted comparison workflow, QA image
+review, completed review session, human attestation, or finalizer result is claimed. The incidents
+are recorded in `docs/postmortems/chunk-5-dicom-pipeline.md`. Run focused and complete gates over
+D-026, replace the freeze, bundle, and private version-1 dataset chain, and rerun the entire private
+chain before recording completion evidence. Do not start ontology, folds, labels, training,
+inference, or submission.

@@ -2365,6 +2365,151 @@ def test_comparator_listing_and_sanitized_summary_are_exact() -> None:
             validator._validate_comparison_summary(packager._canonical_json_bytes(altered))
 
 
+@pytest.mark.parametrize("nested", (False, True))
+def test_comparison_retrieval_accepts_exact_summary_and_safe_root_log(
+    monkeypatch: pytest.MonkeyPatch, nested: bool
+) -> None:
+    runner = _runner()
+    comparator = _comparator()
+    run_config = {"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}}
+
+    def fake_cli(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
+        root = Path(arguments[arguments.index("--path") + 1])
+        output = root / comparator.OUTPUT_DIRECTORY if nested else root
+        output.mkdir(exist_ok=True)
+        (output / comparator.SANITIZED_OUTPUT).write_bytes(
+            packager._canonical_json_bytes(_comparison_summary())
+        )
+        (root / "rsna-knee-dqa-cmp.log").write_bytes(b"dicom_qa_comparison_complete\n")
+        return b""
+
+    monkeypatch.setattr(validator, "_run_kaggle_cli", fake_cli)
+    validator._retrieve_comparison_summary(
+        "test-owner/comparison/1",
+        run_config=run_config,
+        runner=runner,
+        comparator=comparator,
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (b"RSNA_PRIVATE_CANARY_TEST\n", b"PatientID\n"),
+)
+def test_comparison_retrieval_rejects_sensitive_root_log(
+    monkeypatch: pytest.MonkeyPatch, payload: bytes
+) -> None:
+    runner = _runner()
+    comparator = _comparator()
+    run_config = {"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}}
+
+    def fake_cli(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
+        root = Path(arguments[arguments.index("--path") + 1])
+        (root / comparator.SANITIZED_OUTPUT).write_bytes(
+            packager._canonical_json_bytes(_comparison_summary())
+        )
+        (root / "rsna-knee-dqa-cmp.log").write_bytes(payload)
+        return b""
+
+    monkeypatch.setattr(validator, "_run_kaggle_cli", fake_cli)
+    with pytest.raises(validator.OutputValidationError, match=r"\Acomparison_log_invalid\Z"):
+        validator._retrieve_comparison_summary(
+            "test-owner/comparison/1",
+            run_config=run_config,
+            runner=runner,
+            comparator=comparator,
+        )
+
+
+@pytest.mark.parametrize("payload", (b"", b"x" * (2 * 1024 * 1024 + 1)))
+def test_comparison_retrieval_bounds_root_log(
+    monkeypatch: pytest.MonkeyPatch, payload: bytes
+) -> None:
+    runner = _runner()
+    comparator = _comparator()
+
+    def fake_cli(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
+        root = Path(arguments[arguments.index("--path") + 1])
+        (root / comparator.SANITIZED_OUTPUT).write_bytes(
+            packager._canonical_json_bytes(_comparison_summary())
+        )
+        (root / "rsna-knee-dqa-cmp.log").write_bytes(payload)
+        return b""
+
+    monkeypatch.setattr(validator, "_run_kaggle_cli", fake_cli)
+    with pytest.raises(validator.OutputValidationError, match=r"\Acomparison_log_invalid\Z"):
+        validator._retrieve_comparison_summary(
+            "test-owner/comparison/1",
+            run_config={"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}},
+            runner=runner,
+            comparator=comparator,
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "arbitrary_nested",
+        "extra_file",
+        "extra_directory",
+        "missing",
+        "multiple_summaries",
+        "multiple_logs",
+        "misplaced_log",
+        "symlink",
+        "special",
+    ),
+)
+def test_comparison_retrieval_rejects_nonexact_layout(
+    monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    runner = _runner()
+    comparator = _comparator()
+    summary_payload = packager._canonical_json_bytes(_comparison_summary())
+
+    def fake_cli(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
+        root = Path(arguments[arguments.index("--path") + 1])
+        summary = root / comparator.SANITIZED_OUTPUT
+        if mutation == "arbitrary_nested":
+            summary = root / "arbitrary" / comparator.SANITIZED_OUTPUT
+            summary.parent.mkdir()
+        elif mutation != "missing":
+            summary.write_bytes(summary_payload)
+        if mutation == "extra_file":
+            (root / "unexpected.txt").write_text("unexpected")
+        elif mutation == "extra_directory":
+            (root / "unexpected").mkdir()
+        elif mutation == "multiple_summaries":
+            nested = root / comparator.OUTPUT_DIRECTORY
+            nested.mkdir()
+            (nested / comparator.SANITIZED_OUTPUT).write_bytes(summary_payload)
+        elif mutation == "multiple_logs":
+            (root / "first.log").write_text("safe")
+            (root / "second.log").write_text("safe")
+        elif mutation == "misplaced_log":
+            nested = root / comparator.OUTPUT_DIRECTORY
+            nested.mkdir()
+            (nested / "session.log").write_text("safe")
+        elif mutation == "symlink":
+            (root / "unexpected-link").symlink_to(summary)
+        elif mutation == "special":
+            os.mkfifo(root / "unexpected.pipe")
+        if mutation == "arbitrary_nested":
+            summary.write_bytes(summary_payload)
+        return b""
+
+    monkeypatch.setattr(validator, "_run_kaggle_cli", fake_cli)
+    with pytest.raises(
+        validator.OutputValidationError, match=r"\Acomparison_output_layout_invalid\Z"
+    ):
+        validator._retrieve_comparison_summary(
+            "test-owner/comparison/1",
+            run_config={"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}},
+            runner=runner,
+            comparator=comparator,
+        )
+
+
 @pytest.mark.parametrize(
     ("stage", "expected_calls"),
     [
@@ -2534,6 +2679,9 @@ def test_authenticated_workflow_routes_every_immutable_v1_stage(
         assert smoke["dataset_ref"] == result["dataset_ref"]
         assert smoke["source_manifest_ref"] == result["source_manifest_kernel_ref"]
         assert smoke["competition_slug"] == packager.COMPETITION_SLUG
+    if "comparison_kernel" in expected_calls:
+        comparison = next(kwargs for name, kwargs in calls if name == "comparison_kernel")
+        assert comparison["run_config"] is run_config
     if "review_session_kernel" in expected_calls:
         session = next(kwargs for name, kwargs in calls if name == "review_session_kernel")
         assert session["ref"] == result["review_session_ref"]

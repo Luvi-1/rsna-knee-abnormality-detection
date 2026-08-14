@@ -105,27 +105,27 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 
 ## Next evidence required
 
-`dicom-model-v1` has local implementation evidence, but it is not promoted data readiness. An
-earlier staged candidate passed its then-current complete local gate and red-team; later source
-changes and the D-023 two-stage redesign invalidate that historical evidence. The fourth private
-Run A attempt completed its full-data pass but failed closed in the superseded capped joint-material
-selector, and Run B was not started. The exact 29-file staged D-023 candidate subsequently passed
-the complete final local gate, including pytest 507/507 and the locked install/build, lint, format,
-typing, CLI/config/submission/contract, pre-commit, privacy, dependency, contract-drift, diff,
-inventory, and clean-tree checks. Independent end-to-end/source-graph red-teams found no remaining
-P0/P1. Recovery iteration 6 then used fully gated freeze
-`1c4470e8a9557141682a81737981271635db7fdc` and immutable bundle
-`9e6be825c219f458c79fa1599feb82ace33d97dade441858fa53656820e6fda4`. Its private inputs
-authenticated and standalone smoke passed. Run A version 1 reached terminal `ERROR`; a separate
-bounded exact-reference failure-log classification passed with `phase=processing` and
-`code=private_cohort_plan_invalid`. Run B, comparison, QA materialization, and review did not start.
-Source tracing showed that selected-study serialization leaked legacy/internal dimensions outside
-the exact 25-dimension plan schema and that representative profiles were chosen globally rather
-than from the selected cohort. The two-file D-025 correction passed all 46 full-run tests, Ruff
-check/format, strict mypy, and the diff check; its complete gate and replacement private chain remain
-pending.
+`dicom-model-v1` has local and partial private implementation evidence, but it is not promoted data
+readiness. The exact D-023 candidate passed its complete local gate and independent red-teams.
+Recovery iteration 6 then exposed `private_cohort_plan_invalid`; source tracing showed that
+selected-study serialization leaked legacy/internal dimensions outside the exact 25-dimension plan
+schema and that representative profiles were chosen globally rather than from the selected cohort.
+The two-file D-025 correction passed its focused checks and complete exact-set gate, producing
+iteration-7 freeze `e3c6334` and immutable bundle `5fe504...`.
 
-The replacement exact clean candidate must bind to the completed private
+Recovery iteration 7 authenticated its private/offline/version-bound inputs and standalone smoke.
+Independent full-data Run A and Run B both authenticated and passed, remotely verifying the D-025
+cohort-plan correction. The comparison kernel then reached `COMPLETE` and its comparator producer
+was correct, but the workflow failed closed with `comparison_output_layout_invalid`: Kaggle CLI
+2.2.4 unconditionally retrieved one root wrapper log while the local validator required one total
+file. The append-only r7 row is terminal failed. Review-plan materialization, UI/session creation,
+human review, and finalization did not start. D-026 requires the exact comparison-summary path and
+at most one size-bounded privacy-scanned root log while rejecting every extra entry, wrong path,
+symlink, special file, oversized log, canary hit, or sensitive payload. Its complete gate,
+replacement immutable chain, and full remote rerun remain pending. The checkpoint relay could not
+connect to Chrome, so no new reviewer decision exists; standing Chunk 5 authorization controls.
+
+The iteration-8 replacement exact clean candidate must bind to the completed private
 `audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
 private Run A and Run B version-1 kernels must independently process the entire authorized training
 set from the same immutable bundle, configuration, competition input, and source-manifest input.
