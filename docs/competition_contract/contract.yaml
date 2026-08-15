@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "retrieved_at_utc": "2026-08-13T19:20:34Z",
-  "retrieved_at_local": "2026-08-13T12:20:34-07:00",
+  "retrieved_at_utc": "2026-08-15T00:00:25Z",
+  "retrieved_at_local": "2026-08-14T17:00:25-07:00",
   "identity": {
     "competition_id": 154281,
     "slug": "rsna-knee-abnormality-detection",
@@ -150,11 +150,14 @@
   },
   "external_assets": {
     "verified_rule": "External data, pretrained models, and automated tools require adequate rights and equal access or the Rules reasonableness test.",
+    "host_external_service_clarification": "Commercially hosted LLMs and other external inference services are permitted only when the service and method comply with all Competition Rules, service terms, reasonable-access, and minimal-cost requirements.",
     "safe_default": "Use only free, public, equally accessible assets with recorded provenance, version, license, checksum, and winner-delivery compatibility.",
     "ambiguity_issue": 4
   },
   "team_and_sharing": {
     "private_sharing": "Only recognized members of the same official Kaggle team may receive private competition code or data.",
+    "host_external_processing_clarification": "The Host states that compliant external inference processing, including competition report text, is not by itself prohibited private sharing.",
+    "project_external_service_boundary": "Never send raw DICOM pixels, radiology reports, patient-level metadata, identifiers, private competition code or data, or private artifacts to an external LLM, API, or service.",
     "public_code_during_competition": "Share only through the competition Kaggle forum or notebooks and only with compatible third-party rights.",
     "data_access": "Every user must register individually and accept the binding terms."
   },
@@ -223,6 +226,7 @@
       {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733423"},
       {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733475"},
       {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733592"},
+      {"authority": 2, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733965"},
       {"authority": 4, "url": "https://www.kaggle.com/competitions/rsna-knee-abnormality-detection/discussion/733652"},
       {"authority": 3, "url": "https://creativecommons.org/licenses/by-nc/4.0/legalcode.en"},
       {"authority": 3, "url": "https://opensource.org/osd"},

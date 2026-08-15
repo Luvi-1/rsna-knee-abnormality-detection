@@ -16,6 +16,12 @@ MATERIAL_SECTIONS = (
     "runtime",
     "limits",
     "data",
+    "efficiency_prize",
+    "external_assets",
+    "team_and_sharing",
+    "license",
+    "winner_obligations",
+    "ambiguities",
     "evidence",
 )
 

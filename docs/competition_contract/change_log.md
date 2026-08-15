@@ -1,5 +1,28 @@
 # Competition Contract Change Log
 
+## 2026-08-15T00:00:25Z
+
+Chunk 5 recovery refresh before the iteration-9 release gate and replacement freeze:
+
+- The official Kaggle MCP returned unchanged competition metadata, all ten page bodies, the
+  unchanged aggregate inventory, and the account's entered state. All nine operational page
+  fingerprints and the incorporated MIRA PDF fingerprint match the previous snapshot exactly.
+- A current-topic scan found one authoritative Host clarification that the previous contract had
+  omitted: rule-compliant commercially hosted LLM or external inference processing is permitted,
+  and processing report text is not by itself prohibited private sharing. The Host still requires
+  compliance with all Rules, service terms, reasonable accessibility, and minimal cost.
+- The complete project boundary remains stricter: only recognized members of the same official
+  Kaggle team may receive private competition code or data, and no raw DICOM pixels, radiology
+  reports, patient-level metadata, identifiers, private competition code or data, or private
+  artifacts may be sent to an external LLM, API, or service. The clarification therefore does not
+  alter or block the private, offline iteration-9 Chunk 5 workflow.
+- No other material drift was observed in rules, data, evaluation, timeline, runtime,
+  submission/team limits, dataset licensing, or winner obligations.
+- Identity verification remains unavailable through the read-only interface, so the last observed
+  incomplete state continues to block submission and prize actions.
+- No rules acceptance, submission, team action, data preview, compute launch, publication, or
+  remote mutation occurred during this refresh.
+
 ## 2026-08-11T21:41:12Z
 
 Chunk 5 two-stage recovery refresh before the exact release gate and replacement freeze:

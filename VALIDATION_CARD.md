@@ -14,9 +14,17 @@ Fold version: `unassigned`; no folds exist.
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed through the official Kaggle MCP at `2026-08-13T19:20:34Z`. One
-  explained data-description fingerprint change was already covered by the canonical semantics;
-  identity verification and the recorded unresolved fields still fail closed.
+- The live contract refreshed through the official Kaggle MCP at `2026-08-15T00:00:25Z`. All nine
+  operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines,
+  runtime, limits, entered state, and RSNA MIRA PDF were unchanged; identity verification and the
+  recorded unresolved fields still fail closed.
+- New Host topic `733965` permits compliant commercial LLM or external inference under the Rules,
+  equal-access, and minimal-cost conditions and clarifies that report processing is not itself
+  private sharing.
+- The stricter project boundary remains unchanged: no raw DICOM pixels, radiology reports,
+  patient-level metadata, identifiers, private competition code or data, or private artifacts may
+  be sent to any external LLM, API, or service. Only recognized members of the same official Kaggle
+  team may receive private competition code or data.
 
 ## Correction to historical grouping evidence
 
@@ -92,19 +100,42 @@ registry, selects the cohort before representative profiles, and restricts profi
 studies. D-025 passed its focused checks and complete exact-set gate, producing iteration-7 freeze
 `e3c6334` and immutable bundle `5fe504...`.
 
-Recovery iteration 7 authenticated its private/offline/version-bound inputs and smoke. Independent
-full-data Run A and Run B both authenticated and passed. The comparison kernel reached `COMPLETE`
-and its comparator producer was correct, but local workflow validation failed closed with
-`comparison_output_layout_invalid`: Kaggle CLI 2.2.4 unconditionally retrieved one root wrapper log
-while the validator required one total file. The r7 append-only row is terminal failed. Review-plan
-materialization, UI/session creation, human review, and finalization did not start. The planned
-two-file D-026 correction requires the exact summary path, permits at most one size-bounded privacy-
-scanned root log, and rejects every other entry, wrong path, symlink, special file, oversized log,
-canary hit, or sensitive payload. Its focused checks, complete gate, replacement freeze/bundle, and
-full remote chain remain required. The checkpoint relay could not connect to Chrome, so no new
-reviewer decision exists; standing Chunk 5 authorization controls.
+Recovery iteration 8 passed the complete D-026 gate with pytest 528/528 and produced freeze
+`4958c4a` / bundle `09502a...`. Its private/offline/version-bound inputs, smoke, and full-data Run A
+authenticated and passed. Run B version 1 reached `COMPLETE` at 25,940 seconds; two independent
+bounded read-only polls 71 seconds apart agreed, and the established authenticated validator
+returned `dicom_qa_output_validation=PASS mode=workflow stage=run-b`. The protected registry row is
+terminal `blocked`: input, smoke, Run A, and Run B are `passed`; comparison, `review_plan`, and
+`human_review` are `not_started`; `completed_utc` is set; and integrity, foreign keys, and mode are
+`PASS`. This is authenticated Run B workflow-output evidence only, not Chunk 5 PASS or comparison,
+determinism, QA, review, or performance evidence. Frozen-source preflight had found two independent
+P1 defects before comparison launch: the finalizer's six-required/sole-
+optional-orthogonal artifact contract disagreed with the validator's exact-seven requirement, and
+the automatic review-plan event sequence disagreed with the generic start/completion events expected
+by local validation. Comparison, review-plan materialization, UI/session creation, human review, and
+finalization were not launched.
 
-This is not yet promoted preprocessing evidence. The clean immutable candidate must authenticate
+The two-file D-027 correction passes focused 9/9 and packaging 147/147, Ruff check and format, strict
+validator mypy, and independent red-team with no P0/P1. It is included in the r9 first complete
+release-gate PASS. This is not yet promoted preprocessing evidence.
+
+D-028 adds the previously omitted `efficiency_prize`, `external_assets`, `team_and_sharing`,
+`license`, `winner_obligations`, and `ambiguities` sections to the existing `MATERIAL_SECTIONS` and
+tests both mutation and wholesale removal in `tests/test_smoke.py`. Smoke passes 6/6; the combined
+focused set passes 155/155; Ruff/format, mypy over 25 source plus nine trust-boundary files,
+independent current-source `contract_drift=no`, and post-fix red-team PASS/no P0/P1 all pass. The
+r9 exact 16-file candidate passed its first complete release gate on staged tree
+`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
+build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
+pre-commit; secret and privacy checks; dependency audit; contract schema and current
+`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
+changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
+identical complete gate. If that rerun succeeds, the final release record is
+`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The clean
+freeze/commit, immutable bundle, fresh private chain, comparison, QA, human review, and finalizer
+remain required.
+
+The iteration-9 clean immutable candidate must authenticate
 the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
 superseded audit. Distinct private version-1 Run A and Run B kernels must independently process the
 entire authorized training set from the same bundle, preprocessing configuration, competition
@@ -121,7 +152,11 @@ cohort plans plus exact equality of declared deterministic metrics. Timing and r
 differ only where excluded by the frozen comparison contract; no tolerance may be invented after a
 mismatch. Its summary must pass the D-026 exact-path/optional-safe-log retrieval boundary. Complete
 private runtime, decode, preprocessing, cache, disk, peak-memory, CPU-scaling, and throughput
-evidence is still required.
+evidence is still required. The review-plan validator must then require the finalizer's exact six
+mandatory artifacts, permit only its optional `orthogonal.png`, and accept only
+`dicom_qa_review_started`, the four declared `dicom_qa_plan_progress` events, and
+`dicom_qa_review_template_complete`, while preserving every existing fail-closed output and privacy
+gate.
 
 Selector v3 runs after each full pass with a minimum of 100 reviewable studies and no arbitrary
 study maximum. Exact incremental greedy selection continues until every required represented value
@@ -160,10 +195,12 @@ bundle, preprocessing configuration, runs, comparison, cohort, UI parent, and ke
 review artifacts resolve only under authenticated Run A. It may release only
 `human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
 release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
-A locally composed review attestation is neither required nor accepted. Iteration 7 provides
-authenticated historical Run A/Run B and completed-producer evidence, but its terminal-failed chain
-is not an accepted comparison, review, or finalizer result and cannot be spliced into iteration 8.
-No folds exist and no fold-feasibility claim is made.
+A locally composed review attestation is neither required nor accepted. Iteration 8 provides
+authenticated historical input, smoke, Run A, and Run B workflow-output evidence only. Its
+protected row is terminal `blocked` before comparison, and its preflight-blocked chain is not an
+accepted determinism, comparison, QA, review, performance, or finalizer result. Because D-027 and
+D-028 change frozen source, iteration-8 comparison and QA must never launch and the chain cannot be
+spliced into iteration 9. No folds exist and no fold-feasibility claim is made.
 
 ## Shift and subgroup limits
 

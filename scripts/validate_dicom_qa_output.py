@@ -531,15 +531,30 @@ def _validate_review_output_listing(
     observed: set[str] = set()
     review_groups: dict[str, set[str]] = defaultdict(set)
     log_count = 0
-    required_suffixes = {
-        "contact.png",
-        "orthogonal.png",
-        "histogram.png",
-        "animation.gif",
-        "before_after.png",
-        "review.json",
-        "metadata.json",
-    }
+    required_suffixes = frozenset(
+        {
+            "contact.png",
+            "histogram.png",
+            "animation.gif",
+            "before_after.png",
+            "review.json",
+            "metadata.json",
+        }
+    )
+    allowed_suffixes = required_suffixes | {"orthogonal.png"}
+    if finalizer is not None:
+        producer_required = getattr(finalizer, "REQUIRED_SUFFIXES", None)
+        producer_allowed = getattr(finalizer, "ALLOWED_SUFFIXES", None)
+        if (
+            not isinstance(producer_required, frozenset)
+            or not isinstance(producer_allowed, frozenset)
+            or producer_allowed != producer_required | {"orthogonal.png"}
+            or len(producer_required) != 6
+            or any(not isinstance(suffix, str) for suffix in producer_allowed)
+        ):
+            raise OutputValidationError("runner_output_policy_invalid")
+        required_suffixes = producer_required
+        allowed_suffixes = producer_allowed
     for record, _size in records:
         raw_name = _safe_remote_name(record.get("name"))
         name = (
@@ -580,7 +595,10 @@ def _validate_review_output_listing(
     reviewed_cases = {group.split("_series_", 1)[0] for group in review_groups}
     if (
         len(reviewed_cases) < runner.MINIMUM_ELIGIBLE_STUDIES
-        or any(suffixes != required_suffixes for suffixes in review_groups.values())
+        or any(
+            not required_suffixes.issubset(suffixes) or not suffixes.issubset(allowed_suffixes)
+            for suffixes in review_groups.values()
+        )
         or sum(len(suffixes) for suffixes in review_groups.values())
         > runner.PRIVATE_REVIEW_MAX_FILES
     ):
@@ -2162,13 +2180,13 @@ def validate_local_output(
             runner,
             str(run_config["privacy"]["canary"]),
         ) != [
-            {"event": "dicom_qa_started"},
+            {"event": "dicom_qa_review_started"},
             *_expected_progress_events(
                 runner,
                 sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
                 event_name="dicom_qa_plan_progress",
             ),
-            {"event": "dicom_qa_complete"},
+            {"event": "dicom_qa_review_template_complete"},
         ]:
             raise OutputValidationError("log_completion_invalid")
     return cast(dict[str, Any], summary)

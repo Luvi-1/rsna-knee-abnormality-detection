@@ -860,6 +860,20 @@ def test_paginated_remote_listing_checks_visible_private_review_without_download
 def test_review_plan_listing_owns_qa_artifacts_and_bound_plan() -> None:
     runner = _runner()
     finalizer = _finalizer()
+    assert (
+        frozenset(
+            {
+                "contact.png",
+                "histogram.png",
+                "animation.gif",
+                "before_after.png",
+                "review.json",
+                "metadata.json",
+            }
+        )
+        == finalizer.REQUIRED_SUFFIXES
+    )
+    assert finalizer.REQUIRED_SUFFIXES | {"orthogonal.png"} == finalizer.ALLOWED_SUFFIXES
     records = [
         *_remote_records(runner),
         {
@@ -877,14 +891,29 @@ def test_review_plan_listing_owns_qa_artifacts_and_bound_plan() -> None:
             (json.dumps(missing_plan).encode(),), runner, finalizer=finalizer
         )
 
-    missing_orthogonal = [
+    without_optional_orthogonal = [
         record
         for record in records
         if not str(record["name"]).endswith("case_000000_series_000_orthogonal.png")
     ]
+    validator._validate_review_output_listing(
+        (json.dumps(without_optional_orthogonal).encode(),), runner, finalizer=finalizer
+    )
+
+    missing_required = [
+        record
+        for record in without_optional_orthogonal
+        if not str(record["name"]).endswith("case_000000_series_000_contact.png")
+    ]
     with pytest.raises(validator.OutputValidationError, match="remote_review_output_incomplete"):
         validator._validate_review_output_listing(
-            (json.dumps(missing_orthogonal).encode(),), runner, finalizer=finalizer
+            (json.dumps(missing_required).encode(),), runner, finalizer=finalizer
+        )
+
+    duplicate = [*records, records[0]]
+    with pytest.raises(validator.OutputValidationError, match="remote_duplicate_name"):
+        validator._validate_review_output_listing(
+            (json.dumps(duplicate).encode(),), runner, finalizer=finalizer
         )
 
     extra_cross_extension = [
@@ -1327,17 +1356,26 @@ def test_local_validator_accepts_only_three_sanitized_files(tmp_path: Path) -> N
     validator.validate_local_output(output, run_config, runner, manifest)
 
     session_log = output / "session.log"
-    session_log.write_bytes(
-        b"".join(
-            packager._canonical_json_bytes(event)
-            for event in [
-                {"event": "dicom_qa_started"},
-                *validator._expected_progress_events(
-                    runner,
-                    sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
-                    event_name="dicom_qa_plan_progress",
-                ),
-                {"event": "dicom_qa_complete"},
+    plan_events = [
+        {"event": "dicom_qa_review_started"},
+        *validator._expected_progress_events(
+            runner,
+            sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+            event_name="dicom_qa_plan_progress",
+        ),
+        {"event": "dicom_qa_review_template_complete"},
+    ]
+    session_log.write_text(
+        json.dumps(
+            [
+                {"stream_name": "stderr", "time": 1, "data": "platform warning\n"},
+                {
+                    "stream_name": "stdout",
+                    "time": 2,
+                    "data": b"".join(
+                        packager._canonical_json_bytes(event) for event in plan_events
+                    ).decode("ascii"),
+                },
             ]
         )
     )
@@ -1358,6 +1396,53 @@ def test_local_validator_accepts_only_three_sanitized_files(tmp_path: Path) -> N
     (output / "private_case_index.json").write_text("{}")
     with pytest.raises(validator.OutputValidationError, match="local_output_allowlist_invalid"):
         validator.validate_local_output(output, run_config, runner, manifest)
+
+
+def test_review_plan_log_contract_matches_automatic_producer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    runner = _runner()
+    finalizer = _finalizer()
+    run_config = tmp_path / "run-config.json"
+    manifest = tmp_path / "bundle-manifest.json"
+    run_config.write_text("{}")
+    manifest.write_text("{}")
+    args = SimpleNamespace(
+        automatic_materialization=True,
+        run_config=run_config,
+        bundle_manifest=manifest,
+    )
+    calls: list[tuple[object, bytes, bytes, str]] = []
+
+    def materialize(
+        received: object,
+        *,
+        run_config_payload: bytes,
+        manifest_payload: bytes,
+        finalizer_sha256: str,
+    ) -> None:
+        calls.append((received, run_config_payload, manifest_payload, finalizer_sha256))
+        for phase, code in runner.PLAN_PROGRESS_EVENT_SEQUENCE:
+            runner._safe_event("dicom_qa_plan_progress", phase=phase, code=code)
+
+    monkeypatch.setattr(finalizer, "_automatic_args", lambda: args)
+    monkeypatch.setattr(finalizer, "_materialize_automatic_template", materialize)
+    monkeypatch.setattr(finalizer, "_self_hash", lambda: "f" * 64)
+    monkeypatch.setattr(sys, "argv", ["finalize_review.py"])
+
+    assert finalizer.main() == 0
+    assert calls == [(args, b"{}", b"{}", "f" * 64)]
+    assert [json.loads(line) for line in capfd.readouterr().out.splitlines()] == [
+        {"event": "dicom_qa_review_started"},
+        *validator._expected_progress_events(
+            runner,
+            sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+            event_name="dicom_qa_plan_progress",
+        ),
+        {"event": "dicom_qa_review_template_complete"},
+    ]
 
 
 def test_local_core_run_validator_accepts_only_two_safe_files_and_exact_gate(

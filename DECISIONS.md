@@ -259,6 +259,15 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   comparison, sensitive-file and dependency audits, contract/config/submission checks, remote and
   local full-output validation, and four canonical byte comparisons. Hosted CI subsequently passed
   for release candidate `cc050a2`; any successor remains subject to the same exact-head gate.
+  For r9, the exact 16-file candidate passed its first complete release gate on staged tree
+  `ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
+  build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
+  pre-commit; secret and privacy checks; dependency audit; contract schema and current
+  `contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
+  changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
+  identical complete gate. If that rerun succeeds, the final release record is
+  `complete_final_gate=PASS`; any failure invalidates this record and must be corrected before
+  freeze.
 - Risks: modifying or generating a file after the final run invalidates the result.
 - Reversal condition: a reproducible release system proves cryptographic identity between the
   checked file set and the pushed commit while enforcing the same gates.
@@ -524,14 +533,19 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   file, byte, time, and disk limits remain fail-closed admission gates. The only public registry-
   coverage claim is `all_required_represented_registry_values_satisfy_quotas`; the legacy joint-
   material census and coverage claim are removed.
-- Current evidence: D-025 passed its complete gate and produced recovery-iteration-7 freeze
-  `e3c6334` and immutable bundle `5fe504...`. Its private version-1 inputs and standalone smoke
-  authenticated and passed. Independent full-data Run A and Run B then authenticated and passed.
-  The comparison kernel reached `COMPLETE` and the comparator producer was correct, but local
-  workflow validation failed closed with `comparison_output_layout_invalid` because Kaggle CLI
-  2.2.4 unconditionally retrieved one root wrapper log while the validator required one total file.
-  Review-plan materialization, UI/session creation, human review, and final validation were not
-  started. D-026 records the retrieval-boundary correction and new immutable-chain requirement.
+- Current evidence: D-026 passed its complete gate with pytest 528/528 and produced recovery-
+  iteration-8 freeze `4958c4a` and immutable bundle `09502a...`. Its private version-1 inputs,
+  standalone smoke, and full-data Run A authenticated and passed. Run B version 1 reached
+  `COMPLETE` at 25,940 seconds; two independent bounded read-only polls 71 seconds apart agreed, and
+  the established authenticated validator returned
+  `dicom_qa_output_validation=PASS mode=workflow stage=run-b`. The protected registry row is
+  terminal `blocked`: input, smoke, Run A, and Run B are `passed`; comparison, `review_plan`, and
+  `human_review` are `not_started`; `completed_utc` is set; and integrity, foreign keys, and mode are
+  `PASS`. Frozen-source preflight had found the two D-027 plan-contract defects before comparison
+  launch. UI/session creation and final validation were not launched. This is Run B workflow-output
+  validation only, not Chunk 5 PASS or comparison, determinism, QA, review, or performance evidence.
+  Because D-027 and D-028 change source, iteration-8 comparison and QA must never launch, and the
+  chain cannot be spliced into iteration 9.
 - Risks: an eligible population can legitimately require more than the minimum review count; a
   physical capacity gate can still block QA materialization; a mismatch in any of the three
   deterministic outputs blocks the review stage; and sampled smoke estimates may miss a slower
@@ -539,8 +553,9 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: replace only with a workflow that preserves two independent complete
   full-data proofs, exact plan comparison, every required represented bounded-registry quota, the
   same physical and privacy gates, and equally strong human-review binding.
-- Commit/experiment: `e3c6334` / `5fe504...` are superseded-pending by D-026; recovery iteration 7
-  is terminal failed even though its inputs, smoke, Run A, Run B, and comparator producer passed.
+- Commit/experiment: `4958c4a` / `09502a...` are superseded-pending by D-027; recovery iteration 8
+  is terminal `blocked` after passing inputs, smoke, Run A, and Run B; every downstream stage remains
+  `not_started` or unlaunched.
 
 ## D-024 - Admit only the observed Kaggle wrapper log beside smoke output
 
@@ -581,11 +596,15 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Verification: the two source/test files passed all 46 focused full-run tests, Ruff check and
   format, strict mypy, and the diff check, then passed the complete exact-set gate. Recovery-
   iteration-7 freeze `e3c6334` / bundle `5fe504...` authenticated its inputs and smoke; independent
-  full-data Run A and Run B both passed. This verifies the D-025 correction remotely. The later
-  comparison-output layout failure is independent and does not reverse that diagnosis.
-- Consequence: preserve r7 as terminal historical provenance. D-026 requires a new complete gate,
-  freeze, bundle, private version-1 dataset chain, smoke, Run A, Run B, and comparison workflow
-  before QA materialization may start.
+  full-data Run A and Run B both passed. Iteration-8 freeze `4958c4a` / bundle `09502a...` retained
+  the correction through authenticated inputs, smoke, and full-data Run A and Run B; the latter
+  reached `COMPLETE` and passed authenticated workflow-output validation. Its protected row is
+  nevertheless terminal `blocked` before comparison. The later comparison-output and review-plan
+  contract defects are independent and do not reverse the D-025 diagnosis.
+- Consequence: preserve r7 and r8 as historical provenance at their exact attained stages. The r9
+  16-file candidate has passed its first complete release gate; after D-015's immediate identical
+  post-governance rerun, it still requires a new freeze/commit, bundle, private version-1 dataset
+  chain, smoke, Run A, Run B, and comparison workflow before QA materialization may start.
 - Reversal condition: replace only with an equally strict solution that emits exactly the frozen
   25-dimension schema and proves every representative belongs to the selected cohort.
 
@@ -607,12 +626,87 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   privacy-scan policy. Reject every extra file or directory, wrong-path summary, symlink, special
   file, oversized log, canary hit, or sensitive content. Do not relax comparison semantics or the
   producer.
-- Verification required: focused positive and adversarial tests, the complete exact-set gate, a new
-  clean freeze and immutable bundle, and the full private input/smoke/Run A/Run B/comparison chain.
-  The r7 successes cannot be spliced into the replacement chain.
+- Verification: the focused and complete exact-set gates passed with pytest 528/528, producing
+  recovery-iteration-8 freeze `4958c4a` and immutable bundle `09502a...`. Its private inputs, smoke,
+  and full-data Run A authenticated and passed. Run B version 1 reached `COMPLETE` at 25,940
+  seconds; two independent bounded read-only polls 71 seconds apart agreed, and the established
+  authenticated validator returned `dicom_qa_output_validation=PASS mode=workflow stage=run-b`.
+  The protected row is terminal `blocked`, with input/smoke/Run A/Run B `passed`,
+  comparison/`review_plan`/`human_review` `not_started`, `completed_utc` set, and integrity, foreign
+  keys, and mode `PASS`. Comparison was not launched, so remote acceptance of the D-026 retrieval
+  boundary is not proved. The r9 D-027/D-028 candidate has passed its first complete release gate;
+  D-015 requires the immediate identical post-governance rerun before freeze. Neither r7 nor r8 may
+  be spliced into the fresh chain.
 - Reviewer state: the checkpoint relay could not connect to Chrome, so no new reviewer response or
   decision exists. The user's standing authorization for Chunk 5 recovery remains controlling.
-- Consequence: Chunk 5 remains not passed. Review-plan materialization, UI/session creation, human
-  review, and finalization remain blocked until the replacement comparison workflow validates.
+- Consequence: Chunk 5 remains not passed. Comparison, review-plan materialization, UI/session
+  creation, human review, and finalization remain blocked until the D-027 replacement chain reaches
+  and validates each gate in order.
 - Reversal condition: replace only if a pinned official client supplies a stronger exact-output
   retrieval primitive while preserving the same fail-closed privacy and layout checks.
+
+## D-027 - Bind review-plan validation to the frozen producer contracts
+
+- Date: 2026-08-14
+- Owner: Luvi-1 and Codex
+- Question: How should recovery proceed when frozen-source preflight shows that a valid review-plan
+  producer output cannot satisfy its local consumer validator?
+- Evidence: before iteration-8 comparison launch, two independent P1 defects were confirmed. First,
+  the finalizer requires six artifacts per review group and permits `orthogonal.png` only when the
+  source geometry supports it, while the remote-listing validator required exactly seven artifacts.
+  Second, automatic materialization emits `dicom_qa_review_started`, the four frozen
+  `dicom_qa_plan_progress` events, and `dicom_qa_review_template_complete`, while local validation
+  expected the generic full-run start and completion events. Either mismatch would reject a valid
+  plan after expensive remote work. Neither is a DICOM, determinism, input-authentication, or
+  privacy failure.
+- Decision: change only `scripts/validate_dicom_qa_output.py` and
+  `tests/test_dicom_qa_packaging.py`. Bind listing validation to the finalizer's exact
+  `REQUIRED_SUFFIXES` and `ALLOWED_SUFFIXES`: require all six mandatory artifacts, permit only the
+  optional orthogonal view, and preserve duplicate, extra-entry, wrong-path, symlink, special-file,
+  size, canary, and sensitive-content rejection. Validate the actual automatic start, four progress,
+  and completion events. Do not change the producer, renderer, cohort, review, or privacy contract.
+- Verification: focused checks passed 9/9; the complete packaging file passed 147/147; Ruff check
+  and format passed; strict mypy passed for the validator; the pre-governance implementation diff
+  was exactly the two declared source/test files; and an independent red-team returned PASS with no
+  P0/P1. Combined with D-028, the exact 16-file r9 candidate passed its first complete release gate
+  on staged tree `ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529, isolated wheel
+  build/install/import, Ruff/format, package-plus-nine-trust-boundary mypy, pre-commit,
+  secret/privacy checks, dependency audit, contract schema and current `contract_drift=no`, exact
+  inventory, and unchanged-tree checks. D-015 requires the main agent to restage this governance
+  reconciliation and immediately rerun the identical complete gate. If that rerun succeeds, the
+  final release record is `complete_final_gate=PASS`; any failure invalidates this record and must
+  be corrected. The clean iteration-9 freeze/commit, immutable bundle, and fresh private chain
+  remain pending.
+- Consequence: iteration 8 is terminal `blocked` after authenticated Run B workflow-output
+  validation. This is not Chunk 5 PASS or comparison, determinism, QA, review, or performance
+  evidence. Because this decision changes frozen source, iteration-8 comparison and every QA/review
+  stage must never launch; its successes cannot be spliced into iteration 9.
+- Reversal condition: replace only with an equally strict single producer-consumer contract that
+  preserves the same artifact, event, privacy, and output-layout boundaries.
+
+## D-028 - Treat every operational contract section as material drift
+
+- Date: 2026-08-14
+- Owner: Luvi-1 and Codex
+- Question: Which canonical competition-contract sections must block a release when changed or
+  removed?
+- Evidence: the material-drift checker covered the core competition fields but omitted
+  `efficiency_prize`, `external_assets`, `team_and_sharing`, `license`, `winner_obligations`, and
+  `ambiguities`. Mutation or wholesale removal of any omitted section could therefore return
+  `contract_drift=no`, even though the change could alter legal, privacy, sharing, asset, eligibility,
+  or delivery obligations.
+- Decision: add those six names to the existing `MATERIAL_SECTIONS` set. Extend the existing
+  `tests/test_smoke.py` coverage to mutate and wholly remove every material section. Add no dependency,
+  helper layer, configuration surface, or abstraction.
+- Verification: smoke checks pass 6/6; the combined focused set passes 155/155; Ruff check and format
+  pass; mypy passes across 25 `src` files and nine trust-boundary files; an independent current-source
+  check returns `contract_drift=no`; and the post-fix red-team returns PASS with no P0/P1. The exact
+  16-file r9 candidate has passed the complete release gate recorded under D-027 and D-015. D-015's
+  immediate identical post-governance rerun controls the final `complete_final_gate=PASS` record.
+  The clean freeze/commit, immutable bundle, and fresh remote chain remain pending.
+- Consequence: no release, freeze, bundle, or remote replacement chain may proceed on the prior
+  narrow drift proof. Iteration 8 is preserved only as terminal `blocked` historical evidence after
+  authenticated Run B workflow-output validation. Because this decision changes frozen source, its
+  comparison and QA must never launch; the downstream block remains controlling.
+- Reversal condition: replace only with an equally fail-closed checker that proves mutation and
+  removal sensitivity for every operational contract section.

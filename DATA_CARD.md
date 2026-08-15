@@ -19,6 +19,13 @@ complete staged gates passed; hosted CI passed for candidate `cc050a2`, and priv
 - Full-data inspection must run only inside private Kaggle. Raw identifiers, paths, reports, pixels,
   patient-level metadata, private tables, row-level/private hashes, logs, and case-level DICOM
   findings must remain inside that boundary.
+- Host topic `733965` permits some compliant commercial LLM or external inference under the Rules,
+  equal-access, and minimal-cost conditions and clarifies that report processing is not itself
+  private sharing.
+- This does not change the stricter project boundary: no raw DICOM pixels, radiology reports,
+  patient-level metadata, identifiers, private competition code or data, or private artifacts may
+  be sent to any external LLM, API, or service. Only recognized members of the same official Kaggle
+  team may receive private competition code or data.
 
 ## Historical audit correction
 
@@ -106,26 +113,46 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 ## Next evidence required
 
 `dicom-model-v1` has local and partial private implementation evidence, but it is not promoted data
-readiness. The exact D-023 candidate passed its complete local gate and independent red-teams.
-Recovery iteration 6 then exposed `private_cohort_plan_invalid`; source tracing showed that
-selected-study serialization leaked legacy/internal dimensions outside the exact 25-dimension plan
-schema and that representative profiles were chosen globally rather than from the selected cohort.
-The two-file D-025 correction passed its focused checks and complete exact-set gate, producing
-iteration-7 freeze `e3c6334` and immutable bundle `5fe504...`.
+readiness. D-026 passed its complete exact-set gate with pytest 528/528 and produced iteration-8
+freeze `4958c4a` and immutable bundle `09502a...`. Its private/offline/version-bound inputs,
+standalone smoke, and full-data Run A authenticated and passed. Run B version 1 reached `COMPLETE`
+at 25,940 seconds; two independent bounded read-only polls 71 seconds apart agreed, and the
+established authenticated validator returned
+`dicom_qa_output_validation=PASS mode=workflow stage=run-b`. The protected registry row is terminal `blocked`:
+input, smoke, Run A, and Run B are `passed`; comparison, `review_plan`, and
+`human_review` are `not_started`; `completed_utc` is set; and integrity, foreign keys, and mode are
+`PASS`. This is authenticated Run B workflow-output evidence only, not Chunk 5 PASS or comparison,
+determinism, QA, review, or performance evidence.
 
-Recovery iteration 7 authenticated its private/offline/version-bound inputs and standalone smoke.
-Independent full-data Run A and Run B both authenticated and passed, remotely verifying the D-025
-cohort-plan correction. The comparison kernel then reached `COMPLETE` and its comparator producer
-was correct, but the workflow failed closed with `comparison_output_layout_invalid`: Kaggle CLI
-2.2.4 unconditionally retrieved one root wrapper log while the local validator required one total
-file. The append-only r7 row is terminal failed. Review-plan materialization, UI/session creation,
-human review, and finalization did not start. D-026 requires the exact comparison-summary path and
-at most one size-bounded privacy-scanned root log while rejecting every extra entry, wrong path,
-symlink, special file, oversized log, canary hit, or sensitive payload. Its complete gate,
-replacement immutable chain, and full remote rerun remain pending. The checkpoint relay could not
-connect to Chrome, so no new reviewer decision exists; standing Chunk 5 authorization controls.
+Before comparison launch, frozen-source preflight found two independent P1 review-plan contract
+defects. The finalizer requires six QA artifacts per review group and permits `orthogonal.png` only
+when renderable, while the validator required exactly seven. Automatic materialization emits
+`dicom_qa_review_started`, four `dicom_qa_plan_progress` events, and
+`dicom_qa_review_template_complete`, while the validator expected generic run boundaries.
+Comparison, review-plan materialization, UI/session creation, human review, and finalization were not
+launched and must never launch on iteration 8 because D-027 and D-028 change frozen source. The
+D-027 two-file correction passes focused 9/9 and packaging 147/147, Ruff check and
+format, strict validator mypy, and independent red-team with no P0/P1. It is included in the r9
+first complete release-gate PASS.
 
-The iteration-8 replacement exact clean candidate must bind to the completed private
+D-028 closes a separate contract-governance P1: the drift checker omitted `efficiency_prize`,
+`external_assets`, `team_and_sharing`, `license`, `winner_obligations`, and `ambiguities`, allowing
+mutation or wholesale removal to yield `contract_drift=no`. The minimal fix extends the existing
+`MATERIAL_SECTIONS` and `tests/test_smoke.py` only. Smoke passes 6/6; the combined focused set passes
+155/155; Ruff/format, mypy over 25 source plus nine trust-boundary files, independent current-source
+`contract_drift=no`, and post-fix red-team PASS/no P0/P1 all pass. The r9 exact 16-file candidate
+passed its first complete release gate on staged tree
+`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
+build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
+pre-commit; secret and privacy checks; dependency audit; contract schema and current
+`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
+changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
+identical complete gate. If that rerun succeeds, the final release record is
+`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The
+freeze/commit, immutable bundle, fresh private chain, comparison, QA, human review, and finalizer
+remain pending.
+
+The iteration-9 replacement exact clean candidate must bind to the completed private
 `audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
 private Run A and Run B version-1 kernels must independently process the entire authorized training
 set from the same immutable bundle, configuration, competition input, and source-manifest input.
@@ -157,7 +184,9 @@ Every eligible diagnostic series in each selected study must be reviewed. The pr
 identity, cohort hash, artifact hashes, rows, and fixed nine-check decisions remain inside Kaggle.
 Every row also binds the private organizer/physical plane, assigned slot, retention reasons,
 six-slot missing mask, and ordinal sibling slot/terminal/model-eligibility/retention/quality-block
-context.
+context. Each remote review group must contain the finalizer's exact six mandatory artifacts and may
+contain only the optional `orthogonal.png`; its safe log must use the exact automatic review start,
+four progress, and template-completion event sequence.
 
 The authorized human uses Chrome Copy & Edit on the safe private UI template to create a distinct
 private review session, enters `START` before any artifact access, and records only `PASS`, `BLOCK`,

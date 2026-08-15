@@ -39,9 +39,16 @@ Delivered evidence:
 - Rules, metric, schema, dates, notebook/runtime and submission limits, data interface, external
   assets, team/sharing constraints, licenses, and contradictions are recorded with conservative
   defaults.
-- The latest live refresh at `2026-08-13T19:20:34Z` used the official Kaggle MCP first. The current
-  data-description fingerprint changed only for three organizer clarifications already enforced by
-  the canonical contract; every other operational fingerprint and material gate was unchanged.
+- The latest live refresh at `2026-08-15T00:00:25Z` used the official Kaggle MCP first. All nine
+  operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines,
+  runtime, limits, entered state, and RSNA MIRA PDF were unchanged.
+- Newly discovered Host topic `733965` permits compliant commercial LLM or external inference under
+  the Rules, equal-access, and minimal-cost conditions and says report processing is not itself
+  private sharing.
+- The repository's stricter boundary remains unchanged: no raw DICOM pixels, radiology reports,
+  patient-level metadata, identifiers, private competition code or data, or private artifacts may
+  be sent to any external LLM, API, or service. Only recognized members of the same official Kaggle
+  team may receive private competition code or data.
 
 Open gates:
 
@@ -146,15 +153,28 @@ unauthorized.
 
 ## Chunk 5 - deterministic DICOM-to-model pipeline
 
-Status: Chunk 5 recovery is active and not passed. D-025 passed its complete gate and recovery
-iteration 7 used freeze `e3c6334` and immutable bundle `5fe504...`. Its private version-1 inputs,
-standalone smoke, full-data Run A, and independent full-data Run B all authenticated and passed. The
-comparison kernel reached `COMPLETE` and its comparator producer was correct, but the workflow
-failed closed with `comparison_output_layout_invalid` because Kaggle CLI 2.2.4 unconditionally
-retrieved one root wrapper log while the local validator required one total file. The r7 append-only
-row is terminal failed. Review-plan materialization, UI/session creation, human review, and
-finalization did not start. D-026 defines the smallest two-file fail-closed correction; its complete
-gate, replacement freeze/bundle, full remote chain, human review, commit, and push remain pending.
+Status: Chunk 5 recovery is active and not passed. D-026 passed its complete gate with pytest
+528/528, and recovery iteration 8 uses freeze `4958c4a` and immutable bundle `09502a...`. Its private
+version-1 inputs, standalone smoke, and full-data Run A authenticated and passed. Run B version 1
+reached `COMPLETE` at 25,940 seconds; two independent bounded read-only polls 71 seconds apart
+agreed, and the established authenticated validator returned
+`dicom_qa_output_validation=PASS mode=workflow stage=run-b`. The protected registry row is terminal
+`blocked`: input, smoke, Run A, and Run B are `passed`; comparison, `review_plan`, and `human_review`
+are `not_started`; `completed_utc` is set; and integrity, foreign keys, and mode are `PASS`. Frozen-
+source preflight had found two P1 review-plan producer/validator contract defects before comparison
+launch. UI/session creation and finalization were not launched. This is not Chunk 5 PASS and proves
+no comparison, determinism, QA, review, or performance result. D-027 defines the smallest two-file
+fail-closed correction. D-028 closes an independent material-drift checker P1. Their focused checks
+pass. The r9 exact 16-file candidate passed its first complete release gate on staged tree
+`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
+build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
+pre-commit; secret and privacy checks; dependency audit; contract schema and current
+`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
+changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
+identical complete gate. If that rerun succeeds, the final release record is
+`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The
+replacement freeze/commit, immutable bundle, full fresh private chain, comparison, QA, human review,
+finalizer, and push remain pending.
 This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
 request #10 remains unmerged.
 
@@ -209,36 +229,62 @@ Local evidence:
   Ruff, strict typing, pytest 507/507, CLI/config/submission/contract, pre-commit, secrets,
   sensitive-file, dependency, fresh contract-drift, and diff checks. Independent end-to-end and
   source-graph red-teams found no remaining P0/P1.
-- Recovery iteration 7 remotely verified the D-025 correction: the complete gate produced freeze
-  `e3c6334` / bundle `5fe504...`, then inputs, smoke, Run A, and Run B all authenticated and passed.
-  The later comparison kernel completed with a correct producer, but local retrieval validation
-  rejected the unconditional root wrapper log. D-026 changes only that consumer boundary: require
-  the exact summary path, permit at most one size-bounded privacy-scanned root log, and reject every
-  other entry, symlink, special file, or sensitive payload.
+- D-026 passed the complete iteration-8 gate with pytest 528/528 and produced freeze `4958c4a` /
+  bundle `09502a...`. Inputs, smoke, Run A, and Run B authenticated and passed. Run B version 1
+  reached `COMPLETE` at 25,940 seconds; two independent read-only polls 71 seconds apart agreed, and
+  the authenticated workflow validator passed. The protected row is terminal `blocked` before
+  comparison; this supplies no comparison, determinism, QA, review, performance, or Chunk 5 PASS
+  evidence.
+- Frozen-source preflight then found that the finalizer requires six QA artifacts and allows
+  `orthogonal.png` only when renderable while the validator required exactly seven. It also found
+  that automatic materialization emits `dicom_qa_review_started`, four
+  `dicom_qa_plan_progress` events, and `dicom_qa_review_template_complete`, while the validator
+  expected generic run boundaries. Comparison and every review stage were blocked before launch.
+- The D-027 two-file candidate binds the validator to the producer's exact suffix and event
+  contracts. Focused checks pass 9/9, the packaging file passes 147/147, Ruff check and format pass,
+  strict validator mypy passes, and an independent red-team returns PASS with no P0/P1. The
+  correction is included in the r9 first complete release-gate PASS; all replacement immutable-chain
+  evidence remains pending.
+- D-028 found that `efficiency_prize`, `external_assets`, `team_and_sharing`, `license`,
+  `winner_obligations`, and `ambiguities` were absent from the material-drift allowlist, so mutation
+  or wholesale removal could yield `contract_drift=no`. The minimal fix adds them to the existing
+  `MATERIAL_SECTIONS` and extends `tests/test_smoke.py` without a dependency or abstraction. Smoke
+  passes 6/6; the combined focused set passes 155/155; Ruff/format, mypy over 25 source plus nine
+  trust-boundary files, independent current-source `contract_drift=no`, and post-fix red-team PASS/no
+  P0/P1 all pass. The correction is included in the same r9 first complete release-gate PASS, with
+  D-015's immediate identical post-governance rerun controlling the final
+  `complete_final_gate=PASS` record.
 - The checkpoint relay could not connect to Chrome. No new reviewer response or decision exists;
   the user's standing Chunk 5 authorization remains controlling.
 
 Exit evidence still required:
 
-1. Focused positive/adversarial checks and a complete exact-set gate over D-026, then a clean
-   replacement implementation-freeze identity under the approval already granted and a
+1. Preserve iteration 8 only as a terminal `blocked` historical chain. Because D-027 and D-028
+   change frozen source, never launch its comparison, review-plan, UI/session, human-review, or
+   finalizer stages and never splice its passed stages into iteration 9.
+2. Restage this governance reconciliation and immediately rerun the identical complete gate under
+   D-015. A successful rerun fixes the final release record at `complete_final_gate=PASS`; any
+   failure invalidates the record and must be corrected. Then create a clean iteration-9
+   implementation-freeze/commit identity under the approval already granted and a
    deterministic offline bundle cryptographically bound to `audit-0002-manifest-remediation` /
-   `manifest-v2`. The terminal r7 chain cannot be spliced into the replacement.
-2. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
+   `manifest-v2`. The terminal blocked r8 chain cannot be spliced into the replacement.
+3. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
    dataset and every version-1 kernel; version 2 must be absent.
-3. A passing authenticated smoke with separate conservative full-pass and post-comparison
+4. A passing authenticated smoke with separate conservative full-pass and post-comparison
    preparation estimates, followed by successful independent Run A and Run B over the entire
    authorized training set, complete terminal accounting, exact `manifest-v2` series/file/size/raw-
    digest reconciliation, deterministic cohort plans, and no unexplained DICOM or recoverable
    transfer-syntax blocker.
-4. Byte-exact manifest and cohort-plan comparison and exact deterministic metrics, retrieved only
+5. Byte-exact manifest and cohort-plan comparison and exact deterministic metrics, retrieved only
    through the D-026 exact-summary/optional-safe-log boundary; then a passing identity-bound physical
-   capacity gate and one review-plan execution that supplies selected-series replay, double-render,
-   decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput, and runtime evidence.
-5. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
+   capacity gate and one review-plan execution whose six mandatory artifacts, sole optional
+   orthogonal view, and exact automatic event sequence pass D-027. It must supply selected-series
+   replay, double-render, decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput,
+   and runtime evidence.
+6. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
    represented bounded-registry quota and including all eligible diagnostic series; all nine checks
    must be terminal with zero `BLOCK`.
-6. Private finalization bound to the exact completed review-session identity and successful
+7. Private finalization bound to the exact completed review-session identity and successful
    disclosure validation of the allowlisted sanitized aggregates.
-7. Truthful final governance, complete staged gates, committed and pushed synchronized branch, and
+8. Truthful final governance, complete staged gates, committed and pushed synchronized branch, and
    no ontology, fold, label, model, prediction, ensemble, inference, or submission work.

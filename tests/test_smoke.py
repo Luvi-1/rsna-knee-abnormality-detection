@@ -68,6 +68,14 @@ def test_exported_schema_matches_model() -> None:
 
 def test_material_contract_drift_is_detected(tmp_path: Path) -> None:
     canonical_path = ROOT / "docs" / "competition_contract" / "contract.yaml"
+    additional_sections = (
+        "efficiency_prize",
+        "external_assets",
+        "team_and_sharing",
+        "license",
+        "winner_obligations",
+        "ambiguities",
+    )
     observed = json.loads(canonical_path.read_text())
     observed["targets"]["labels"][0] = "Changed target"
     observed["submission"]["columns"][1] = "Changed target"
@@ -76,11 +84,30 @@ def test_material_contract_drift_is_detected(tmp_path: Path) -> None:
     observed["limits"]["daily_submissions"] = 1
     observed["data"]["description_fingerprint"] = "changed"
     observed["data"]["inventory"]["total_files"] += 1
+    for section in additional_sections:
+        observed[section] = {"changed": True}
     observed_path = tmp_path / "observed.yaml"
     observed_path.write_text(json.dumps(observed))
 
     changed = material_drift(load_contract(canonical_path), load_contract(observed_path))
-    assert changed == ("targets", "submission", "timeline", "runtime", "limits", "data")
+    assert changed == (
+        "targets",
+        "submission",
+        "timeline",
+        "runtime",
+        "limits",
+        "data",
+        *additional_sections,
+    )
+
+    removed = json.loads(canonical_path.read_text())
+    for section in additional_sections:
+        removed.pop(section)
+    removed_path = tmp_path / "removed.yaml"
+    removed_path.write_text(json.dumps(removed))
+    assert material_drift(load_contract(canonical_path), load_contract(removed_path)) == (
+        additional_sections
+    )
 
     invalid_path = tmp_path / "invalid.yaml"
     invalid_path.write_text('{"schema_version":"private-marker"}')
