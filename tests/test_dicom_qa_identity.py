@@ -194,7 +194,8 @@ def _bundle_inputs(tmp_path: Path) -> dict[str, Any]:
         "pylibjpeg_openjpeg-2.5.0-py3-none-any.whl",
     ):
         path = tmp_path / name
-        path.write_bytes(b"fixture\n")
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("fixture/__init__.py", b"")
         dependencies.append(path)
     requirements = tmp_path / "runtime-requirements.txt"
     requirements.write_text("pillow==12.3.0\n")
@@ -297,7 +298,7 @@ def test_source_manifest_requires_successor_registry_binding(tmp_path: Path) -> 
         registry,
         packager.SOURCE_MANIFEST_AUDIT_ID,
     )
-    assert identity["audit_id"] == "audit-0002-manifest-remediation"
+    assert identity["audit_id"] == "audit-0003-wheel-sanitization"
     with pytest.raises(packager.PackagingError, match="source_manifest_audit_invalid"):
         packager._source_manifest_identity(
             source,
@@ -342,7 +343,7 @@ def _static_inputs() -> tuple[dict[str, Any], dict[str, Any]]:
     }
     source = {
         "version": "manifest-v2",
-        "audit_id": "audit-0002-manifest-remediation",
+        "audit_id": "audit-0003-wheel-sanitization",
         "kernel_ref": "test-owner/manifest-kernel",
         "kernel_version": 1,
         "kernel_code_file": "run.py",

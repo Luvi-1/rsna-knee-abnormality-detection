@@ -1,7 +1,9 @@
 # Validation Card
 
 Hard-group version: `protected-groups-v2`; full private recomputation completed in
-`audit-0002-manifest-remediation`.
+`audit-0002-manifest-remediation`. The scientific result remains historical evidence, but D-029
+supersedes that audit as a reusable source root; `audit-0003-wheel-sanitization` must complete before
+new downstream use.
 
 Fold version: `unassigned`; no folds exist.
 
@@ -116,28 +118,57 @@ by local validation. Comparison, review-plan materialization, UI/session creatio
 finalization were not launched.
 
 The two-file D-027 correction passes focused 9/9 and packaging 147/147, Ruff check and format, strict
-validator mypy, and independent red-team with no P0/P1. It is included in the r9 first complete
-release-gate PASS. This is not yet promoted preprocessing evidence.
+validator mypy, and independent red-team with no P0/P1. It passed in r9 freeze `1db805e`; the later
+dependency-wheel content rejection is separate. This is not promoted preprocessing evidence.
 
 D-028 adds the previously omitted `efficiency_prize`, `external_assets`, `team_and_sharing`,
 `license`, `winner_obligations`, and `ambiguities` sections to the existing `MATERIAL_SECTIONS` and
 tests both mutation and wholesale removal in `tests/test_smoke.py`. Smoke passes 6/6; the combined
 focused set passes 155/155; Ruff/format, mypy over 25 source plus nine trust-boundary files,
 independent current-source `contract_drift=no`, and post-fix red-team PASS/no P0/P1 all pass. The
-r9 exact 16-file candidate passed its first complete release gate on staged tree
-`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
-build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
-pre-commit; secret and privacy checks; dependency audit; contract schema and current
-`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
-changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
-identical complete gate. If that rerun succeeds, the final release record is
-`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The clean
-freeze/commit, immutable bundle, fresh private chain, comparison, QA, human review, and finalizer
-remain required.
+r9 candidate passed the exact 529/529 gate and produced freeze `1db805e` / bundle `28457d...`; all
+non-content bundle checks passed. Final content inspection found pinned upstream `pydicom 3.0.2`
+aggregate 104 `.dcm` members and 188 standard DICM-preamble members, so the bundle was rejected
+before upload. No r9 remote artifact exists. Its protected registry row is terminal `blocked`, every
+remote stage is `not_started`, and the reason is `dependency_wheel_medical_payload_detected`.
 
-The iteration-9 clean immutable candidate must authenticate
-the completed private `audit-0002-manifest-remediation` / `manifest-v2` output and reject the
-superseded audit. Distinct private version-1 Run A and Run B kernels must independently process the
+D-029 uses one shared stdlib sanitizer in `package_manifest_bundle` to remove the general test tree
+and any `.dcm`, `.dicom`, or standard DICM-at-byte-128 member, regenerate wheel `RECORD`
+deterministically, validate every other wheel fail-closed, and preserve runtime modules, metadata,
+licenses, and offline preflight. The first r10 candidate passed on exact staged tree
+`5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`: pytest 530/530; isolated wheel
+build/install/import; Ruff check/format; mypy over 25 source and nine trust-boundary files;
+audit/configuration/submission; contract schema and current `contract_drift=no`; pre-commit;
+privacy checks; `pip-audit`; exact inventory and unchanged-tree checks. That gate is
+superseded. D-030 preflight found that the project wheel lacked the shared archive guard; deployment
+could skip wheel/`RECORD` checks; the actual local kernel upload lacked an exact two-file/hash
+allowlist; and remote dataset/kernel version-1 content, sources, listings, and race stability were
+not completely authenticated. It also found raw private-reference-capable commands, an unscoped
+credential path, and a root-trust gap that allowed dataset metadata and wheel scanning from a safe
+sibling directory other than the verified bundle-manifest root. The same helper built the
+audit-0002 bundle.
+
+The minimal correction extends the shared guard to the project wheel and adds one deployment
+authenticator that directly reuses the existing DICOM-QA version-1 helpers. Before network access,
+every stage validates the exact local two-file kernel/hash, all wheels/`RECORD`, resolved dataset
+metadata under the exact bundle-manifest parent, and kernel metadata under its exact sibling kernel
+directory. Remote gates authenticate exact private dataset version-1 content/hashes, exact kernel
+version-1 code/source graph, stable listings, and before/after race snapshots. Status is fixed to
+`PENDING`, `RUNNING`, `COMPLETE`, or `ERROR`; token scope, logs, `/1` references, and gates remain
+bounded. The mismatched-root regression proves zero remote calls, and independent authentication
+and runbook red-teams pass with no P0/P1. The first complete exact 24-file D-015 gate passed on tree
+`cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`: pytest 537/537 plus the full lock/build/import,
+static, configuration, contract, schema, pre-commit, privacy, dependency-audit, inventory, and
+unchanged-tree checks all passed. This reconciliation changes bytes, so an immediate identical
+fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
+
+A replacement freeze/commit, sanitized manifest bundle, and completed private
+`audit-0003-wheel-sanitization` / `manifest-v2` output remain required before a clean immutable
+DICOM-QA candidate authenticates and binds to it. Audit-0002 remains
+historical scientific evidence only and may not be reused as the source root. Do not delete or reuse
+old remote artifacts; run the full fresh chain. Chunk 5 is not passed, and downstream/Chunk 6 work
+remains blocked. Distinct private
+version-1 Run A and Run B kernels must independently process the
 entire authorized training set from the same bundle, preprocessing configuration, competition
 input, and source-manifest input. Each produces a canonical full-pass manifest, deterministic
 metrics, and a deterministic cohort plan without QA replay or rendering. Every discovered study,

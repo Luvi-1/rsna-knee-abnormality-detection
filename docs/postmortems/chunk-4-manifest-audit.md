@@ -26,6 +26,11 @@
   seconds at code commit `6fce3af8ba1cc85dacd6a29326f999bf5f5227ed`. Its five approved schema-v2
   outputs passed the replacement validator; pinned bundle, provenance, and artifact hashes are in
   `docs/experiments/audit-0002-manifest-remediation.md`.
+- A later pre-upload Chunk 5 bundle audit found that the shared dependency helper had preserved
+  upstream pydicom medical fixtures in both the manifest and DICOM-QA wheelhouses while metadata
+  claimed no DICOM pixels. This did not expose private competition data or invalidate the historical
+  aggregate semantics, but it superseded the audit-0002 bundle/output chain as a reusable source
+  root. `audit-0003-wheel-sanitization` is required before Chunk 5 can resume.
 
 ## Root cause and contributing factors
 
@@ -84,6 +89,7 @@ Guarded cleanup verified that no active local or origin ref reaches the unsafe h
 and the complete staged candidate passed every final local gate. Private pull request #10 remains
 open and unmerged; any successor to the green `cc050a2` candidate requires exact-head hosted CI.
 No fold, model, prediction, ensemble, or submission work may begin from this postmortem alone.
+The fresh sanitized manifest audit must pass before any new DICOM-QA bundle can bind a source root.
 
 - Owner: Codex.
 - Historical code commit: `75792aad08a3685d0c9ce92b5cab90307bf1336c`.

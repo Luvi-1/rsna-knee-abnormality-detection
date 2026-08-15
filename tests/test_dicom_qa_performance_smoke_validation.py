@@ -75,7 +75,7 @@ def _summary(run_config: dict[str, Any], manifest: dict[str, Any]) -> bytes:
                 "preprocessing_config_sha256": provenance["preprocessing_config_sha256"],
                 "preprocessing_version": provenance["preprocessing_version"],
                 "source_manifest_version": "manifest-v2",
-                "source_manifest_audit_id": "audit-0002-manifest-remediation",
+                "source_manifest_audit_id": "audit-0003-wheel-sanitization",
                 "input_binding_sha256": "1" * 64,
             },
             "runtime": {

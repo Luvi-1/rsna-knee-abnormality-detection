@@ -32,7 +32,7 @@ FAILURE_PHASES: Final = {"bundle", "selection", "processing", "output"}
 DATASET_VERSION: Final = 1
 DATASET_PAGE_SIZE: Final = 200
 KAGGLE_CLI_VERSION: Final = "Kaggle CLI 2.2.4"
-SOURCE_MANIFEST_AUDIT_ID: Final = "audit-0002-manifest-remediation"
+SOURCE_MANIFEST_AUDIT_ID: Final = "audit-0003-wheel-sanitization"
 SOURCE_MANIFEST_VERSION: Final = "manifest-v2"
 SOURCE_MANIFEST_DOWNLOADABLE_OUTPUTS: Final = {
     "audit-output/sanitized_summary.json": 1024**2,

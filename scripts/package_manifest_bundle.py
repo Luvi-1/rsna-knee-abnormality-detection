@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -35,6 +37,8 @@ TARGET_PLATFORMS: Final = (
     "manylinux2014_x86_64",
 )
 TARGET_PYTHONS: Final = ("3.11", "3.12")
+PYDICOM_TEST_TREE: Final = ("pydicom", "data", "test_files")
+MEDICAL_WHEEL_SUFFIXES: Final = frozenset({".dcm", ".dicom"})
 OUTPUT_DIRECTORY: Final = "audit-output"
 AUDIT_KEY_FILENAME: Final = "audit-key.bin"
 REQUIRED_DECODER_PACKAGES: Final = {
@@ -189,6 +193,14 @@ def _wheel_distribution(path: Path) -> str:
     return _normalized_distribution(distribution)
 
 
+def _medical_wheel_member(member: PurePosixPath, header: bytes) -> bool:
+    return (
+        member.parts[:3] == PYDICOM_TEST_TREE
+        or member.suffix.casefold() in MEDICAL_WHEEL_SUFFIXES
+        or header[128:132] == b"DICM"
+    )
+
+
 def _validate_linux_wheel(path: Path) -> None:
     name = path.name.lower()
     if (
@@ -207,6 +219,32 @@ def _validate_linux_wheel(path: Path) -> None:
         and ("cp311" in name or "cp312" in name)
     ):
         raise PackagingError("dependency_wheel_platform_invalid")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names: set[str] = set()
+            for info in archive.infolist():
+                member = PurePosixPath(info.filename)
+                mode = info.external_attr >> 16
+                if (
+                    member.is_absolute()
+                    or any(part in {"", ".", ".."} for part in member.parts)
+                    or "\\" in info.filename
+                    or info.filename in names
+                    or stat.S_ISLNK(mode)
+                    or info.file_size < 0
+                ):
+                    raise PackagingError("dependency_wheel_archive_invalid")
+                names.add(info.filename)
+                if info.is_dir():
+                    continue
+                with archive.open(info) as stream:
+                    header = stream.read(132)
+                if _medical_wheel_member(member, header):
+                    raise PackagingError("dependency_wheel_medical_payload_detected")
+    except (OSError, zipfile.BadZipFile) as error:
+        raise PackagingError("dependency_wheel_archive_invalid") from error
+    if _wheel_distribution(path) == "pydicom":
+        _validate_pydicom_record(path)
 
 
 def _normalized_run_config_record(
@@ -442,6 +480,7 @@ def _assemble_bundle(
         r"[A-Za-z0-9][A-Za-z0-9._+-]{0,199}\.whl", wheel_path.name
     ):
         raise PackagingError("wheel_name_invalid")
+    _validate_linux_wheel(wheel_path)
     if not dependency_wheel_paths:
         raise PackagingError("dependency_wheelhouse_empty")
     dependency_names: set[str] = set()
@@ -754,6 +793,116 @@ def _wheel_record(payload: bytes) -> str:
     return f"sha256={digest},{len(payload)}"
 
 
+def _validate_pydicom_record(path: Path) -> None:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            payloads = {
+                info.filename: archive.read(info)
+                for info in archive.infolist()
+                if not info.is_dir()
+            }
+        records = [name for name in payloads if name.endswith(".dist-info/RECORD")]
+        if len(records) != 1 or any(
+            name.endswith((".dist-info/RECORD.jws", ".dist-info/RECORD.p7s")) for name in payloads
+        ):
+            raise PackagingError("dependency_wheel_record_invalid")
+        record_name = records[0]
+        rows = list(csv.reader(payloads[record_name].decode("utf-8").splitlines()))
+        if len(rows) != len(payloads) or any(len(row) != 3 for row in rows):
+            raise PackagingError("dependency_wheel_record_invalid")
+        observed = {row[0]: (row[1], row[2]) for row in rows}
+        if len(observed) != len(rows) or set(observed) != set(payloads):
+            raise PackagingError("dependency_wheel_record_invalid")
+        for name, payload in payloads.items():
+            expected_hash, expected_size = (
+                ("", "") if name == record_name else _wheel_record(payload).split(",", 1)
+            )
+            if observed[name] != (expected_hash, expected_size):
+                raise PackagingError("dependency_wheel_record_invalid")
+        if (
+            "pydicom/__init__.py" not in payloads
+            or not any(name.endswith(".dist-info/METADATA") for name in payloads)
+            or not any(name.endswith(".dist-info/WHEEL") for name in payloads)
+            or not any(".dist-info/licenses/" in name.casefold() for name in payloads)
+        ):
+            raise PackagingError("dependency_wheel_record_invalid")
+    except (OSError, UnicodeDecodeError, csv.Error, zipfile.BadZipFile) as error:
+        raise PackagingError("dependency_wheel_record_invalid") from error
+
+
+def _strip_pydicom_medical_payloads(path: Path, timestamp: int) -> None:
+    if _wheel_distribution(path) != "pydicom":
+        return
+    files: dict[str, bytes] = {}
+    record_name: str | None = None
+    removed = False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            infos = archive.infolist()
+            if len(infos) > 10_000 or sum(info.file_size for info in infos) > MAX_BUNDLE_BYTES:
+                raise PackagingError("pydicom_wheel_sanitization_failed")
+            names: set[str] = set()
+            for info in infos:
+                member = PurePosixPath(info.filename)
+                mode = info.external_attr >> 16
+                if (
+                    member.is_absolute()
+                    or any(part in {"", ".", ".."} for part in member.parts)
+                    or "\\" in info.filename
+                    or info.filename in names
+                    or stat.S_ISLNK(mode)
+                    or info.file_size < 0
+                ):
+                    raise PackagingError("pydicom_wheel_sanitization_failed")
+                names.add(info.filename)
+                if info.is_dir():
+                    continue
+                payload = archive.read(info)
+                if len(payload) != info.file_size:
+                    raise PackagingError("pydicom_wheel_sanitization_failed")
+                if _medical_wheel_member(member, payload[:132]):
+                    removed = True
+                    continue
+                name = _safe_relative_path(info.filename)
+                if name.endswith(".dist-info/RECORD"):
+                    if record_name is not None:
+                        raise PackagingError("pydicom_wheel_sanitization_failed")
+                    record_name = name
+                    continue
+                if name.endswith((".dist-info/RECORD.jws", ".dist-info/RECORD.p7s")):
+                    raise PackagingError("pydicom_wheel_sanitization_failed")
+                files[name] = payload
+    except (OSError, zipfile.BadZipFile) as error:
+        raise PackagingError("pydicom_wheel_sanitization_failed") from error
+    if not removed:
+        return
+    if (
+        record_name is None
+        or "pydicom/__init__.py" not in files
+        or not any(name.endswith(".dist-info/METADATA") for name in files)
+        or not any(name.endswith(".dist-info/WHEEL") for name in files)
+        or not any(".dist-info/licenses/" in name.casefold() for name in files)
+    ):
+        raise PackagingError("pydicom_wheel_sanitization_failed")
+    record_lines = [f"{name},{_wheel_record(payload)}" for name, payload in sorted(files.items())]
+    record_lines.append(f"{record_name},,")
+    files[record_name] = ("\n".join(record_lines) + "\n").encode()
+    temporary = path.with_name(f".{path.name}.sanitized")
+    date_time = time.gmtime(max(timestamp, 315532800))[:6]
+    try:
+        with zipfile.ZipFile(temporary, "x", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, payload in sorted(files.items()):
+                info = zipfile.ZipInfo(name, date_time)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, payload)
+        os.replace(temporary, path)
+        os.utime(path, (timestamp, timestamp), follow_symlinks=False)
+    except (OSError, zipfile.BadZipFile) as error:
+        temporary.unlink(missing_ok=True)
+        raise PackagingError("pydicom_wheel_sanitization_failed") from error
+
+
 def _build_langdetect_wheel(source: Path, destination: Path, timestamp: int) -> Path:
     """Build the locked pure-Python dependency without an unpinned build backend."""
 
@@ -948,6 +1097,7 @@ def _prepare_runtime_wheels(
         ):
             raise PackagingError("dependency_python_coverage_invalid")
     for wheel in wheels:
+        _strip_pydicom_medical_payloads(wheel, commit_timestamp)
         _validate_linux_wheel(wheel)
         os.utime(wheel, (commit_timestamp, commit_timestamp), follow_symlinks=False)
     return wheels, requirements_path

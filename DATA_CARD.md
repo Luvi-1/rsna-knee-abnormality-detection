@@ -1,10 +1,11 @@
 # Data Card
 
 Status: the full private `manifest-v2` remediation audit completed in 10,092 seconds and its
-schema-v2 sanitized output passed validation. The historical `manifest-v1` audit is preserved for
-provenance but superseded for downstream use. Guarded history/ref cleanup and the Checkpoint 1
-complete staged gates passed; hosted CI passed for candidate `cc050a2`, and private pull request
-#10 remains open and unmerged. Chunk 5 has not passed its own final gates.
+schema-v2 sanitized output passed validation. It remains historical scientific evidence,
+but D-029 supersedes `audit-0002-manifest-remediation` as a reusable source root because the shared
+bundle helper admitted dependency-wheel medical payloads. The historical `manifest-v1` audit is
+also preserved for provenance but superseded. `audit-0003-wheel-sanitization` must complete before
+new downstream use. Chunk 5 has not passed.
 
 ## Source, scope, and license
 
@@ -60,6 +61,8 @@ policy across every JSON and Markdown representation. The completed output repor
 `all_files_terminal: true`, `all_series_terminal: true`, and `private_artifacts_complete: true`.
 Code, bundle, provenance, and artifact hashes are recorded in
 `docs/experiments/audit-0002-manifest-remediation.md`.
+These remain historical scientific provenance; they are not a reusable bundle/source root after
+D-029.
 
 ## DICOM integrity status
 
@@ -140,20 +143,46 @@ D-028 closes a separate contract-governance P1: the drift checker omitted `effic
 mutation or wholesale removal to yield `contract_drift=no`. The minimal fix extends the existing
 `MATERIAL_SECTIONS` and `tests/test_smoke.py` only. Smoke passes 6/6; the combined focused set passes
 155/155; Ruff/format, mypy over 25 source plus nine trust-boundary files, independent current-source
-`contract_drift=no`, and post-fix red-team PASS/no P0/P1 all pass. The r9 exact 16-file candidate
-passed its first complete release gate on staged tree
-`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
-build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
-pre-commit; secret and privacy checks; dependency audit; contract schema and current
-`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
-changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
-identical complete gate. If that rerun succeeds, the final release record is
-`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The
-freeze/commit, immutable bundle, fresh private chain, comparison, QA, human review, and finalizer
-remain pending.
+`contract_drift=no`, and post-fix red-team PASS/no P0/P1 all pass. The r9 candidate passed the exact
+529/529 gate and produced freeze `1db805e` / bundle `28457d...`; every non-content bundle check
+passed. Final content inspection rejected the bundle before upload because pinned upstream
+`pydicom 3.0.2` contains aggregate 104 `.dcm` members and 188 standard DICM-preamble members. No r9
+remote artifact exists. Its registry row is terminal `blocked`, every remote stage is `not_started`,
+and the reason is `dependency_wheel_medical_payload_detected`.
 
-The iteration-9 replacement exact clean candidate must bind to the completed private
-`audit-0002-manifest-remediation` / `manifest-v2` output and reject the superseded audit. Distinct
+D-029 applies one shared stdlib sanitizer in `package_manifest_bundle`: remove the general test tree
+plus any `.dcm`, `.dicom`, or standard DICM-at-byte-128 member; regenerate wheel `RECORD`
+deterministically; validate every other wheel fail-closed; and preserve runtime modules, metadata,
+licenses, and offline preflight. The first r10 candidate passed on exact staged tree
+`5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`: pytest 530/530; isolated wheel
+build/install/import; Ruff check/format; mypy over 25 source and nine trust-boundary files;
+audit/configuration/submission; contract schema and current `contract_drift=no`; pre-commit;
+privacy checks; `pip-audit`; exact inventory and unchanged-tree checks. D-030 preflight then
+found that the project wheel lacked the shared medical-payload guard, deployment stages could skip
+wheel/`RECORD` checks, the actual local kernel upload lacked an exact two-file/hash allowlist, and
+remote dataset/kernel version-1 content, sources, listings, and race stability were not completely
+authenticated. Raw status/private-reference-capable commands and an unscoped credential path also
+violated the fixed-output boundary. The 530/530 gate is therefore superseded.
+
+The minimal D-030 correction extends the shared guard to the project wheel and adds one deployment
+authenticator that directly reuses the existing DICOM-QA version-1 helpers. Before any network
+operation, every stage validates the exact two-file local kernel/hash and every wheel/`RECORD`.
+Remote gates authenticate exact private dataset version-1 content/hashes, exact kernel version-1
+code/source graph, stable listings, and before/after race snapshots. Status is limited to
+`PENDING`, `RUNNING`, `COMPLETE`, or `ERROR`; the runbook uses a command-scoped token, protected
+logs, explicit `/1`, and bracketed gates. No dependency, framework, or new abstraction was added.
+Both independent authentication and runbook red-teams pass with no P0/P1. The first complete exact
+24-file D-015 gate passed on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`: pytest 537/537,
+offline lock/build/import, Ruff/format, mypy over 25 package and 11 trust-boundary files,
+config/submission/contract/schema checks, pre-commit, privacy scans, `pip-audit`, and exact
+inventory/unchanged-tree checks all passed. This reconciliation changes bytes, so an immediate
+identical fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
+
+After that gate, the replacement freeze/commit and sanitized manifest bundle must be created,
+and the private `audit-0003-wheel-sanitization` execution must complete and validate `manifest-v2`.
+Only then may a new exact clean DICOM-QA candidate bind to that private source
+output. Do not reuse or
+delete any old remote artifact, and do not reuse r9 freeze `1db805e` or bundle `28457d...`. Distinct
 private Run A and Run B version-1 kernels must independently process the entire authorized training
 set from the same immutable bundle, configuration, competition input, and source-manifest input.
 Each run emits a canonical full-pass manifest, deterministic metrics, and a deterministic cohort
@@ -201,7 +230,9 @@ terminal, and zero `BLOCK` using
 disclosure-controlled tokens while exact review counts, private identities, and private hashes
 remain inside Kaggle.
 
-Every private input and kernel must pass ready/private, offline, exact-source, exact-version, and
-exact-listing gates. Until the final sanitized determinism, performance, and human-review outputs
+Every private input and kernel must pass the D-030 ready/private, offline, exact-version-1,
+exact-content/source/listing, and before/after race gates with fixed sanitized output. Until the
+final sanitized determinism, performance, and human-review outputs
 validate, preprocessed artifacts are experimental and folds, weak labels, training, inference,
-prediction, ensembles, and submission remain blocked.
+prediction, ensembles, and submission remain blocked. Chunk 5 is not passed, and Chunk 6 remains
+blocked.

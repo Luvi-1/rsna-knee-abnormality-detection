@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import zipfile
 from concurrent.futures.process import BrokenProcessPool
 from copy import deepcopy
@@ -32,6 +33,13 @@ def _load_module(name: str, path: Path) -> ModuleType:
 
 packager = _load_module("_manifest_packager", ROOT / "scripts" / "package_manifest_bundle.py")
 validator = _load_module("_manifest_validator", ROOT / "scripts" / "validate_manifest_output.py")
+sys.path.insert(0, str(ROOT))
+try:
+    deployment = _load_module(
+        "_manifest_deployment", ROOT / "scripts" / "authenticate_manifest_deployment.py"
+    )
+finally:
+    sys.path.pop(0)
 
 
 FAKE_RUNNER = r"""
@@ -215,7 +223,7 @@ def run_manifest_audit(*, input_root, output_root, manifest_schema_path,
 """
 
 
-def _wheel(path: Path, distribution: str, module_files: dict[str, str]) -> None:
+def _wheel(path: Path, distribution: str, module_files: dict[str, str | bytes]) -> None:
     dist_info = f"{distribution.replace('-', '_')}-0.1.0.dist-info"
     metadata = (
         "Metadata-Version: 2.1\n"
@@ -235,6 +243,90 @@ def _wheel(path: Path, distribution: str, module_files: dict[str, str]) -> None:
             info = zipfile.ZipInfo(name, (2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, content)
+
+
+def test_pydicom_wheel_strips_medical_payloads_and_rebuilds_record(tmp_path: Path) -> None:
+    dicm_payload = b"\0" * 128 + b"DICM" + b"payload"
+    module_files: dict[str, str | bytes] = {
+        "pydicom/__init__.py": "__version__ = '0.1.0'\n",
+        "pydicom/data/runtime.json": b"{}",
+        "pydicom/data/charset_files/README.txt": b"safe charset resource\n",
+        "pydicom/data/palettes/README.md": b"safe palette resource\n",
+        "pydicom/data/test_files/support.json": b"{}",
+        "pydicom/data/charset_files/sample.dcm": b"suffix-only payload",
+        "pydicom/data/palettes/sample.bin": dicm_payload,
+        "pydicom-0.1.0.dist-info/licenses/LICENSE": b"test license\n",
+    }
+    first = tmp_path / "pydicom-0.1.0-py3-none-any.whl"
+    second_root = tmp_path / "second"
+    second_root.mkdir()
+    second = second_root / first.name
+    _wheel(first, "pydicom", module_files)
+    _wheel(second, "pydicom", module_files)
+
+    packager._strip_pydicom_medical_payloads(first, TIMESTAMP)
+    packager._strip_pydicom_medical_payloads(second, TIMESTAMP)
+
+    assert first.read_bytes() == second.read_bytes()
+    packager._validate_linux_wheel(first)
+    with zipfile.ZipFile(first) as archive:
+        payloads = {
+            info.filename: archive.read(info) for info in archive.infolist() if not info.is_dir()
+        }
+    record_names = [name for name in payloads if name.endswith(".dist-info/RECORD")]
+    assert record_names == ["pydicom-0.1.0.dist-info/RECORD"]
+    record_name = record_names[0]
+    record_payload = payloads.pop(record_name)
+    assert (
+        record_payload
+        == (
+            "\n".join(
+                [
+                    f"{name},{packager._wheel_record(payload)}"
+                    for name, payload in sorted(payloads.items())
+                ]
+                + [f"{record_name},,"]
+            )
+            + "\n"
+        ).encode()
+    )
+    assert payloads["pydicom/__init__.py"] == b"__version__ = '0.1.0'\n"
+    assert payloads["pydicom/data/runtime.json"] == b"{}"
+    assert payloads["pydicom/data/charset_files/README.txt"] == b"safe charset resource\n"
+    assert payloads["pydicom/data/palettes/README.md"] == b"safe palette resource\n"
+    assert payloads["pydicom-0.1.0.dist-info/licenses/LICENSE"] == b"test license\n"
+    assert all(
+        not packager._medical_wheel_member(Path(name), payload[:132])
+        for name, payload in payloads.items()
+    )
+
+    unexpected = tmp_path / "dummy_dep-0.1.0-py3-none-any.whl"
+    _wheel(unexpected, "dummy-dep", {"dummy_dep/__init__.py": "", "dummy_dep/sample": dicm_payload})
+    with pytest.raises(packager.PackagingError, match="dependency_wheel_medical_payload_detected"):
+        packager._validate_linux_wheel(unexpected)
+
+    invalid_record_root = tmp_path / "invalid-record"
+    invalid_record_root.mkdir()
+    invalid_record = invalid_record_root / first.name
+    _wheel(
+        invalid_record,
+        "pydicom",
+        {
+            "pydicom/__init__.py": "",
+            "pydicom/data/runtime.json": b"{}",
+            "pydicom-0.1.0.dist-info/licenses/LICENSE": b"test license\n",
+        },
+    )
+    with pytest.raises(packager.PackagingError, match="dependency_wheel_record_invalid"):
+        packager._validate_linux_wheel(invalid_record)
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    inputs = _bundle_inputs(project_root)
+    with zipfile.ZipFile(inputs["wheel_path"], "a") as archive:
+        archive.writestr("rsna_knee/medical_fixture", dicm_payload)
+    with pytest.raises(packager.PackagingError, match="dependency_wheel_medical_payload_detected"):
+        packager._assemble_bundle(output=tmp_path / "rejected-bundle", **inputs)
 
 
 def _bundle_inputs(tmp_path: Path) -> dict[str, Any]:
@@ -560,6 +652,248 @@ def test_bundle_is_deterministic_and_metadata_is_fail_closed(tmp_path: Path) -> 
     run_config = json.loads((first / "dataset" / "run-config.json").read_text())
     assert run_config["provenance"]["decoder_packages"] == packager.REQUIRED_DECODER_PACKAGES
     assert inputs["audit_key"].hex() not in json.dumps(run_config)
+
+
+def test_manifest_deployment_auth_reuses_exact_v1_helpers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _assemble(tmp_path)
+    run_config = json.loads((bundle / "dataset" / "run-config.json").read_text())
+    manifest = json.loads((bundle / "dataset" / "bundle-manifest.json").read_text())
+    calls: list[str] = []
+    snapshot = {"version": 1, "is_private": True}
+    kernel_identity = {"version": 1, "is_private": True, "enable_internet": False}
+    monkeypatch.setattr(
+        deployment.remote, "_supported_kaggle_cli_interpreter", lambda: Path("/usr/bin/python3")
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_authenticated_dataset_snapshot",
+        lambda _ref, _files: calls.append("dataset") or snapshot,
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_authenticate_dataset_content",
+        lambda _ref, _content, **_kwargs: calls.append("content"),
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_authenticate_kernel_api_version",
+        lambda _ref, _version: calls.append("api") or kernel_identity,
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_pull_and_verify_exact_kernel",
+        lambda *_args, **_kwargs: calls.append("pull") or kernel_identity,
+    )
+    monkeypatch.setattr(
+        deployment.remote, "_kernel_status_complete", lambda _ref: calls.append("status")
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_authenticated_listing",
+        lambda _ref, _version: calls.append("listing") or (b"[]",),
+    )
+    monkeypatch.setattr(
+        deployment.remote,
+        "_validate_source_manifest_listing",
+        lambda _pages, _identity: calls.append("validate-listing"),
+    )
+
+    deployment.authenticate_manifest_deployment(
+        run_config=run_config,
+        manifest=manifest,
+        bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+        dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+        kernel_metadata_path=bundle / "kernel" / "kernel-metadata.json",
+        stage="local",
+    )
+    kernel_ref = json.loads((bundle / "kernel" / "kernel-metadata.json").read_text())["id"]
+    monkeypatch.setattr(
+        deployment.remote,
+        "_run_kaggle_cli",
+        lambda _arguments, **_kwargs: (
+            f'{kernel_ref} has status "KernelWorkerStatus.RUNNING"\n'.encode()
+        ),
+    )
+    assert (
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=bundle / "kernel" / "kernel-metadata.json",
+            stage="status",
+        )
+        == "RUNNING"
+    )
+    deployment.authenticate_manifest_deployment(
+        run_config=run_config,
+        manifest=manifest,
+        bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+        dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+        kernel_metadata_path=bundle / "kernel" / "kernel-metadata.json",
+        stage="complete",
+    )
+
+    assert calls == [
+        "api",
+        "api",
+        "dataset",
+        "content",
+        "api",
+        "status",
+        "pull",
+        "listing",
+        "validate-listing",
+        "status",
+        "api",
+        "pull",
+        "dataset",
+    ]
+    other_root = tmp_path / "other"
+    other_root.mkdir()
+    other_bundle = _assemble(other_root)
+    remote_calls = len(calls)
+    with pytest.raises(
+        deployment.DeploymentAuthenticationError, match="deployment_identity_invalid"
+    ):
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=other_bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=bundle / "kernel" / "kernel-metadata.json",
+            stage="inputs",
+        )
+    assert len(calls) == remote_calls
+
+    kernel_path = bundle / "kernel" / "kernel-metadata.json"
+    altered = json.loads(kernel_path.read_text())
+    altered["enable_internet"] = True
+    kernel_path.write_text(json.dumps(altered))
+    with pytest.raises(
+        deployment.DeploymentAuthenticationError, match="deployment_identity_invalid"
+    ):
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=kernel_path,
+            stage="inputs",
+        )
+
+    altered["enable_internet"] = False
+    kernel_path.write_text(json.dumps(altered))
+    run_path = bundle / "kernel" / "run.py"
+    run_payload = run_path.read_bytes()
+    run_path.write_bytes(run_payload + b"\n")
+    with pytest.raises(
+        deployment.DeploymentAuthenticationError, match="deployment_identity_invalid"
+    ):
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=kernel_path,
+            stage="local",
+        )
+    run_path.write_bytes(run_payload)
+    extra_path = bundle / "kernel" / "extra.py"
+    extra_path.write_text("pass\n")
+    with pytest.raises(
+        deployment.DeploymentAuthenticationError, match="deployment_identity_invalid"
+    ):
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=kernel_path,
+            stage="local",
+        )
+    extra_path.unlink()
+
+    project_wheel = next((bundle / "dataset").glob("rsna_knee-*.whl"))
+    with zipfile.ZipFile(project_wheel, "a") as archive:
+        archive.writestr("rsna_knee/payload.bin", b"\0" * 128 + b"DICM")
+    remote_calls = len(calls)
+    with pytest.raises(
+        deployment.packager.PackagingError, match="dependency_wheel_medical_payload_detected"
+    ):
+        deployment.authenticate_manifest_deployment(
+            run_config=run_config,
+            manifest=manifest,
+            bundle_manifest_path=bundle / "dataset" / "bundle-manifest.json",
+            dataset_metadata_path=bundle / "dataset" / "dataset-metadata.json",
+            kernel_metadata_path=kernel_path,
+            stage="inputs",
+        )
+    assert len(calls) == remote_calls
+
+
+@pytest.mark.parametrize(
+    ("provider_status", "expected"),
+    [
+        ("KernelWorkerStatus.PENDING", "PENDING"),
+        ("RUNNING", "RUNNING"),
+        ("complete", "COMPLETE"),
+        ("KernelWorkerStatus.ERROR", "ERROR"),
+        ("COMPLETE_WITH_ERROR", None),
+    ],
+)
+def test_manifest_deployment_status_is_fixed_and_fail_closed(
+    provider_status: str,
+    expected: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = "test-owner/private-manifest-kernel"
+    monkeypatch.setattr(
+        deployment.remote,
+        "_run_kaggle_cli",
+        lambda _arguments, **_kwargs: f'{ref} has status "{provider_status}"\n'.encode(),
+    )
+    if expected is None:
+        with pytest.raises(deployment.DeploymentAuthenticationError, match="kernel_status_invalid"):
+            deployment._kernel_status(ref)
+    else:
+        assert deployment._kernel_status(ref) == expected
+
+
+def test_manifest_deployment_status_cli_emits_only_fixed_state(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        deployment.output, "load_verified_policy", lambda *_args, **_kwargs: ({}, None)
+    )
+    monkeypatch.setattr(deployment.output, "_json_object", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(deployment, "authenticate_manifest_deployment", lambda **_kwargs: "RUNNING")
+
+    assert (
+        deployment.main(
+            [
+                "--run-config",
+                "run-config.json",
+                "--bundle-manifest",
+                "bundle-manifest.json",
+                "--dataset-metadata",
+                "dataset-metadata.json",
+                "--kernel-metadata",
+                "kernel-metadata.json",
+                "--expected-commit",
+                COMMIT,
+                "--expected-bundle",
+                "b" * 64,
+                "--stage",
+                "status",
+            ]
+        )
+        == 0
+    )
+    assert capsys.readouterr().out == "manifest_deployment_status=RUNNING\n"
 
 
 def test_top_level_packaging_reuses_explicit_private_key_deterministically(

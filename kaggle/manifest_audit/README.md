@@ -13,12 +13,15 @@ seconds, retaining 1,800 seconds before the 23,400-second outer ceiling for vali
 
 Start from a clean commit. The packager refuses modified or untracked files, builds the project
 wheel offline, exports only locked runtime dependencies, downloads/builds CPython 3.11 and 3.12
-x86-64 Linux wheels, rejects macOS/Windows/ARM wheels, and records every byte and SHA-256 in the
-bundle manifest. Create one ignored, mode-0600 audit key and preserve it for every rebuild/rerun of
-that immutable audit lineage; the packager never creates, prints, or places its material in public
-configuration or sanitized output.
+x86-64 Linux wheels, removes the upstream pydicom medical test tree plus every `.dcm`, `.dicom`, or
+standard `DICM`-preamble member, regenerates that wheel's `RECORD`, rejects any medical payload in
+every other wheel, rejects macOS/Windows/ARM wheels, and records every retained byte and SHA-256 in
+the bundle manifest. Create one ignored, mode-0600 audit key and preserve it for every rebuild/rerun
+of that immutable audit lineage; the packager never creates, prints, or places its material in
+public configuration or sanitized output.
 
 ```bash
+set -euo pipefail
 bundle_root="artifacts/manifest-audit-bundle"
 audit_key_path="artifacts/manifest-audit-key.bin"
 test -f "$audit_key_path" || (umask 077; openssl rand -out "$audit_key_path" 32)
@@ -28,6 +31,29 @@ uv run python scripts/package_manifest_bundle.py \
   --output "$bundle_root" \
   --audit-key-path "$audit_key_path" \
   --owner "$KAGGLE_OWNER"
+
+expected_commit="$(jq -er .code_commit "$bundle_root/dataset/run-config.json")"
+expected_bundle="$(jq -er .bundle_sha256 "$bundle_root/dataset/run-config.json")"
+
+authenticate_manifest_stage() {
+  local stage="$1"
+  local command=(uv run --locked --no-sync python -m scripts.authenticate_manifest_deployment \
+    --run-config "$bundle_root/dataset/run-config.json" \
+    --bundle-manifest "$bundle_root/dataset/bundle-manifest.json" \
+    --dataset-metadata "$bundle_root/dataset/dataset-metadata.json" \
+    --kernel-metadata "$bundle_root/kernel/kernel-metadata.json" \
+    --expected-commit "$expected_commit" \
+    --expected-bundle "$expected_bundle" \
+    --stage "$stage")
+  if [ "$stage" = local ]; then
+    "${command[@]}"
+  else
+    test -n "${token_value:-}" || return 1
+    KAGGLE_API_TOKEN="$token_value" "${command[@]}"
+  fi
+}
+
+authenticate_manifest_stage local
 
 jq -e '
   .is_private == true and
@@ -46,9 +72,11 @@ jq -e '
 ' "$bundle_root/dataset/dataset-metadata.json" >/dev/null
 ```
 
-The success line contains only the bundle hash. Private dataset and kernel references remain inside
-their local metadata files and should not be printed, pasted into chat, or committed. `artifacts/`
-is ignored by Git.
+The success line contains only the bundle hash. The `local` authentication stage reopens the actual
+assembled project and dependency wheels, verifies their Linux tags and medical-payload boundary,
+and checks every retained pydicom member against its regenerated `RECORD`; it needs no network token.
+Private dataset and kernel references remain inside their local metadata files and should not be
+printed, pasted into chat, or committed. `artifacts/` is ignored by Git.
 
 ## Approval-gated create and run
 
@@ -56,31 +84,36 @@ Do not run these commands until the human explicitly approves the corresponding 
 not add `--public`; Kaggle dataset creation is private by default.
 
 ```bash
+set -euo pipefail
 token_value="$(launchctl getenv KAGGLE_API_TOKEN)"
 test -n "$token_value"
+audit_transport_root="$(umask 077; mktemp -d)"
+chmod 700 "$audit_transport_root"
 
-KAGGLE_API_TOKEN="$token_value" kaggle datasets create \
+(umask 077; KAGGLE_API_TOKEN="$token_value" kaggle datasets create \
   --path "$bundle_root/dataset" \
   --dir-mode skip \
-  --quiet
+  --quiet >"$audit_transport_root/dataset-create.log" 2>&1)
 
-dataset_ref="$(jq -r .id "$bundle_root/dataset/dataset-metadata.json")"
-dataset_status="$(mktemp)"
-dataset_listing="$(mktemp)"
-KAGGLE_API_TOKEN="$token_value" kaggle datasets status \
-  "$dataset_ref" --format json >"$dataset_status"
-KAGGLE_API_TOKEN="$token_value" kaggle datasets files \
-  "$dataset_ref" --page-size 200 --format json >"$dataset_listing"
+authenticate_manifest_stage inputs
 
-KAGGLE_API_TOKEN="$token_value" kaggle kernels push \
+(umask 077; KAGGLE_API_TOKEN="$token_value" kaggle kernels push \
   --path "$bundle_root/kernel" \
-  --timeout 23400
+  --timeout 23400 >"$audit_transport_root/kernel-push.log" 2>&1)
+
+authenticate_manifest_stage kernel
 ```
 
-Do not push the kernel until the saved status is `ready` and the saved listing exactly matches every
-local dataset file except `dataset-metadata.json`. A successful create response can precede bundle
-availability on the notebook mount. Keep both responses local and mode 0600; do not print or paste
-them because they contain the private dataset reference.
+Do not push the kernel until the `inputs` stage prints its fixed PASS token. It requires a private,
+ready dataset whose current version is exactly 1; exact names, sizes, downloaded hashes, and
+before/after snapshots must match the verified local bundle. A successful create response can
+precede bundle availability on the notebook mount. The immediate `kernel` stage authenticates
+remote version 1, private/offline metadata, exact code hash, and the dataset/competition source
+graph without requiring a terminal status. It prints no private reference.
+
+The create and push transports are captured only in fresh mode-0600 files below the mode-0700
+audit root. Never print, paste, or commit those files; rely only on the fixed authentication
+lines for acceptance.
 
 Never run `kaggle config view`, print the token, print its length, or place it in a command-line
 argument. The metadata pins one private dataset source plus the official competition source. The
@@ -89,25 +122,47 @@ unsupported Python minor, an incomplete wheel set, or a missing competition moun
 
 ## Monitor without exposing references
 
-Load the private reference into a shell variable and pass it directly to the CLI. Status is for the
-latest version, so never push another version while one is running.
+Load the private reference into a shell variable without printing it. The fixed-output status stage
+authenticates remote version 1 and emits only
+`manifest_deployment_status=PENDING|RUNNING|COMPLETE|ERROR`; Kaggle exposes no reliable aggregate
+progress percentage here. Never push another version while version 1 is running.
 
 ```bash
+set -euo pipefail
 kernel_ref="$(jq -r .id "$bundle_root/kernel/kernel-metadata.json")"
 
-KAGGLE_API_TOKEN="$token_value" kaggle kernels status "$kernel_ref"
+authenticate_manifest_stage status
+```
 
-listing_file="$(mktemp)"
+Allow each status request to complete or time out. Keep exactly one request in flight. Only after a
+timeout or transport failure, issue at most one identical, non-overlapping read-only retry. If that
+retry fails, record a monitoring transport issue rather than a job failure and keep all downstream
+work blocked.
+
+Only after the fixed status is `COMPLETE`, authenticate and validate the exact version-1 listing:
+
+```bash
+set -euo pipefail
+authenticate_manifest_stage complete
+listing_file="$(umask 077; mktemp)"
 KAGGLE_API_TOKEN="$token_value" kaggle kernels files \
-  "$kernel_ref" \
+  "$kernel_ref/1" \
   --page-size 200 \
-  --format json >"$listing_file"
+  --format json >"$listing_file" 2>"$audit_transport_root/kernel-files.log"
 
 uv run python scripts/validate_manifest_output.py \
   --run-config "$bundle_root/dataset/run-config.json" \
   --bundle-manifest "$bundle_root/dataset/bundle-manifest.json" \
+  --expected-commit "$expected_commit" \
+  --expected-bundle "$expected_bundle" \
   --remote-listing "$listing_file"
+authenticate_manifest_stage complete
 ```
+
+The two `complete` checks bracket the version-1 listing. Each requires two agreeing API/code/source
+checks, two terminal COMPLETE checks, the exact paginated output inventory, unchanged dataset
+snapshots, and an exact content-hash download. A transport failure is not a run failure; retry only
+with the established bounded, non-overlapping policy.
 
 The remote-list validator permits the six named private artifacts only while they remain on Kaggle:
 
@@ -133,19 +188,25 @@ the local validator therefore requires exactly one scrubbed log containing only 
 completion events.
 
 ```bash
+set -euo pipefail
 download_dir="$(mktemp -d)"
 safe_pattern='^(audit-output/)?(sanitized_summary\.json|data_audit\.md|leakage_audit\.md|domain_shift_audit\.md|sanitized_artifact_inventory\.json)$'
 
+authenticate_manifest_stage complete
 KAGGLE_API_TOKEN="$token_value" kaggle kernels output \
-  "$kernel_ref" \
+  "$kernel_ref/1" \
   --path "$download_dir" \
   --file-pattern "$safe_pattern" \
-  --quiet
+  --quiet >"$audit_transport_root/safe-output.log" 2>&1
 
 uv run python scripts/validate_manifest_output.py \
   --run-config "$bundle_root/dataset/run-config.json" \
   --bundle-manifest "$bundle_root/dataset/bundle-manifest.json" \
+  --expected-commit "$expected_commit" \
+  --expected-bundle "$expected_bundle" \
   --local-dir "$download_dir"
+
+authenticate_manifest_stage complete
 ```
 
 Local validation requires all five sanitized artifacts under `audit-output/`, exactly one successful
@@ -197,18 +258,24 @@ report content, or direct pair evidence.
 
 ## Recovery
 
-- If status is still running, wait; do not push again or create overlapping compute.
-- If status fails, retrieve only the session log with a no-match output filter, then validate it
+- If status is `PENDING` or `RUNNING`, wait; do not push again or create overlapping compute.
+- If status is `ERROR`, retrieve only the session log with a no-match output filter, then validate it
   against the pinned bundle before reading the fixed phase and code:
 
   ```bash
+  set -euo pipefail
   failure_dir="$(mktemp -d)"
+  authenticate_manifest_stage kernel
   KAGGLE_API_TOKEN="$token_value" kaggle kernels output \
-    "$kernel_ref" --path "$failure_dir" --file-pattern '^$' --quiet
+    "$kernel_ref/1" --path "$failure_dir" --file-pattern '^$' --quiet \
+    >"$audit_transport_root/failure-output.log" 2>&1
   uv run python scripts/validate_manifest_output.py \
     --run-config "$bundle_root/dataset/run-config.json" \
     --bundle-manifest "$bundle_root/dataset/bundle-manifest.json" \
+    --expected-commit "$expected_commit" \
+    --expected-bundle "$expected_bundle" \
     --failure-log-dir "$failure_dir"
+  authenticate_manifest_stage kernel
   ```
 
   A safe failure contains exactly the start event and one allowlisted failure event. The validator

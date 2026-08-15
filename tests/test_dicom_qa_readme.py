@@ -60,7 +60,7 @@ def test_runbook_matches_current_parsers_and_immutable_workflow(tmp_path: Path) 
     assert not any(value in text for value in obsolete)
 
     required_in_order = (
-        "audit-0002-manifest-remediation",
+        "audit-0003-wheel-sanitization",
         "validate_workflow_stage inputs",
         '--path "$bundle_root/performance-smoke-kernel" --timeout 4200',
         "validate_workflow_stage performance-smoke",

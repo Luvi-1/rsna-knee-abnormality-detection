@@ -76,8 +76,10 @@ asset use occurred in the chunk.
 
 Current evidence: `audit-0001-manifest` is superseded. Its successor,
 `audit-0002-manifest-remediation`, completed a full private CPU run in 10,092 seconds against
-`manifest-v2` / `protected-groups-v2`. Downstream fold and model work remains blocked by the
-remaining Checkpoint 1 release gates.
+`manifest-v2` / `protected-groups-v2`. That scientific evidence remains valid historically, but
+D-029 supersedes audit-0002 as a reusable source root because the shared bundle helper admitted
+dependency-wheel medical payloads. `audit-0003-wheel-sanitization` must complete before reuse.
+Downstream fold and model work remains blocked.
 
 What remains valid as historical provenance:
 
@@ -132,6 +134,8 @@ Completed and validated so far:
 - Schema-v2 sanitized evidence with complete coverage, zero unexplained DICOM issues, complete
   dispositions, private hard/soft provenance checks, and five approved artifact hashes.
 - `audit-0001-manifest` preserved as historical provenance and superseded for all downstream use.
+- `audit-0002-manifest-remediation` preserved as historical scientific evidence but superseded as a
+  reusable source root; `audit-0003-wheel-sanitization` must complete before a new consuming bundle.
 - Guarded history/ref cleanup passed: the old feature ref now points to the clean history, the
   temporary unsafe branch is deleted, and no active local or origin ref reaches the unsafe commit.
 - Final complete staged-candidate gates passed: locked install/package, 139/139 pytest, Ruff
@@ -165,16 +169,22 @@ source preflight had found two P1 review-plan producer/validator contract defect
 launch. UI/session creation and finalization were not launched. This is not Chunk 5 PASS and proves
 no comparison, determinism, QA, review, or performance result. D-027 defines the smallest two-file
 fail-closed correction. D-028 closes an independent material-drift checker P1. Their focused checks
-pass. The r9 exact 16-file candidate passed its first complete release gate on staged tree
-`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
-build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
-pre-commit; secret and privacy checks; dependency audit; contract schema and current
-`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
-changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
-identical complete gate. If that rerun succeeds, the final release record is
-`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The
-replacement freeze/commit, immutable bundle, full fresh private chain, comparison, QA, human review,
-finalizer, and push remain pending.
+pass. The r9 candidate then passed the exact 529/529 gate and produced freeze `1db805e` / bundle
+`28457d...`; all non-content bundle checks passed. Before upload, content inspection found pinned
+upstream `pydicom 3.0.2` aggregate 104 `.dcm` members and 188 standard DICM-preamble members. The
+bundle was rejected. No r9 remote artifact exists; its registry row is terminal `blocked`, every
+remote stage is `not_started`, and the reason is `dependency_wheel_medical_payload_detected`. D-029
+defines the shared sanitizer recovery. Its first r10 candidate passed 530/530 on exact staged tree
+`5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`, but D-030 preflight found uncovered
+project-wheel and deployment-authentication trust boundaries, so that gate is superseded. The
+minimal correction reuses the shared wheel guard and established DICOM-QA version-1 helpers.
+Independent auth and runbook red-teams pass with no P0/P1. The first complete exact 24-file D-015
+gate passed on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` with pytest 537/537 and all
+recorded release checks. This reconciliation changes bytes, so an immediate identical fully
+restaged rerun is required; its PASS fixes `complete_final_gate=PASS`. Freeze/commit, sanitized
+manifest bundle, private audit-0003
+execution, new DICOM-QA bundle and full fresh chain, comparison, QA, human review, finalizer, and
+push remain pending. Chunk 5 is not passed; downstream and Chunk 6 remain blocked.
 This work was explicitly authorized after the Chunks 1-4 checkpoint branch was established; pull
 request #10 remains unmerged.
 
@@ -191,8 +201,9 @@ Local evidence:
   QA-only fallback, duplicates, uneven spacing, multiple bit depths and signed pixels, blank,
   constant, corrupt and truncated inputs, MONOCHROME1, laterality, optional channels, deterministic
   sampling, multiple series per slot, and missing slots.
-- The source root of trust is the completed `audit-0002-manifest-remediation` / `manifest-v2`
-  private output. The superseded v1 audit is rejected. Each full runner verifies the mounted source
+- `audit-0002-manifest-remediation` / `manifest-v2` remains historical scientific evidence but is
+  superseded as a reusable source root. The new root must come from completed
+  `audit-0003-wheel-sanitization` / `manifest-v2`. Each full runner verifies the mounted source
   database, schema, input snapshot, and private audit binding before processing, then exactly
   reconciles train-series membership, `source_row_count`, organizer plane/fluid/fat flags, and every
   regular DICOM's keyed relative identity, byte size, and raw digest.
@@ -243,17 +254,37 @@ Local evidence:
 - The D-027 two-file candidate binds the validator to the producer's exact suffix and event
   contracts. Focused checks pass 9/9, the packaging file passes 147/147, Ruff check and format pass,
   strict validator mypy passes, and an independent red-team returns PASS with no P0/P1. The
-  correction is included in the r9 first complete release-gate PASS; all replacement immutable-chain
-  evidence remains pending.
+  correction passed in r9 freeze `1db805e`; the later dependency-wheel content rejection is
+  separate.
 - D-028 found that `efficiency_prize`, `external_assets`, `team_and_sharing`, `license`,
   `winner_obligations`, and `ambiguities` were absent from the material-drift allowlist, so mutation
   or wholesale removal could yield `contract_drift=no`. The minimal fix adds them to the existing
   `MATERIAL_SECTIONS` and extends `tests/test_smoke.py` without a dependency or abstraction. Smoke
   passes 6/6; the combined focused set passes 155/155; Ruff/format, mypy over 25 source plus nine
   trust-boundary files, independent current-source `contract_drift=no`, and post-fix red-team PASS/no
-  P0/P1 all pass. The correction is included in the same r9 first complete release-gate PASS, with
-  D-015's immediate identical post-governance rerun controlling the final
-  `complete_final_gate=PASS` record.
+  P0/P1 all pass. The correction passed in r9 freeze `1db805e`; the later dependency-wheel content
+  rejection is separate.
+- D-029 fixes the shared root once in `package_manifest_bundle` with the standard library: remove
+  the general test tree plus every `.dcm`, `.dicom`, or standard DICM-at-byte-128 member; regenerate
+  wheel `RECORD` deterministically; validate every other wheel fail-closed; and preserve runtime,
+  metadata, licenses, and offline preflight. The first r10 candidate passed on exact staged tree
+  `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`: pytest 530/530; isolated wheel
+  build/install/import; Ruff check/format; mypy over 25 source and nine trust-boundary files;
+  audit/configuration/submission; contract schema and current `contract_drift=no`; pre-commit;
+  privacy checks; `pip-audit`; exact inventory and unchanged-tree checks. That gate is now
+  superseded by D-030 preflight findings.
+- D-030 extends the same guard to the project wheel and adds one deployment authenticator that
+  directly reuses the existing DICOM-QA version-1 helpers. Before network access, every stage checks
+  the exact two-file local kernel/hash and all wheels/`RECORD`, binds dataset metadata to the exact
+  bundle-manifest parent, and binds kernel metadata to its exact sibling kernel directory; remote gates prove exact private
+  dataset version-1 content/hashes, exact kernel version-1 code/source graph, stable listings, and
+  before/after race snapshots. Status is fixed to `PENDING`, `RUNNING`, `COMPLETE`, or `ERROR`; the
+  runbook uses a command-scoped token, protected logs, explicit `/1`, and bracketed gates. No new
+  dependency, framework, or abstraction was added. The mismatched-root regression proves zero
+  remote calls. Independent auth/runbook red-teams pass with no P0/P1. The first complete exact
+  24-file D-015 gate passed on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` with pytest
+  537/537 and all recorded checks. This reconciliation changes bytes, so an immediate identical
+  fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
 - The checkpoint relay could not connect to Chrome. No new reviewer response or decision exists;
   the user's standing Chunk 5 authorization remains controlling.
 
@@ -262,29 +293,33 @@ Exit evidence still required:
 1. Preserve iteration 8 only as a terminal `blocked` historical chain. Because D-027 and D-028
    change frozen source, never launch its comparison, review-plan, UI/session, human-review, or
    finalizer stages and never splice its passed stages into iteration 9.
-2. Restage this governance reconciliation and immediately rerun the identical complete gate under
-   D-015. A successful rerun fixes the final release record at `complete_final_gate=PASS`; any
-   failure invalidates the record and must be corrected. Then create a clean iteration-9
-   implementation-freeze/commit identity under the approval already granted and a
-   deterministic offline bundle cryptographically bound to `audit-0002-manifest-remediation` /
-   `manifest-v2`. The terminal blocked r8 chain cannot be spliced into the replacement.
-3. Authenticated private, offline, exact-source, exact-version, exact-listing checks for the base
-   dataset and every version-1 kernel; version 2 must be absent.
-4. A passing authenticated smoke with separate conservative full-pass and post-comparison
+2. Preserve r9 freeze `1db805e`, rejected bundle `28457d...`, and the terminal `blocked` registry row
+   as historical failure evidence. No r9 remote artifact exists. Do not upload/reuse the bundle,
+   splice an old chain, or delete an old remote artifact.
+3. Preserve the auth/runbook red-team PASS/no-P0/P1 and the first complete exact 24-file D-015 gate
+   PASS on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`; restage this reconciliation and run the
+   identical full gate immediately. A PASS fixes `complete_final_gate=PASS`. Then create the
+   replacement freeze/commit and
+   sanitized manifest bundle, execute `audit-0003-wheel-sanitization` privately, and bind a new
+   offline DICOM-QA bundle only to its validated output.
+4. Use only the D-030 fixed-output, command-scoped gates to authenticate private/offline exact
+   dataset and kernel version 1, exact content/source/listing hashes, stable before/after snapshots,
+   and version-2 absence. Keep protected logs and private references inside the approved boundary.
+5. A passing authenticated smoke with separate conservative full-pass and post-comparison
    preparation estimates, followed by successful independent Run A and Run B over the entire
    authorized training set, complete terminal accounting, exact `manifest-v2` series/file/size/raw-
    digest reconciliation, deterministic cohort plans, and no unexplained DICOM or recoverable
    transfer-syntax blocker.
-5. Byte-exact manifest and cohort-plan comparison and exact deterministic metrics, retrieved only
+6. Byte-exact manifest and cohort-plan comparison and exact deterministic metrics, retrieved only
    through the D-026 exact-summary/optional-safe-log boundary; then a passing identity-bound physical
    capacity gate and one review-plan execution whose six mandatory artifacts, sole optional
    orthogonal view, and exact automatic event sequence pass D-027. It must supply selected-series
    replay, double-render, decode, preprocessing, cache, peak-memory, CPU-scaling, disk, throughput,
    and runtime evidence.
-6. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
+7. At least 100 completed private human-reviewed studies, with selector v3 satisfying every required
    represented bounded-registry quota and including all eligible diagnostic series; all nine checks
    must be terminal with zero `BLOCK`.
-7. Private finalization bound to the exact completed review-session identity and successful
+8. Private finalization bound to the exact completed review-session identity and successful
    disclosure validation of the allowlisted sanitized aggregates.
-8. Truthful final governance, complete staged gates, committed and pushed synchronized branch, and
+9. Truthful final governance, complete staged gates, committed and pushed synchronized branch, and
    no ontology, fold, label, model, prediction, ensemble, inference, or submission work.

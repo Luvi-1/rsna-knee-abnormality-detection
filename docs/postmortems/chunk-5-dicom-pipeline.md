@@ -1,6 +1,6 @@
 # Chunk 5 private-run and output-retrieval recovery incidents
 
-Status: **recovery iteration 8 terminal blocked before comparison; Chunk 5 not passed**
+Status: **r8 terminal blocked; r9 rejected before upload; first r10 gate superseded by deployment-authentication preflight; Chunk 5 remains not passed**
 
 Date: 2026-08-14
 
@@ -26,9 +26,12 @@ review, performance, or finalizer evidence. Because D-027 and D-028 change froze
 iteration-8 comparison and QA must never launch, and the chain cannot be spliced into iteration 9.
 
 A later release-gate audit found the independent D-028 material-drift checker P1. Its minimal root
-fix has focused evidence and is included with D-027 in the r9 first complete release-gate PASS.
-D-015 requires the immediate identical post-governance rerun; freeze/commit, bundle, and fresh
-private chain remain pending.
+fix passed with D-027 in r9 freeze `1db805e` after the exact 529/529 gate.
+
+Bundle `28457d...` passed all non-content checks but was rejected before upload: pinned upstream
+`pydicom 3.0.2` contains aggregate 104 `.dcm` members and 188 standard DICM-preamble members. No r9
+remote artifact exists. The protected r9 registry row is terminal `blocked`, every remote stage is
+`not_started`, and the reason is `dependency_wheel_medical_payload_detected`.
 
 Mode-0600 ignored Run A failure logs were retrieved only under exact allowlists for diagnosis and
 remain inside the protected project boundary. Only fixed sanitized runner events were exposed
@@ -152,6 +155,35 @@ This was an incomplete fail-closed allowlist, not live contract drift. The indep
 check still returns `contract_drift=no`; the defect was that the checker could not prove that result
 against all operational sections.
 
+## Ninth root cause
+
+The shared `package_manifest_bundle` path copied complete pinned dependency wheels into both the
+manifest and DICOM-QA offline bundles. The r9 source candidate and every non-content bundle check
+passed, but final content inspection found medical test payloads inside the upstream
+`pydicom 3.0.2` wheel: aggregate 104 `.dcm` members and 188 members with the standard `DICM`
+preamble. The bundle was rejected before upload.
+
+This is a shared dependency-packaging trust-boundary defect, not private competition-data exposure
+or remote execution. No r9 remote artifact exists. Because the same helper built the
+`audit-0002-manifest-remediation` bundle, its scientific result remains historical evidence but its
+bundle is superseded as a reusable source root.
+
+## Tenth root cause
+
+The first r10 candidate passed 530/530 on exact staged tree
+`5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`, but deployment preflight found that the
+project wheel did not enter the shared medical-payload archive guard; remote stages could skip
+wheel/`RECORD` validation; and the actual two-file local kernel upload was not exact-allowlisted and
+hashed. Exact private dataset/kernel version-1 content, sources, listings, and race stability were
+also incompletely authenticated. Raw status/private-reference-capable commands and an unscoped
+credential path violated the fixed-output boundary.
+
+A final root-trust check found that the initial authenticator could read dataset metadata and scan
+wheels from a safe sibling directory distinct from the verified bundle-manifest root. This was a
+local path-binding and remote-provenance authentication defect, not a remote mutation or private
+medical-data exposure. No r10 freeze, bundle, dataset, kernel, or audit-0003 execution exists. The
+530/530 gate is superseded.
+
 ## Internal transcript control incident
 
 During diagnosis, one broad search crossed into ignored local artifacts and printed obsolete canary
@@ -170,6 +202,14 @@ of ignored artifacts are limited to exact bounded allowlists and fixed sanitized
   accepted comparison, determinism, QA, performance, review, or finalizer evidence exists.
 - Comparison and review planning did not start; UI/session creation, human review, and finalization
   did not start.
+- R9 produced only local freeze `1db805e` and rejected bundle `28457d...`. Its registry row is
+  terminal `blocked`, every remote stage is `not_started`, and no r9 remote artifact exists.
+- Audit-0002 remains historical scientific evidence but cannot be reused as a source root. The new
+  audit-0003 experiment and a full fresh DICOM-QA chain are required.
+- The first r10 530/530 gate is superseded. The corrected candidate passed its first complete exact
+  24-file D-015 gate on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`; this governance
+  reconciliation requires an immediate identical rerun. No r10 freeze, bundle, audit-0003 remote
+  result, comparison, QA, or review claim exists.
 - No Chunk 6 work, folds, weak labels, model training, inference, prediction, ensemble, or
   submission occurred.
 - All five historical Run A failures and the r7 comparison-workflow failure preserved the medical-
@@ -304,21 +344,40 @@ comparison, determinism, QA, review, performance, or finalizer evidence.
 The D-027 two-file correction passes focused checks 9/9 and the complete packaging file 147/147.
 Ruff check and format pass, strict mypy passes for the validator, the pre-governance implementation
 diff was exactly the two declared source/test files, and an independent red-team returns PASS with no
-P0/P1. The correction is included in the r9 first complete release-gate PASS. A new immutable
-freeze/commit, bundle, and full private chain remain pending.
+P0/P1. The correction passed in r9 freeze `1db805e`; the later dependency-wheel rejection is
+separate.
 
 D-028 smoke checks pass 6/6 and the combined focused set passes 155/155. Ruff check and format pass;
 mypy passes across 25 source files and nine trust-boundary files; the independent current-source
-check returns `contract_drift=no`; and the post-fix red-team returns PASS with no P0/P1. The r9 exact
-16-file candidate passed its first complete release gate on staged tree
-`ed3720d8159b1242a6b72cab13dec43a4406f25a`: pytest 529/529; isolated wheel
-build/install/import; Ruff check and format; mypy over the package plus nine trust-boundary files;
-pre-commit; secret and privacy checks; dependency audit; contract schema and current
-`contract_drift=no`; exact inventory; and unchanged-tree checks. This governance reconciliation
-changes that staged tree, so D-015 requires the main agent to restage and immediately rerun the
-identical complete gate. If that rerun succeeds, the final release record is
-`complete_final_gate=PASS`; any failure invalidates this record and must be corrected. The new
-freeze/commit, immutable bundle, and fresh private chain remain pending.
+check returns `contract_drift=no`; and the post-fix red-team returns PASS with no P0/P1. The
+correction passed in r9 freeze `1db805e`; the later dependency-wheel rejection is separate.
+
+D-029 implements one shared stdlib sanitizer in `scripts/package_manifest_bundle.py` and its
+existing packaging regression. It removes the general test tree plus
+any `.dcm`, `.dicom`, or standard DICM-at-byte-128 member, regenerates wheel `RECORD`
+deterministically, validates every other wheel fail-closed, and preserves runtime modules,
+metadata, licenses, and offline preflight. Existing DICOM-QA source-audit constants and fixtures are
+rebound to audit-0003. The first r10 candidate passed on exact staged tree
+`5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`: pytest 530/530; isolated wheel
+build/install/import; Ruff check/format; mypy over 25 source and nine trust-boundary files;
+audit/configuration/submission; contract schema and current `contract_drift=no`; pre-commit;
+privacy checks; `pip-audit`; exact inventory and unchanged-tree checks. D-030 preflight
+superseded that gate.
+
+D-030 extends the shared guard to the project wheel and adds one deployment authenticator that
+directly reuses the existing DICOM-QA version-1 helpers. Before any network operation, every stage
+validates the exact two-file local kernel/hash and all wheels/`RECORD`; dataset metadata must resolve
+under the exact bundle-manifest parent, and kernel metadata under its exact sibling kernel
+directory. Remote gates authenticate exact private dataset version-1 content/hashes, exact kernel
+version-1 code/source graph, stable listings, and before/after race snapshots. Status is limited to
+`PENDING`, `RUNNING`, `COMPLETE`, or `ERROR`; the runbook uses a command-scoped token, protected
+logs, explicit `/1`, and bracketed gates. No dependency, framework, or new abstraction was added.
+The mismatched-root regression proves zero remote calls, and independent authentication and
+runbook red-teams pass with no P0/P1. The first complete exact 24-file D-015 gate passed on tree
+`cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` with pytest 537/537 and every recorded
+lock/build/import, static, configuration, contract, privacy, dependency, inventory, and
+unchanged-tree check. This reconciliation changes bytes, so an immediate identical fully restaged
+rerun is required; its PASS fixes `complete_final_gate=PASS`.
 
 The checkpoint relay could not connect to Chrome at this recovery boundary. No new reviewer
 response or decision exists; the user's standing Chunk 5 authorization remains controlling.
@@ -328,19 +387,26 @@ response or decision exists; the user's standing Chunk 5 authorization remains c
 1. Preserve iteration 8 only as a terminal `blocked` historical chain. Because D-027 and D-028
    change frozen source, never launch its comparison, review-plan, UI/session, human-review, or
    finalizer stages and never splice its passed stages into iteration 9.
-2. Restage this governance reconciliation and immediately rerun the identical complete gate under
-   D-015. A successful rerun fixes the final release record at `complete_final_gate=PASS`; any
-   failure invalidates the record and must be corrected. Then create a clean iteration-9
-   implementation freeze/commit and build a new immutable private bundle; do not reuse or splice
-   recovery iteration 8.
-3. Create and re-authenticate the replacement private/offline/version-bound dataset chain.
-4. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
+2. Preserve r9 freeze `1db805e`, rejected bundle `28457d...`, and its terminal `blocked` registry
+   row as historical failure evidence. Do not upload/reuse it, splice either old chain, or delete
+   any old remote artifact.
+3. The D-029/D-030 independent authentication and runbook red-teams both pass with no P0/P1, and
+   the first complete exact 24-file D-015 gate passed on tree
+   `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`. Restage this governance reconciliation and run the
+   identical complete gate immediately; its PASS fixes `complete_final_gate=PASS`. Then create the
+   replacement freeze/commit and sanitized manifest bundle,
+   execute
+   `audit-0003-wheel-sanitization` / `manifest-v2` privately, and bind a new DICOM-QA bundle only to
+   its validated output.
+4. Create and re-authenticate the replacement private/offline/version-1 dataset and kernel chain
+   through only the fixed-output D-030 root/content/source/listing/race gates.
+5. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
    run and validate full Run A before starting independent Run B.
-5. Compare exact manifests, deterministic metrics, and cohort plans, and validate retrieval through
+6. Compare exact manifests, deterministic metrics, and cohort plans, and validate retrieval through
    the D-026 exact-summary/optional-safe-log boundary. Only then run the existing review-plan
    kernel's identity-bound capacity gate, replay, double render, benchmarks, and plan materialization;
    require its D-027 artifact and automatic-event contracts.
-6. Complete the unchanged private human review, finalization, and disclosure-controlled validation.
-7. Stop at the Chunk 5 gate; do not begin ontology, folds, labels, or model work.
+7. Complete the unchanged private human review, finalization, and disclosure-controlled validation.
+8. Stop at the Chunk 5 gate; do not begin ontology, folds, labels, or model work.
 
 Chunk 5 remains **FAIL / recovery pending** until every gate above succeeds.

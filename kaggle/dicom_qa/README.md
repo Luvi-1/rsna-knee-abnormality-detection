@@ -14,7 +14,7 @@ output to a mode-0700 temporary directory, delete it at exit, and expose only fi
 Start only after the complete local gate passes on a clean candidate commit. The packager refuses a
 dirty tree. It also refuses the superseded `audit-0001` source manifest. Supply the ignored,
 mode-0700 Chunk 4 bundle root (containing its `dataset/` and `kernel/`) and the ignored, mode-0600
-audit registry whose `audit-0002-manifest-remediation` row is `completed` for `manifest-v2`.
+audit registry whose `audit-0003-wheel-sanitization` row is `completed` for `manifest-v2`.
 The source root must contain the exact v1 `dataset/bundle-manifest.json`, `run-config.json`,
 `dataset-metadata.json`, `kernel/run.py`, and `kernel-metadata.json`; the packager verifies their
 complete local inventory, hashes, permissions, derived identities, and registry binding.
@@ -33,12 +33,12 @@ uv run python scripts/package_dicom_qa_bundle.py \
   --workers 4 \
   --source-manifest-bundle-root "$SOURCE_MANIFEST_BUNDLE_ROOT" \
   --source-manifest-registry "$SOURCE_MANIFEST_REGISTRY" \
-  --source-manifest-audit-id audit-0002-manifest-remediation
+  --source-manifest-audit-id audit-0003-wheel-sanitization
 
 expected_commit="$(jq -er .code_commit "$bundle_root/dataset/run-config.json")"
 expected_bundle="$(jq -er .bundle_sha256 "$bundle_root/dataset/run-config.json")"
 jq -e '
-  .input_identity.source_manifest.audit_id == "audit-0002-manifest-remediation" and
+  .input_identity.source_manifest.audit_id == "audit-0003-wheel-sanitization" and
   .input_identity.source_manifest.version == "manifest-v2" and
   .input_identity.source_manifest.kernel_version == 1 and
   .input_identity.source_manifest.bundle_dataset_version == 1 and
@@ -99,8 +99,8 @@ KAGGLE_API_TOKEN="$token_value" kaggle datasets create \
 ```
 
 Define the one staged authenticated validator command. Every invocation authenticates the base
-dataset and `audit-0002` source-manifest inputs, every immutable predecessor through the requested
-stage, and a second base-dataset snapshot. It prints only a fixed token.
+dataset and `audit-0003-wheel-sanitization` source-manifest inputs, every immutable predecessor
+through the requested stage, and a second base-dataset snapshot. It prints only a fixed token.
 
 ```bash
 validate_workflow_stage() {

@@ -445,7 +445,7 @@ def _public_review_identity(
             "audit_key_filename",
         }
         or source_manifest.get("version") != "manifest-v2"
-        or source_manifest.get("audit_id") != "audit-0002-manifest-remediation"
+        or source_manifest.get("audit_id") != "audit-0003-wheel-sanitization"
         or source_manifest.get("kernel_version") != 1
         or source_manifest.get("bundle_dataset_version") != 1
         or source_manifest.get("kernel_code_file") != "run.py"

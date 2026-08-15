@@ -1,8 +1,10 @@
 # AUDIT-0002 — Manifest remediation rerun contract
 
-Status: **private execution, schema-v2 output validation, guarded history/ref cleanup, and final
-staged local gates passed**. Private pull request #10 is open and unmerged; hosted CI passed on
-release candidate `cc050a2`, and any successor remains subject to the same gate.
+Status: **historical scientific execution accepted; bundle root superseded before Chunk 5 reuse**.
+The schema-v2 output validation and final staged gates passed, but a later bundle audit found
+upstream pydicom medical fixtures inside the locked wheel while dataset metadata claimed no DICOM
+pixels. `audit-0003-wheel-sanitization` must replace the bundle/execution root without changing the
+manifest semantics. Private pull request #10 remains open and unmerged.
 
 ## Before run
 
@@ -143,3 +145,11 @@ Private pull request #10 is open and unmerged. Hosted CI passed on release candi
 `cc050a21ab3386b501170d224ef57ef990a3753b`; any later documentation commit must pass the same
 workflow before Checkpoint 1 closes. No merge, preprocessing, fold, weak-label, model, prediction,
 ensemble, or submission action is authorized.
+
+### Later bundle-boundary correction
+
+The scientific aggregate above remains historical evidence, but its immutable wheel set is not a
+valid reusable source root: the upstream pydicom wheel packaged medical fixtures that the bundle
+policy forbids. No private competition data was exposed by that dependency defect. Preserve this
+record, do not reuse its bundle/output chain for Chunk 5, and require the separately registered
+`audit-0003-wheel-sanitization` rerun from a sanitized bundle.
