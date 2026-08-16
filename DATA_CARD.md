@@ -1,11 +1,10 @@
 # Data Card
 
-Status: the full private `manifest-v2` remediation audit completed in 10,092 seconds and its
-schema-v2 sanitized output passed validation. It remains historical scientific evidence,
-but D-029 supersedes `audit-0002-manifest-remediation` as a reusable source root because the shared
-bundle helper admitted dependency-wheel medical payloads. The historical `manifest-v1` audit is
-also preserved for provenance but superseded. `audit-0003-wheel-sanitization` must complete before
-new downstream use. Chunk 5 has not passed.
+Status: `audit-0002-manifest-remediation` remains historical scientific evidence only; the sanitized
+audit-0003 successor supplied the authenticated r10 source root. R10 input, smoke, Run A, Run B, and
+comparison passed, but review-plan v1 failed safely at input discovery before any review artifact or
+pixel access. R10 is terminal failed, Chunk 5 has not passed, and only a fresh r11 no-splice chain may
+continue.
 
 ## Source, scope, and license
 
@@ -178,13 +177,29 @@ config/submission/contract/schema checks, pre-commit, privacy scans, `pip-audit`
 inventory/unchanged-tree checks all passed. This reconciliation changes bytes, so an immediate
 identical fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
 
-After that gate, the replacement freeze/commit and sanitized manifest bundle must be created,
-and the private `audit-0003-wheel-sanitization` execution must complete and validate `manifest-v2`.
-Only then may a new exact clean DICOM-QA candidate bind to that private source
-output. Do not reuse or
-delete any old remote artifact, and do not reuse r9 freeze `1db805e` or bundle `28457d...`. Distinct
-private Run A and Run B version-1 kernels must independently process the entire authorized training
-set from the same immutable bundle, configuration, competition input, and source-manifest input.
+R10 then authenticated its exact input, smoke, Run A, Run B, comparison, and review-plan source
+graph. Review-plan version 1 reached `ERROR`; two bounded read-only checks 93 seconds apart agreed,
+and the frozen privacy/canary failure validator passed with only `input_discovery_invalid`. The
+shared automatic basename walk had entered the official greater-than-4,096-study competition tree
+before selecting the already-correct source. No private plan artifact, pixel, UI/session, human
+review, or finalizer stage was accessed or created, and the r10 registry is terminal `failed`.
+
+D-031 changes only the shared finalizer and its focused identity regression: base discovery stops at
+depth 1 and kernel-output discovery starts below the exact derived kernel mount. Existing symlink,
+duplicate, count, file-type, and error gates remain fail closed. Independent red-team passes with no
+P0/P1; focused identity 41/41, boundary matrix 12/12, combined identity plus packaging 188/188, full
+pytest 537/537, Ruff/format, strict finalizer mypy, and the scoped diff check pass. The first exact
+staged D-015 gate passed on tree `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10 files:
+locked offline reinstall/lock; isolated wheel build/install/import; tracked MIME/symlink and
+sensitive guards; Ruff/format; mypy over 25 package plus 11 trust-boundary files; pytest 537/537;
+config/synthetic-submission; protected current contract/schema and generated-schema bytes;
+pre-commit/detect-secrets; `pip-audit` with no vulnerabilities; cached diff, inventory, and unchanged-
+tree PASS. This governance reconciliation changes bytes, so one immediate identical restaged rerun
+must PASS to fix the final gate as passed; failure invalidates and must correct this record. Do not
+reuse, resume, delete, or splice any r8, r9, or r10 stage.
+Distinct fresh r11 Run A and Run B version-1 kernels must independently process the entire authorized
+training set from the same immutable bundle, configuration, competition input, and source-manifest
+input.
 Each run emits a canonical full-pass manifest, deterministic metrics, and a deterministic cohort
 plan, without replaying or rendering the selected QA artifacts.
 Every run must exactly reconcile train-series membership, `source_row_count`, organizer
@@ -230,9 +245,9 @@ terminal, and zero `BLOCK` using
 disclosure-controlled tokens while exact review counts, private identities, and private hashes
 remain inside Kaggle.
 
-Every private input and kernel must pass the D-030 ready/private, offline, exact-version-1,
+Every r11 private input and kernel must pass the D-030 ready/private, offline, exact-version-1,
 exact-content/source/listing, and before/after race gates with fixed sanitized output. Until the
 final sanitized determinism, performance, and human-review outputs
 validate, preprocessed artifacts are experimental and folds, weak labels, training, inference,
-prediction, ensembles, and submission remain blocked. Chunk 5 is not passed, and Chunk 6 remains
-blocked.
+prediction, ensembles, and submission remain blocked. R10 supplies historical evidence only through
+comparison; Chunk 5, QA, and Chunk 6 remain blocked.

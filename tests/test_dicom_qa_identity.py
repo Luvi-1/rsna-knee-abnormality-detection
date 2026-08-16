@@ -819,7 +819,7 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
         "deployment": {"owner": "test-owner"},
     }
     refs = finalize_review._derived_refs(run_config)
-    bundle_root = input_root / "bundle/data"
+    bundle_root = input_root / "bundle"
     _write_private(
         bundle_root / "run-config.json",
         finalize_review._canonical_json_bytes(run_config),
@@ -840,6 +840,16 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
         smoke_root / "sanitized_performance_smoke.json",
     ):
         _write_private(path, b"fixture\n")
+    counterfeit = (
+        input_root
+        / "counterfeit"
+        / refs["run_a"].partition("/")[2]
+        / "output/private_full_run_manifest.jsonl"
+    )
+    _write_private(counterfeit, b"counterfeit\n")
+    crowded = input_root / "competition/train_series"
+    for ordinal in range(4097):
+        (crowded / f"study-{ordinal:04d}").mkdir(parents=True)
     monkeypatch.setenv("KAGGLE_INPUT_ROOT", str(input_root))
     monkeypatch.setenv("KAGGLE_WORKING_ROOT", str(working_root))
 
@@ -850,6 +860,21 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
     assert materialize.performance_smoke_summary == (
         smoke_root / "sanitized_performance_smoke.json"
     )
+
+    duplicate = run_a_root.parent / "duplicate/private_full_run_manifest.jsonl"
+    _write_private(duplicate, b"duplicate\n")
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._automatic_args()
+    duplicate.unlink()
+    duplicate.parent.rmdir()
+
+    review_session_mount = input_root / refs["review_session"].partition("/")[2]
+    review_session_target = input_root / "review-session-target"
+    review_session_target.mkdir()
+    review_session_mount.symlink_to(review_session_target, target_is_directory=True)
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._automatic_args()
+    review_session_mount.unlink()
 
     review_plan_root = input_root / refs["review_plan"].partition("/")[2] / "output"
     review_session_root = input_root / refs["review_session"].partition("/")[2] / "output"

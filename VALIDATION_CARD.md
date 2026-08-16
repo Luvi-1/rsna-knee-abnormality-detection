@@ -1,9 +1,8 @@
 # Validation Card
 
-Hard-group version: `protected-groups-v2`; full private recomputation completed in
-`audit-0002-manifest-remediation`. The scientific result remains historical evidence, but D-029
-supersedes that audit as a reusable source root; `audit-0003-wheel-sanitization` must complete before
-new downstream use.
+Hard-group version: `protected-groups-v2`; `audit-0002-manifest-remediation` remains historical
+scientific evidence only. The sanitized audit-0003 successor supplied the authenticated r10 source
+root. R10 is terminal failed at review-plan input discovery and cannot be resumed or spliced.
 
 Fold version: `unassigned`; no folds exist.
 
@@ -162,13 +161,28 @@ static, configuration, contract, schema, pre-commit, privacy, dependency-audit, 
 unchanged-tree checks all passed. This reconciliation changes bytes, so an immediate identical
 fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
 
-A replacement freeze/commit, sanitized manifest bundle, and completed private
-`audit-0003-wheel-sanitization` / `manifest-v2` output remain required before a clean immutable
-DICOM-QA candidate authenticates and binds to it. Audit-0002 remains
-historical scientific evidence only and may not be reused as the source root. Do not delete or reuse
-old remote artifacts; run the full fresh chain. Chunk 5 is not passed, and downstream/Chunk 6 work
-remains blocked. Distinct private
-version-1 Run A and Run B kernels must independently process the
+A clean r10 immutable candidate authenticated input, performance smoke, Run A, Run B, comparison,
+and the review-plan source graph. Review-plan version 1 reached `ERROR`; two bounded read-only checks
+93 seconds apart agreed, and the frozen privacy/canary failure validator passed with only
+`input_discovery_invalid`. The source graph was correct: the generic basename walk entered the
+legitimate greater-than-4,096-study competition tree before selecting the exact source. No review
+artifact, pixel, UI/session, human QA, or finalizer stage was accessed or created. The r10 protected
+row is terminal `failed`.
+
+D-031 limits base discovery to depth 1 and kernel discovery to the exact derived mount while
+preserving symlink, duplicate, count, file-type, and error rejection. Independent red-team passes
+with no P0/P1; focused identity 41/41, boundary matrix 12/12, combined identity plus packaging
+188/188, full pytest 537/537, Ruff/format, strict finalizer mypy, and the scoped diff check pass. The
+first exact staged D-015 gate passed on tree `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10
+files: locked offline reinstall/lock; isolated wheel build/install/import; tracked MIME/symlink and
+sensitive guards; Ruff/format; mypy over 25 package plus 11 trust-boundary files; pytest 537/537;
+config/synthetic-submission; protected current contract/schema and generated-schema bytes;
+pre-commit/detect-secrets; `pip-audit` with no vulnerabilities; cached diff, inventory, and unchanged-
+tree PASS. This governance reconciliation changes bytes, so one immediate identical restaged rerun
+must PASS to fix the final gate as passed; failure invalidates and must correct this record. Do not
+delete, reuse, resume, or
+splice r8, r9, or r10. A fresh r11 chain is required, and Chunk 5, QA, downstream work, and Chunk 6
+remain blocked. Distinct r11 private version-1 Run A and Run B kernels must independently process the
 entire authorized training set from the same bundle, preprocessing configuration, competition
 input, and source-manifest input. Each produces a canonical full-pass manifest, deterministic
 metrics, and a deterministic cohort plan without QA replay or rendering. Every discovered study,
@@ -178,7 +192,7 @@ DICOM's keyed relative identity, byte size, and raw digest to authenticated `man
 unexplained DICOM issue and zero unresolved recoverable transfer-syntax, ordering, or geometry
 blocker.
 
-A separate version-1 comparator must require byte-exact equality of the canonical manifests and
+A separate r11 version-1 comparator must require byte-exact equality of the canonical manifests and
 cohort plans plus exact equality of declared deterministic metrics. Timing and resource fields may
 differ only where excluded by the frozen comparison contract; no tolerance may be invented after a
 mismatch. Its summary must pass the D-026 exact-path/optional-safe-log retrieval boundary. Complete
@@ -226,12 +240,10 @@ bundle, preprocessing configuration, runs, comparison, cohort, UI parent, and ke
 review artifacts resolve only under authenticated Run A. It may release only
 `human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
 release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
-A locally composed review attestation is neither required nor accepted. Iteration 8 provides
-authenticated historical input, smoke, Run A, and Run B workflow-output evidence only. Its
-protected row is terminal `blocked` before comparison, and its preflight-blocked chain is not an
-accepted determinism, comparison, QA, review, performance, or finalizer result. Because D-027 and
-D-028 change frozen source, iteration-8 comparison and QA must never launch and the chain cannot be
-spliced into iteration 9. No folds exist and no fold-feasibility claim is made.
+A locally composed review attestation is neither required nor accepted. R10 provides authenticated
+historical input, smoke, Run A, Run B, and comparison evidence only. Its terminal failed chain is not
+accepted QA, human-review, performance, finalizer, or Chunk 5 evidence and cannot be spliced into
+r11. No folds exist and no fold-feasibility claim is made.
 
 ## Shift and subgroup limits
 

@@ -2191,12 +2191,14 @@ def _parser() -> argparse.ArgumentParser:
 def _discover_matches(root: Path, basename: str) -> tuple[Path, ...]:
     matches: list[Path] = []
     try:
+        if root.is_symlink() or not root.is_dir():
+            raise ReviewFinalizationError("input_discovery_invalid")
         resolved = root.resolve(strict=True)
         for current, directories, files in os.walk(resolved, followlinks=False):
             current_path = Path(current)
             depth = len(current_path.relative_to(resolved).parts)
             directories[:] = [name for name in directories if name != "private-review"]
-            if depth >= 4:
+            if depth >= 1:
                 directories[:] = []
             if len(directories) + len(files) > 4096:
                 raise ReviewFinalizationError("input_discovery_invalid")
@@ -2228,18 +2230,15 @@ def _discover_optional_one(root: Path, basename: str) -> Path | None:
 
 def _discover_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path:
     slug = kernel_ref.partition("/")[2]
-    matches = [path for path in _discover_matches(root, basename) if slug in path.parts]
-    if len(matches) != 1:
-        raise ReviewFinalizationError("input_discovery_invalid")
-    return matches[0]
+    return _discover_one(root / slug, basename)
 
 
 def _discover_optional_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path | None:
     slug = kernel_ref.partition("/")[2]
-    matches = [path for path in _discover_matches(root, basename) if slug in path.parts]
-    if len(matches) > 1:
-        raise ReviewFinalizationError("input_discovery_invalid")
-    return matches[0] if matches else None
+    source_root = root / slug
+    if not source_root.exists() and not source_root.is_symlink():
+        return None
+    return _discover_optional_one(source_root, basename)
 
 
 def _automatic_args() -> argparse.Namespace:

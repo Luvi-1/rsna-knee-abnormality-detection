@@ -801,10 +801,47 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   so an immediate identical fully restaged rerun is required; a PASS without further mutation fixes
   `complete_final_gate=PASS`. The 530/530 gate on tree
   `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0` remains superseded.
-- Consequence: no r10 freeze, bundle, dataset, kernel, or audit-0003 remote evidence exists. Restage
-  and fully gate the exact corrected candidate before creating a replacement freeze and sanitized
-  manifest bundle. Then run the full authenticated audit-0003 and DICOM-QA chain in order. Chunk 5
-  remains not passed; comparison, QA, human review, every downstream stage, and Chunk 6 stay blocked.
+- Consequence: **amended by D-031.** D-030 subsequently authenticated the r10 source and deployment
+  chain through input, smoke, Run A, Run B, and comparison. Review-plan v1 then failed safely at
+  input discovery; the r10 registry is terminal `failed` and cannot be resumed or spliced.
 - Reversal condition: replace only with a smaller equally fail-closed path that proves the same
   local root/wheel/kernel identity, exact private version-1 remote content/source identity, stable
   listings, race freedom, and fixed-output privacy boundary.
+
+## D-031 - Scope automatic review-plan discovery to authenticated source mounts
+
+- Date: 2026-08-16
+- Owner: Luvi-1 and Codex
+- Question: How should recovery proceed when an authenticated review-plan kernel fails before source
+  selection because generic basename discovery walks the legitimate competition tree?
+- Evidence: r10 input authentication, performance smoke, Run A, Run B, and exact comparison all
+  passed their authenticated workflow validators. Review-plan version 1 reached `ERROR`; two bounded
+  read-only status checks 93 seconds apart agreed. The frozen privacy/canary failure validator passed
+  and released only `input_discovery_invalid`. The authenticated kernel source graph was exact. Static
+  tracing showed that the shared `/kaggle/input` basename walk entered the official competition's
+  legitimate `train_series` directory before selecting a source; that directory has more than 4,096
+  study entries and correctly tripped the generic discovery count gate. No review artifact, pixel,
+  UI/session, human review, or finalizer stage was accessed or created. The r10 registry is terminal
+  `failed`.
+- Decision: change only `kaggle/dicom_qa/finalize_review.py` and its existing focused identity test.
+  Search one level below the base input root, and resolve kernel outputs only beneath the exact
+  derived kernel mount. Reuse the existing optional-one helper and preserve all symlink, duplicate,
+  entry-count, file-type, and error gates. Add no dependency, configuration, fallback search,
+  abstraction, log access, or privacy exception.
+- Verification: independent exact two-file red-team passes with no P0/P1; focused identity passes
+  41/41; boundary matrix 12/12; combined identity plus packaging 188/188; full development pytest
+  537/537. The first exact staged D-015 gate passed on tree
+  `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10 files: locked offline reinstall/lock;
+  isolated wheel build/install/import; tracked MIME/symlink and sensitive guards; Ruff check/format;
+  mypy over 25 package and 11 trust-boundary files; pytest 537/537; config and synthetic-submission
+  checks; contract schema plus protected current `contract_drift=no`; generated-schema byte check;
+  pre-commit and detect-secrets; `pip-audit` with no vulnerabilities; cached diff, exact inventory,
+  and unchanged-tree PASS. This governance reconciliation changes bytes, so D-015 requires one
+  immediate identical fully restaged rerun. Its PASS fixes the final gate as passed; failure
+  invalidates and must correct this record.
+- Consequence: r10 remains terminal historical evidence through comparison only. Build a new frozen
+  r11 candidate and execute input, smoke, Run A, Run B, comparison, and review-plan sequentially with
+  no stage splicing. Chunk 5, private QA, every downstream stage, and Chunk 6 remain blocked until the
+  r11 review-plan, authorized human review, and finalizer gates pass.
+- Reversal condition: replace only with a smaller equally source-scoped discovery rule that retains
+  the same exact mount binding and every current fail-closed trust and privacy gate.

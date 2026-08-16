@@ -1,8 +1,8 @@
 # Chunk 5 private-run and output-retrieval recovery incidents
 
-Status: **r8 terminal blocked; r9 rejected before upload; first r10 gate superseded by deployment-authentication preflight; Chunk 5 remains not passed**
+Status: **r8/r9 historical failures; r10 authenticated through comparison then failed safely at review-plan input discovery; Chunk 5 remains not passed**
 
-Date: 2026-08-14
+Date: 2026-08-16
 
 ## Summary
 
@@ -32,6 +32,12 @@ Bundle `28457d...` passed all non-content checks but was rejected before upload:
 `pydicom 3.0.2` contains aggregate 104 `.dcm` members and 188 standard DICM-preamble members. No r9
 remote artifact exists. The protected r9 registry row is terminal `blocked`, every remote stage is
 `not_started`, and the reason is `dependency_wheel_medical_payload_detected`.
+
+R10 subsequently authenticated input, performance smoke, Run A, Run B, comparison, and the exact
+review-plan source graph. Review-plan version 1 reached `ERROR`; two bounded read-only checks 93
+seconds apart agreed, and the frozen privacy/canary failure validator passed with only
+`input_discovery_invalid`. No review artifact, pixel, UI/session, human review, or finalizer stage was
+accessed or created. The protected r10 registry row is terminal `failed`.
 
 Mode-0600 ignored Run A failure logs were retrieved only under exact allowlists for diagnosis and
 remain inside the protected project boundary. Only fixed sanitized runner events were exposed
@@ -181,8 +187,20 @@ credential path violated the fixed-output boundary.
 A final root-trust check found that the initial authenticator could read dataset metadata and scan
 wheels from a safe sibling directory distinct from the verified bundle-manifest root. This was a
 local path-binding and remote-provenance authentication defect, not a remote mutation or private
-medical-data exposure. No r10 freeze, bundle, dataset, kernel, or audit-0003 execution exists. The
-530/530 gate is superseded.
+medical-data exposure. That preflight finding was corrected before the later r10 remote chain. The
+530/530 gate remains superseded.
+
+## Eleventh root cause
+
+The r10 review-plan kernel's source graph was exact, but `finalize_review.py` used one generic
+basename walk across all of `/kaggle/input` before selecting a dataset or kernel source. The walk
+entered the legitimate official `train_series` tree, whose study-directory population exceeds the
+generic 4,096-entry discovery limit, and failed closed with `input_discovery_invalid` before any
+private replay, rendering, or artifact creation.
+
+This was a source-discovery scope defect, not missing input, source-graph drift, DICOM corruption, or
+privacy leakage. D-031 limits base search to depth 1 and starts kernel-output search at the exact
+derived mount while retaining the existing symlink, duplicate, count, file-type, and error gates.
 
 ## Internal transcript control incident
 
@@ -206,10 +224,9 @@ of ignored artifacts are limited to exact bounded allowlists and fixed sanitized
   terminal `blocked`, every remote stage is `not_started`, and no r9 remote artifact exists.
 - Audit-0002 remains historical scientific evidence but cannot be reused as a source root. The new
   audit-0003 experiment and a full fresh DICOM-QA chain are required.
-- The first r10 530/530 gate is superseded. The corrected candidate passed its first complete exact
-  24-file D-015 gate on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`; this governance
-  reconciliation requires an immediate identical rerun. No r10 freeze, bundle, audit-0003 remote
-  result, comparison, QA, or review claim exists.
+- R10 authenticated inputs, smoke, Run A, Run B, and comparison. Its review-plan version 1 failed
+  safely before artifacts; the terminal failed chain is historical evidence only and supplies no QA,
+  human-review, performance-finalizer, or Chunk 5 claim.
 - No Chunk 6 work, folds, weak labels, model training, inference, prediction, ensemble, or
   submission occurred.
 - All five historical Run A failures and the r7 comparison-workflow failure preserved the medical-
@@ -379,34 +396,35 @@ lock/build/import, static, configuration, contract, privacy, dependency, invento
 unchanged-tree check. This reconciliation changes bytes, so an immediate identical fully restaged
 rerun is required; its PASS fixes `complete_final_gate=PASS`.
 
+D-031 changes only `kaggle/dicom_qa/finalize_review.py` and its existing focused identity regression.
+Base discovery stops at depth 1; kernel discovery starts beneath the exact derived kernel mount; and
+the symlink, duplicate, count, file-type, and error gates remain unchanged. The focused identity
+suite passes 41/41; boundary matrix 12/12; combined identity plus packaging 188/188; full development
+pytest 537/537; Ruff check and format, strict finalizer mypy, and the scoped diff check pass. The
+independent exact two-file red-team passes with no P0/P1. The first exact staged D-015 gate passed on
+tree `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10 files: locked offline reinstall/lock;
+isolated wheel build/install/import; tracked MIME/symlink and sensitive guards; Ruff/format; mypy over
+25 package plus 11 trust-boundary files; pytest 537/537; config/synthetic-submission; protected
+current contract/schema and generated-schema byte checks; pre-commit/detect-secrets; `pip-audit` with
+no vulnerabilities; cached diff, exact inventory, and unchanged-tree PASS. This governance
+reconciliation changes bytes, so one immediate identical fully restaged rerun must PASS to fix
+the final gate as passed; failure invalidates and must correct this record.
+
 The checkpoint relay could not connect to Chrome at this recovery boundary. No new reviewer
 response or decision exists; the user's standing Chunk 5 authorization remains controlling.
 
 ## Remaining gates
 
-1. Preserve iteration 8 only as a terminal `blocked` historical chain. Because D-027 and D-028
-   change frozen source, never launch its comparison, review-plan, UI/session, human-review, or
-   finalizer stages and never splice its passed stages into iteration 9.
-2. Preserve r9 freeze `1db805e`, rejected bundle `28457d...`, and its terminal `blocked` registry
-   row as historical failure evidence. Do not upload/reuse it, splice either old chain, or delete
-   any old remote artifact.
-3. The D-029/D-030 independent authentication and runbook red-teams both pass with no P0/P1, and
-   the first complete exact 24-file D-015 gate passed on tree
-   `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`. Restage this governance reconciliation and run the
-   identical complete gate immediately; its PASS fixes `complete_final_gate=PASS`. Then create the
-   replacement freeze/commit and sanitized manifest bundle,
-   execute
-   `audit-0003-wheel-sanitization` / `manifest-v2` privately, and bind a new DICOM-QA bundle only to
-   its validated output.
-4. Create and re-authenticate the replacement private/offline/version-1 dataset and kernel chain
-   through only the fixed-output D-030 root/content/source/listing/race gates.
-5. Require authenticated smoke estimates for the full pass and post-comparison preparation, then
-   run and validate full Run A before starting independent Run B.
-6. Compare exact manifests, deterministic metrics, and cohort plans, and validate retrieval through
-   the D-026 exact-summary/optional-safe-log boundary. Only then run the existing review-plan
+1. Preserve r8, r9, and r10 only as terminal historical evidence. Do not resume, mutate, delete, or
+   splice any stage.
+2. Preserve the first exact staged D-015 PASS as non-final evidence and immediately pass the
+   identical fully restaged gate before fixing the final gate as passed.
+3. Freeze a new r11 bundle and execute input authentication, smoke, Run A, Run B, and comparison in
+   sequence through the existing D-030 fixed-output root/content/source/listing/race gates.
+4. Only then run the existing review-plan
    kernel's identity-bound capacity gate, replay, double render, benchmarks, and plan materialization;
    require its D-027 artifact and automatic-event contracts.
-7. Complete the unchanged private human review, finalization, and disclosure-controlled validation.
-8. Stop at the Chunk 5 gate; do not begin ontology, folds, labels, or model work.
+5. Complete the unchanged private human review, finalization, and disclosure-controlled validation.
+6. Stop at the Chunk 5 gate; do not begin ontology, folds, labels, or model work.
 
 Chunk 5 remains **FAIL / recovery pending** until every gate above succeeds.
