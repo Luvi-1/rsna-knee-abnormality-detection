@@ -1,5 +1,23 @@
 # Competition Contract Change Log
 
+## 2026-08-20T08:02:22Z
+
+Chunk 5 recovery refresh before the authenticated r11 performance-smoke identity check:
+
+- The official Kaggle MCP returned unchanged competition metadata, the aggregate inventory of
+  819,640 files (819,635 DICOM and five CSV), all official page bodies, the entered state, and the
+  current discussion list.
+- Host topic `733965` remains the authoritative hosted-LLM clarification already recorded in the
+  canonical contract. Later discussion activity contains no new authoritative rule text or
+  material change.
+- Rules, evaluation, timeline, offline runtime, notebook-only submission mode, team/submission
+  limits, external-asset requirements, sharing restrictions, licensing, and winner obligations
+  show no material drift from `2026-08-15T000025Z.md` or `contract.yaml`.
+- Identity verification remains unavailable through the read-only interface, so submission and
+  prize actions stay blocked. The authorized private/offline Chunk 5 workflow remains allowed.
+- No rules acceptance, submission, team action, data preview, compute launch, publication, or
+  remote mutation occurred during this refresh.
+
 ## 2026-08-15T00:00:25Z
 
 Chunk 5 recovery refresh before the iteration-9 release gate and replacement freeze:

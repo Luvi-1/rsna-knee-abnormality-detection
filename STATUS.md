@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-16 (Chunk 5 r10 review-plan input-discovery failure; D-031 r11 recovery)
+Updated: 2026-08-20 (Chunk 5 r11 recovery; live contract refresh)
 
 ## Current checkpoint
 
@@ -70,7 +70,7 @@ Updated: 2026-08-16 (Chunk 5 r10 review-plan input-discovery failure; D-031 r11 
   organizer clarification topics.
 - The live rules, data, evaluation, timeline, runtime, submission, external-asset, team, license,
   sharing, official discussion clarifications, and MIRA license were refreshed at
-  `2026-08-15T00:00:25Z`.
+  `2026-08-20T08:02:22Z`.
 - All nine operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory,
   deadlines, runtime, limits, entered state, and RSNA MIRA PDF were unchanged. The unresolved
   contradictions and conservative defaults remain in `docs/competition_contract/contract.yaml`.
@@ -84,6 +84,9 @@ Updated: 2026-08-16 (Chunk 5 r10 review-plan input-discovery failure; D-031 r11 
 - The official interface confirms the account is entered but does not expose current identity-
   verification state, so submission and prize actions remain blocked. No team action, rules action,
   submission, public release, or model action occurred.
+- The 2026-08-20 refresh found no material contract drift; later discussion activity in Host topic
+  `733965` added no new authoritative rule text. The new snapshot is
+  `docs/competition_contract/2026-08-20T080222Z.md`.
 - The checkpoint relay could not connect to Chrome during this recovery boundary. No new reviewer
   response or decision exists; the user's standing Chunk 5 authorization remains controlling.
 

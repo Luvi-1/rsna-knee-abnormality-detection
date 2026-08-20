@@ -15,7 +15,7 @@ Fold version: `unassigned`; no folds exist.
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed through the official Kaggle MCP at `2026-08-15T00:00:25Z`. All nine
+- The live contract refreshed through the official Kaggle MCP at `2026-08-20T08:02:22Z`. All nine
   operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines,
   runtime, limits, entered state, and RSNA MIRA PDF were unchanged; identity verification and the
   recorded unresolved fields still fail closed.

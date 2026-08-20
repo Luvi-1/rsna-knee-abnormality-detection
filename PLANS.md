@@ -39,7 +39,7 @@ Delivered evidence:
 - Rules, metric, schema, dates, notebook/runtime and submission limits, data interface, external
   assets, team/sharing constraints, licenses, and contradictions are recorded with conservative
   defaults.
-- The latest live refresh at `2026-08-15T00:00:25Z` used the official Kaggle MCP first. All nine
+- The latest live refresh at `2026-08-20T08:02:22Z` used the official Kaggle MCP first. All nine
   operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines,
   runtime, limits, entered state, and RSNA MIRA PDF were unchanged.
 - Newly discovered Host topic `733965` permits compliant commercial LLM or external inference under
