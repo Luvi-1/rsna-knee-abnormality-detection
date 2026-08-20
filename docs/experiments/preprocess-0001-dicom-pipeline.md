@@ -6,6 +6,14 @@ cannot be resumed or spliced; D-031 red-team, focused/static checks, and its fir
 pass, but the required identical restaged gate, a fresh r11 chain, QA materialization, human review, and finalizer remain pending; Chunk 5 not
 passed**.
 
+Current recovery addendum (2026-08-20): the no-drift contract refresh is frozen at
+`2723ff4a1692d5d897234e67aba167c629017f9b`; replacement bundle
+`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921` passed local packaging and
+verified-policy gates. Append-only r12 is `planned`, all remote stages are `not_started`, and no
+r12 remote dataset, kernel, run, output, or pixel exists. The prior r11 candidate is historical;
+no reuse or splice is permitted. The next safe action is a protected metadata-only derived
+performance-smoke identity absence check before any version-1 push.
+
 ## Objective
 
 Implement and validate `dicom-model-v1`, a deterministic, physically grounded MRI-series pipeline
@@ -19,8 +27,8 @@ transformation, and produces model-ready tensors without starting ontology, fold
 | ID | `preprocess-0001-dicom-pipeline` |
 | Hypothesis | Geometry-first ordering, explicit decode/intensity handling, and fixed physical-position sampling can produce byte-deterministic model inputs across heterogeneous MRI series without systematic ordering, orientation, or laterality errors. |
 | Primary change | Add the first DICOM-to-model preprocessing version and its private QA runner. |
-| Code | `feat/chunk-5-dicom-pipeline`; r8/r9/r10 are terminal historical evidence only; D-031 r11 replacement freeze/bundle pending |
-| Source manifest | The sanitized audit-0003 successor authenticated as the r10 source root; audit-0002 remains historical scientific evidence only; r11 must reauthenticate the exact source without splicing r10 stages |
+| Code | `feat/chunk-5-dicom-pipeline`; freeze `2723ff4`; r8/r9/r10 and the old r11 candidate are terminal historical evidence only; r12 replacement bundle is local and remote stages are not_started |
+| Source manifest | The sanitized audit-0003 successor remains the authenticated source root; audit-0002 remains historical scientific evidence only; r12 must bind the exact source without splicing r10/r11 stages |
 | Hard groups | `protected-groups-v2`; not used to construct folds |
 | Labels | `official-labels-v1`; not consumed by preprocessing |
 | Folds | `unassigned` |

@@ -3,6 +3,17 @@
 This file records the continuous sequence of work. A historical chunk can have useful deliverables
 while still requiring correction before cumulative merge. “Complete” below never means merged.
 
+## Current r12 recovery checkpoint
+
+The live contract refresh at `2026-08-20T08:02:22Z` found no material drift. The exact refreshed
+tree is frozen at `2723ff4a1692d5d897234e67aba167c629017f9b`; its replacement DICOM-QA bundle is
+`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921`. Packager, verified-policy,
+synthetic/offline preflight, and packaging suites pass. Append-only r12 is `planned`, with every
+remote stage `not_started`; no r12 remote dataset, kernel, or run exists. R10 and the old r11
+candidate are historical and cannot be reused or spliced. The next action is one protected
+metadata-only smoke-identity absence check, followed by a private version-1 smoke push only if
+absence is positively proved. Chunk 5 and all downstream QA remain blocked.
+
 ## Chunk 1 - private repository operating system
 
 Historical status: implementation delivered on a private feature branch; cumulative validation is

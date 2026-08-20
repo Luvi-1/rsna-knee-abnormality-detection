@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-20 (Chunk 5 r11 recovery; live contract refresh)
+Updated: 2026-08-20 (Chunk 5 r12 recovery; live contract refresh)
 
 ## Current checkpoint
 
@@ -9,7 +9,7 @@ Updated: 2026-08-20 (Chunk 5 r11 recovery; live contract refresh)
   preprocessing, series-slot assignment, private visual QA, and runtime evidence without ontology,
   folds, labels, model training, prediction, ensemble, or submission work.
 - Exit gate: Chunk 5 is **not passed**. R10 is terminal failed and cannot be resumed or spliced. It
-  requires a fully gated D-031 replacement freeze/commit, a fresh immutable r11 private DICOM-QA
+  requires a fully gated r12 replacement freeze/commit, a fresh immutable r12 private DICOM-QA
   chain bound to the authenticated source audit,
   two distinct complete private Kaggle executions over the entire authorized training set; an
   accepted exact deterministic comparison; and an authorized human review of at least 100 post-run
@@ -19,6 +19,19 @@ Updated: 2026-08-20 (Chunk 5 r11 recovery; live contract refresh)
 - Private pixels, case details, identifiers, full manifests, review identities, cohort hashes,
   review rows, transform ledgers, and detailed performance artifacts remain inside Kaggle. Only
   explicitly allowlisted, disclosure-validated aggregates may leave that boundary.
+
+## Current r12 checkpoint
+
+The 2026-08-20 aggregate-only contract refresh found no material drift and is frozen in commit
+`2723ff4a1692d5d897234e67aba167c629017f9b`, with snapshot
+`docs/competition_contract/2026-08-20T080222Z.md`. The replacement bundle is
+`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921`; its packager,
+verified-policy, synthetic/offline preflight, and DICOM-QA packaging suites passed. Append-only
+registry successor r12 is `planned`, bound to that freeze and bundle, with every remote stage
+`not_started`. No r12 remote dataset, kernel, or run exists. The prior r11 bundle and row are
+historical and cannot be mutated, reused, or spliced. The next safe action is a protected,
+metadata-only derived smoke-identity absence check; only a positive `ABSENT` result permits one
+private/offline version-1 smoke push. Chunk 5, QA, human review, and Chunk 6 remain blocked.
 
 ## Truthful validation state
 

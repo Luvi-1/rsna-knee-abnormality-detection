@@ -1,8 +1,19 @@
 # Chunk 5 private-run and output-retrieval recovery incidents
 
-Status: **r8/r9 historical failures; r10 authenticated through comparison then failed safely at review-plan input discovery; Chunk 5 remains not passed**
+Status: **r8/r9 historical failures; r10 authenticated through comparison then failed safely at review-plan input discovery; r12 is locally frozen and remote-not-started; Chunk 5 remains not passed**
 
-Date: 2026-08-16
+Date: 2026-08-20
+
+## Current r12 recovery checkpoint
+
+The aggregate-only contract refresh at `2026-08-20T08:02:22Z` found no material drift and froze
+commit `2723ff4a1692d5d897234e67aba167c629017f9b`. Replacement bundle
+`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921` passed the packager,
+verified-policy, synthetic/offline preflight, and packaging checks. Append-only r12 is `planned`
+with all remote stages `not_started`; no r12 remote dataset, kernel, run, output, or pixel exists.
+The old r11 candidate and all r10 evidence are historical and cannot be reused or spliced. The
+next safe action is one protected metadata-only smoke-identity absence check before any private
+version-1 push.
 
 ## Summary
 

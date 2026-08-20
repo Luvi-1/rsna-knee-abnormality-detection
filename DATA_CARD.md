@@ -3,8 +3,18 @@
 Status: `audit-0002-manifest-remediation` remains historical scientific evidence only; the sanitized
 audit-0003 successor supplied the authenticated r10 source root. R10 input, smoke, Run A, Run B, and
 comparison passed, but review-plan v1 failed safely at input discovery before any review artifact or
-pixel access. R10 is terminal failed, Chunk 5 has not passed, and only a fresh r11 no-splice chain may
+pixel access. R10 is terminal failed, Chunk 5 has not passed, and only the fresh r12 no-splice chain may
 continue.
+
+## Current r12 recovery identity
+
+The 2026-08-20 contract refresh found no material drift and froze commit
+`2723ff4a1692d5d897234e67aba167c629017f9b`. The replacement bundle
+`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921` passed local packaging,
+verified-policy, synthetic/offline preflight, and packaging checks. Registry r12 is append-only and
+`planned`; all remote stages are `not_started`, and no r12 dataset, kernel, run, output, or pixel has
+been created. The prior r11 candidate is historical and cannot be reused or spliced. A protected
+metadata-only smoke-identity absence check is required before any new private version-1 smoke push.
 
 ## Source, scope, and license
 

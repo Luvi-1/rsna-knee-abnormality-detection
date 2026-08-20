@@ -845,3 +845,24 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   r11 review-plan, authorized human review, and finalizer gates pass.
 - Reversal condition: replace only with a smaller equally source-scoped discovery rule that retains
   the same exact mount binding and every current fail-closed trust and privacy gate.
+
+## D-032 - Re-freeze after the live contract refresh before r11 remote work
+
+- Date: 2026-08-20
+- Owner: Luvi-1 and Codex
+- Question: What source and registry identity may authorize the next private DICOM-QA action after
+  the aggregate-only contract refresh?
+- Evidence: the official Kaggle MCP refresh at `2026-08-20T08:02:22Z` found no material contract
+  drift. The exact six-file documentation refresh passed the complete D-015 gate and froze commit
+  `2723ff4a1692d5d897234e67aba167c629017f9b`. The replacement DICOM-QA packager, verified-policy,
+  synthetic/offline preflight, and packaging suites passed for bundle
+  `efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921`. An append-only r12 registry
+  successor is `planned` with all remote stages `not_started`; no r12 remote resource exists.
+- Decision: use only the r12 freeze, bundle, and planned registry successor. Treat r10 and the old
+  r11 candidate as historical, do not mutate or splice them, and perform one protected metadata-only
+  derived smoke-identity absence check before any version-1 private/offline push. A non-`ABSENT`
+  result is an access/infrastructure blocker, not evidence of absence or failure.
+- Consequence: Chunk 5, Run A/B, comparison, review-plan, UI, human review, finalizer, and Chunk 6
+  remain blocked until the fresh r12 chain passes each exact authenticated validator.
+- Reversal condition: only a new complete gate and new immutable bundle may replace this identity;
+  no tracked byte or remote artifact may be reused across freezes.
