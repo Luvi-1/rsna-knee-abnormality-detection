@@ -1,20 +1,46 @@
 # Validation Card
 
 Hard-group version: `protected-groups-v2`; `audit-0002-manifest-remediation` remains historical
-scientific evidence only. The sanitized audit-0003 successor supplied the authenticated r10 source
-root. R10 is terminal failed at review-plan input discovery and cannot be resumed or spliced.
+scientific evidence only. The sanitized audit-0003 successor supplied the authenticated private
+source root. R13 is terminal failed at performance smoke and cannot be resumed or spliced.
 
 Fold version: `unassigned`; no folds exist.
 
-## Current r12 recovery checkpoint
+## Current r13 terminal checkpoint
 
-The exact contract refresh at `2026-08-20T08:02:22Z` found no material drift and is frozen at
-`2723ff4a1692d5d897234e67aba167c629017f9b`. Replacement bundle
-`efe087afd5bb8f5391213e359c52b88f5930975c837b813ee98affe3f1fb9921` passed packager,
-verified-policy, synthetic/offline preflight, and packaging checks. Append-only r12 is `planned`
-with all remote stages `not_started`; no r12 remote resource exists. R10 and the old r11 candidate
-remain historical and cannot be reused or spliced. The next gate is a protected metadata-only
-derived smoke-identity absence check, then version-1 private smoke only after positive absence.
+Legacy Kaggle authentication was restored without credential exposure. Exact r13 performance-smoke
+version 1 authenticated and is terminal `ERROR`. The corrected strict failure validator returns
+`phase=performance_smoke`, `code=throughput_projection_exceeds_budget`. The append-only registry is
+terminal `failed`: input authentication passed, and Run A, Run B, comparison, review-plan, and human
+review are `not_started`. No rerun, splice, Run A, output retrieval, or downstream launch occurred.
+The safe log's one progress event localizes failure to the inner throughput gate. Exact 15-file tree
+`afd8909a798d30fa9314fe6568768bca68fbda14` passed its complete D-015 gate with pytest 538/538 and
+all recorded checks but is historical and superseded. After the governance bytes were restaged,
+exact tree `e298964891b214bfbf4dc06725f2cde3b3bd3f74` failed the mandatory pytest rerun with one
+failure and 537 passes because a manifest-runner test compared nondeterministic real wall-clock
+`runtime.elapsed_seconds` (3 seconds versus 2). Production uses `ceil(monotonic - start)`, and its
+validators intentionally accept an integer from zero through the configured maximum; production,
+disclosure, and schema behavior remain correct. The minimal test-only correction reuses
+`_validate_exact_aggregates` on the rerun, excludes only `runtime` from cross-run aggregate equality,
+and retains exact table-hash, study-key, QA-byte, and audit-key equality. Focused 3/3 passed
+repeatedly, the complete manifest-runner file passed 12/12, and Ruff check/format plus the scoped diff
+check pass. The current candidate is exactly 16 files: seven source/tests, eight governance files,
+and `docs/competition_contract/2026-08-21T200304Z.md`. Exact staged tree
+`22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate: locked offline
+`uv` lock/sync; full pytest 538/538 in 63.84 seconds; isolated wheel build, offline install, and
+import of `rsna-knee 0.1.0`; Ruff PASS with 124 files formatted; mypy over 25 package plus 16 trust-
+boundary files; valid configuration with the established hash and synthetic submission `rows=2`;
+canonical contract schema valid, current `contract_drift=no`, and generated schema bytes current;
+sensitive guard PASS; tracked MIME exact at 154 regular files plus the one exact `.agents/skills`
+symlink; `pip-audit` with no known vulnerabilities; all pre-commit hooks PASS; full tracked detect-
+secrets PASS; and exact 16-file inventory, no unstaged or untracked residue, and unchanged-tree PASS.
+This eight-file governance reconciliation changes bytes, so one immediate fully restaged identical
+complete rerun and final red-team remain required. Only PASS with no later byte change fixes
+`complete_final_gate=PASS`; any failure invalidates the first-pass final-gate evidence and requires
+this record to be corrected. Freeze, bundle, authenticated identity-absence proof, append-only
+registry preparation, and successor smoke remain pending. Even after those prerequisites pass,
+authorization stops at one fresh successor smoke; Run A requires authenticated smoke terminal/output
+validation and a fresh decision.
 
 ## Competition metric contract
 
@@ -25,11 +51,12 @@ derived smoke-identity absence check, then version-1 private smoke only after po
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed through the official Kaggle MCP at `2026-08-20T08:02:22Z`. All nine
-  operational hashes, the 819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines,
-  runtime, limits, entered state, and RSNA MIRA PDF were unchanged; identity verification and the
-  recorded unresolved fields still fail closed.
-- New Host topic `733965` permits compliant commercial LLM or external inference under the Rules,
+- The live contract refreshed through the official Kaggle MCP at `2026-08-21T20:03:04Z`. The
+  819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines, runtime, limits, entered
+  state, and recorded Host clarification were unchanged with no material drift. Latest snapshot:
+  `docs/competition_contract/2026-08-21T200304Z.md`. Identity-verification state is unavailable
+  through the read-only official interface and remains fail closed, not known incomplete.
+- Host topic `733965` permits compliant commercial LLM or external inference under the Rules,
   equal-access, and minimal-cost conditions and clarifies that report processing is not itself
   private sharing.
 - The stricter project boundary remains unchanged: no raw DICOM pixels, radiology reports,
@@ -165,11 +192,14 @@ directory. Remote gates authenticate exact private dataset version-1 content/has
 version-1 code/source graph, stable listings, and before/after race snapshots. Status is fixed to
 `PENDING`, `RUNNING`, `COMPLETE`, or `ERROR`; token scope, logs, `/1` references, and gates remain
 bounded. The mismatched-root regression proves zero remote calls, and independent authentication
-and runbook red-teams pass with no P0/P1. The first complete exact 24-file D-015 gate passed on tree
+and runbook red-teams pass with no P0/P1. The historical first complete exact 24-file D-015 gate
+passed on tree
 `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`: pytest 537/537 plus the full lock/build/import,
 static, configuration, contract, schema, pre-commit, privacy, dependency-audit, inventory, and
-unchanged-tree checks all passed. This reconciliation changes bytes, so an immediate identical
-fully restaged rerun is required; its PASS fixes `complete_final_gate=PASS`.
+unchanged-tree checks all passed. That result is superseded. The later 15-file PASS and failed
+restaged tree are also historical and superseded. The first exact 16-file gate passed, but these
+governance bytes require the fully restaged identical complete rerun and final red-team;
+`complete_final_gate=PASS` remains unset.
 
 A clean r10 immutable candidate authenticated input, performance smoke, Run A, Run B, comparison,
 and the review-plan source graph. Review-plan version 1 reached `ERROR`; two bounded read-only checks
@@ -183,16 +213,42 @@ D-031 limits base discovery to depth 1 and kernel discovery to the exact derived
 preserving symlink, duplicate, count, file-type, and error rejection. Independent red-team passes
 with no P0/P1; focused identity 41/41, boundary matrix 12/12, combined identity plus packaging
 188/188, full pytest 537/537, Ruff/format, strict finalizer mypy, and the scoped diff check pass. The
-first exact staged D-015 gate passed on tree `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10
+historical first exact staged D-015 gate passed on tree
+`959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10
 files: locked offline reinstall/lock; isolated wheel build/install/import; tracked MIME/symlink and
 sensitive guards; Ruff/format; mypy over 25 package plus 11 trust-boundary files; pytest 537/537;
 config/synthetic-submission; protected current contract/schema and generated-schema bytes;
 pre-commit/detect-secrets; `pip-audit` with no vulnerabilities; cached diff, inventory, and unchanged-
-tree PASS. This governance reconciliation changes bytes, so one immediate identical restaged rerun
-must PASS to fix the final gate as passed; failure invalidates and must correct this record. Do not
-delete, reuse, resume, or
-splice r8, r9, or r10. A fresh r11 chain is required, and Chunk 5, QA, downstream work, and Chunk 6
-remain blocked. Distinct r11 private version-1 Run A and Run B kernels must independently process the
+tree PASS. That 10-file result is superseded. The later 15-file PASS and failed restaged tree are also
+historical and superseded. The first exact 16-file gate passed, but these governance bytes require
+the fully restaged identical complete rerun and final red-team; `complete_final_gate=PASS` remains
+unset. Do not delete, reuse, resume, or splice r8,
+r9, or r10.
+
+D-033 records the current r13 state-machine mismatch. The smoke producer emits smoke-specific
+start, progress, and failure events over a smoke-specific phase set; the generic consumer accepted
+only full-run events and phases. The smallest fix keeps one entry point, selects the closed protocol
+from the first exact start event, and enforces its exact terminal event, phase allowlist, ordered
+progress prefix, and phase-specific legal prefix length. Hybrid, reordered, extra, and wrong-phase
+logs are rejected. Exact authenticated revalidation returns `phase=performance_smoke`,
+`code=throughput_projection_exceeds_budget`; this is terminal failure evidence, not runtime
+acceptance. The 15-file PASS and failed restaged tree are historical and superseded. The first exact
+16-file gate passed, but the fully restaged identical complete rerun and final red-team remain
+pending.
+
+D-034 removes only the stale sample `elapsed +` retained when the former monolithic smoke plus full
+pass was split into a standalone 3,600-second smoke and later full-budget Run A/Run B kernels. Both
+admission sites retain pre-smoke setup accounting where applicable, the conservative full-pass
+projection, 3,600-second reserve, finite checks, self/outer deadlines, authentication, and privacy
+gates. Existing 3,801/3,799-second boundary tests, the 4,320-second standalone ceiling, and scoped
+static checks pass. A fresh successor smoke is still required and may fail closed; the 15-file PASS
+and failed restaged tree are historical and superseded. The first exact 16-file gate passed, but the
+fully restaged identical complete rerun and final red-team remain pending.
+
+A fresh immutable successor smoke is required, and Chunk 5, QA, downstream work, and Chunk 6 remain
+blocked. The Run A-through-finalizer design below is future scientific work, not current
+authorization; it requires authenticated terminal/output validation of that fresh smoke and a fresh
+decision. Distinct successor private version-1 Run A and Run B kernels must independently process the
 entire authorized training set from the same bundle, preprocessing configuration, competition
 input, and source-manifest input. Each produces a canonical full-pass manifest, deterministic
 metrics, and a deterministic cohort plan without QA replay or rendering. Every discovered study,
@@ -202,7 +258,7 @@ DICOM's keyed relative identity, byte size, and raw digest to authenticated `man
 unexplained DICOM issue and zero unresolved recoverable transfer-syntax, ordering, or geometry
 blocker.
 
-A separate r11 version-1 comparator must require byte-exact equality of the canonical manifests and
+A separate successor version-1 comparator must require byte-exact equality of the canonical manifests and
 cohort plans plus exact equality of declared deterministic metrics. Timing and resource fields may
 differ only where excluded by the frozen comparison contract; no tolerance may be invented after a
 mismatch. Its summary must pass the D-026 exact-path/optional-safe-log retrieval boundary. Complete
@@ -251,9 +307,10 @@ review artifacts resolve only under authenticated Run A. It may release only
 `human_review_summary.json` and `final_performance_report.json` as the two final allowlisted
 release-safe outputs, using disclosure-controlled review tokens while exact counts remain private.
 A locally composed review attestation is neither required nor accepted. R10 provides authenticated
-historical input, smoke, Run A, Run B, and comparison evidence only. Its terminal failed chain is not
-accepted QA, human-review, performance, finalizer, or Chunk 5 evidence and cannot be spliced into
-r11. No folds exist and no fold-feasibility claim is made.
+historical input, smoke, Run A, Run B, and comparison evidence only. R13 provides only authenticated
+input and terminal smoke-failure evidence. Neither is accepted QA, human-review, performance,
+finalizer, or Chunk 5 evidence, and neither can be spliced into a successor. No folds exist and no
+fold-feasibility claim is made.
 
 ## Shift and subgroup limits
 

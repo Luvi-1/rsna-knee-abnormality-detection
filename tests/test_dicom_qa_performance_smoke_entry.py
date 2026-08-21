@@ -163,7 +163,7 @@ def test_entrypoint_calls_only_authenticated_production_smoke_and_cleans_cache(
         "authenticated_sample": True,
         "post_comparison_preparation_path_exercised": True,
         "production_path_exercised": True,
-        "projected_full_run_seconds_ceiling": 4_380,
+        "projected_full_run_seconds_ceiling": 4_320,
         "qa_replay_render_seconds_per_series_ceiling": 3,
         "representative_benchmark_seconds_ceiling": 180,
         "review_artifact_bytes_per_series_power_of_two_mib_ceiling": 2,

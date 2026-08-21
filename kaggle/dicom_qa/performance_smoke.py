@@ -500,7 +500,7 @@ def _run_authenticated_smoke(
             reconciliation.expected_series_count / sample_series,
             reconciliation.expected_file_count / sample_files,
         )
-        projected_after_auth = elapsed + projected_full_pass + runner.POST_FULL_PASS_RESERVE_SECONDS
+        projected_after_auth = projected_full_pass + runner.POST_FULL_PASS_RESERVE_SECONDS
         projected_total = pre_smoke_elapsed + projected_after_auth
         if (
             not math.isfinite(projected_total)

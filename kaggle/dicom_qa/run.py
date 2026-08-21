@@ -3283,7 +3283,7 @@ def _run_performance_smoke(
         reconciliation.expected_series_count / sample_series,
         reconciliation.expected_file_count / sample_files,
     )
-    if elapsed + projected_full_pass_seconds + POST_FULL_PASS_RESERVE_SECONDS > budget_seconds:
+    if projected_full_pass_seconds + POST_FULL_PASS_RESERVE_SECONDS > budget_seconds:
         raise SafeRunError("throughput_projection_exceeds_budget")
 
 

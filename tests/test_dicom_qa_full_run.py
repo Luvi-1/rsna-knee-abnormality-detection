@@ -714,9 +714,9 @@ def test_performance_smoke_projects_full_pass_and_fails_before_budget_burn(
         "deadline_at": None,
     }
     try:
-        runner._run_performance_smoke(**arguments, budget_seconds=3_901.0)
+        runner._run_performance_smoke(**arguments, budget_seconds=3_801.0)
         with pytest.raises(runner.SafeRunError, match="throughput_projection_exceeds_budget"):
-            runner._run_performance_smoke(**arguments, budget_seconds=3_899.0)
+            runner._run_performance_smoke(**arguments, budget_seconds=3_799.0)
     finally:
         base.connection.close()
     assert not list(tmp_path.glob(".performance-smoke-cache-*"))

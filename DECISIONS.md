@@ -266,14 +266,43 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   artifact exists. The first r10 D-029 candidate then passed 530/530 on exact staged tree
   `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0`, but D-030 preflight found additional
   project-wheel and deployment-authentication trust gaps. That gate is superseded. After their
-  correction, the first complete exact staged D-015 gate passed on tree
+  correction, the historical first complete exact staged D-015 gate passed on tree
   `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` over exactly 24 files: pytest 537/537;
   offline locked reinstall and lock; isolated wheel build/install/import; tracked MIME, symlink, and
   sensitive guard; Ruff check/format; mypy over 25 package and 11 trust-boundary files;
   config/submission; contract schema and current `contract_drift=no`; schema bytes; pre-commit;
   detect-secrets; `pip-audit` with no vulnerabilities; and diff, inventory, and unchanged-tree PASS.
-  This governance reconciliation changes bytes, so D-015 requires an immediate identical fully
-  restaged rerun; a PASS without further mutation fixes `complete_final_gate=PASS`.
+  That 24-file result is historical and superseded by the later validator, throughput, governance,
+  and contract-snapshot changes. Exact 15-file tree
+  `afd8909a798d30fa9314fe6568768bca68fbda14` then passed its complete D-015 gate: locked offline
+  lock/sync; isolated wheel build and offline install/import; tracked MIME, exact `.agents/skills`
+  symlink, and sensitive guard; Ruff check/format; mypy over 25 package plus 16 trust-boundary files;
+  pytest 538/538; config audit and synthetic submission; contract schema and current
+  `contract_drift=no`; generated schema bytes; pre-commit and full tracked detect-secrets;
+  `pip-audit` with no vulnerabilities; and cached diff, exact 15-file inventory, no unstaged or
+  untracked residue, and unchanged-tree checks. That PASS is now historical and superseded. After
+  the governance bytes were restaged, exact tree
+  `e298964891b214bfbf4dc06725f2cde3b3bd3f74` failed the mandatory pytest rerun with one failure and
+  537 passes because `tests/test_manifest_runner.py` compared nondeterministic real wall-clock
+  `runtime.elapsed_seconds`: the first run reported 3 seconds and the rerun 2 seconds. Production
+  intentionally records `ceil(monotonic - start)`, and its validators accept an integer from zero
+  through the configured maximum, so production, disclosure, and schema contracts are correct. The
+  minimal test-only correction reuses `_validate_exact_aggregates` on the rerun and compares every
+  aggregate section except `runtime`, while retaining exact table-hash, study-key, QA-byte, and
+  audit-key equality. The focused target passed 3/3 repeatedly, the complete manifest-runner file
+  passed 12/12, and Ruff check/format plus the scoped diff check pass. Exact staged tree
+  `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` then passed the first complete 16-file D-015 gate:
+  locked offline `uv` lock/sync; full pytest 538/538 in 63.84 seconds; isolated wheel build, offline
+  install, and import of `rsna-knee 0.1.0`; Ruff PASS with 124 files formatted; mypy over 25 package
+  plus 16 trust-boundary files; valid configuration with the established hash and synthetic
+  submission `rows=2`; canonical contract schema valid, current `contract_drift=no`, and generated
+  schema bytes current; sensitive guard PASS; tracked MIME exact at 154 regular files plus the one
+  exact `.agents/skills` symlink; `pip-audit` with no known vulnerabilities; all pre-commit hooks
+  PASS; full tracked detect-secrets PASS; and exact 16-file inventory, no unstaged or untracked
+  residue, and unchanged-tree PASS. This eight-file governance reconciliation changes bytes, so
+  D-015 requires one immediate fully restaged identical complete rerun. Only PASS with no later byte
+  change fixes `complete_final_gate=PASS`; any failure invalidates the first-pass final-gate evidence
+  and requires this record to be corrected. Final red-team remains pending.
 - Risks: modifying or generating a file after the final run invalidates the result.
 - Reversal condition: a reproducible release system proves cryptographic identity between the
   checked file set and the pushed commit while enforcing the same gates.
@@ -612,9 +641,12 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   nevertheless terminal `blocked` before comparison. The later comparison-output and review-plan
   contract defects are independent and do not reverse the D-025 diagnosis.
 - Consequence: preserve r7 and r8 as historical provenance at their exact attained stages. The r9
-  16-file candidate has passed its first complete release gate; after D-015's immediate identical
-  post-governance rerun, it still requires a new freeze/commit, bundle, private version-1 dataset
-  chain, smoke, Run A, Run B, and comparison workflow before QA materialization may start.
+  16-file candidate and its release gate are historical and superseded. The later 15-file PASS and
+  failed restaged tree are also historical and superseded. Exact 16-file tree
+  `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate, but these
+  governance bytes require the immediate fully restaged identical complete rerun and final red-team
+  before preparation. Current authorization still permits only a fully prepared fresh successor
+  smoke; Run A requires authenticated smoke validation and a fresh decision.
 - Reversal condition: replace only with an equally strict solution that emits exactly the frozen
   25-dimension schema and proves every representative belongs to the selected cohort.
 
@@ -644,11 +676,14 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   The protected row is terminal `blocked`, with input/smoke/Run A/Run B `passed`,
   comparison/`review_plan`/`human_review` `not_started`, `completed_utc` set, and integrity, foreign
   keys, and mode `PASS`. Comparison was not launched, so remote acceptance of the D-026 retrieval
-  boundary is not proved. The r9 D-027/D-028 candidate has passed its first complete release gate;
-  D-015 requires the immediate identical post-governance rerun before freeze. Neither r7 nor r8 may
-  be spliced into the fresh chain.
+  boundary is not proved. The r9 D-027/D-028 release-gate result is historical and superseded by later
+  source, governance, and contract-snapshot changes. Neither r7 nor r8 may be spliced into a fresh
+  chain. The 15-file PASS and failed restaged tree are historical and superseded. The first 16-file
+  complete gate passed, but no freeze or smoke may proceed before the fully restaged identical rerun
+  and final red-team pass with no later byte change.
 - Reviewer state: the checkpoint relay could not connect to Chrome, so no new reviewer response or
-  decision exists. The user's standing authorization for Chunk 5 recovery remains controlling.
+  decision exists. The standing Chunk 5 authorization is now bounded by the latest smoke-only
+  checkpoint and does not authorize Run A.
 - Consequence: Chunk 5 remains not passed. Comparison, review-plan materialization, UI/session
   creation, human review, and finalization remain blocked until the D-027 replacement chain reaches
   and validates each gate in order.
@@ -682,10 +717,12 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   `1db805e` / bundle `28457d...`; the later dependency-wheel content rejection is independent of the
   D-027 producer/consumer fix. No r9 remote artifact exists. The first r10 D-029 gate on exact
   staged tree `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0` is superseded by D-030. Independent
-  auth and runbook red-teams now pass with no P0/P1. The first exact 24-file D-015 gate passed on
-  tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`; this byte-changing governance
-  reconciliation requires its immediate identical fully restaged rerun before the new freeze,
-  bundles, and private chain.
+  auth and runbook red-teams now pass with no P0/P1. The exact 24-file D-015 result on tree
+  `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` is historical and superseded. The later 15-file PASS
+  and failed restaged tree are also historical and superseded. The first 16-file complete gate
+  passed, but these governance bytes require the fully restaged identical rerun and final red-team.
+  Even after PASS with no later byte change, only the prepared fresh successor smoke is authorized
+  until authenticated validation and a fresh Run A decision.
 - Consequence: iteration 8 is terminal `blocked` after authenticated Run B workflow-output
   validation. This is not Chunk 5 PASS or comparison, determinism, QA, review, or performance
   evidence. Because this decision changes frozen source, iteration-8 comparison and every QA/review
@@ -713,10 +750,12 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   529/529 gate retained this correction in freeze `1db805e`; the later dependency-wheel content
   rejection is separate. The first r10 D-029 gate on exact staged tree
   `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0` is superseded by the D-030 trust-boundary
-  correction. Independent auth and runbook red-teams pass with no P0/P1. The first exact 24-file
-  D-015 gate passed on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260`; this byte-changing
-  governance reconciliation requires its immediate identical fully restaged rerun before a new
-  freeze, bundles, and fresh remote chain.
+  correction. Independent auth and runbook red-teams pass with no P0/P1. The exact 24-file D-015
+  result on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` is historical and superseded. The
+  later 15-file PASS and failed restaged tree are also historical and superseded. The first 16-file
+  complete gate passed, but these governance bytes require the fully restaged identical rerun and
+  final red-team before any clean freeze, deterministic bundle, identity-absence proof, registry
+  preparation, or successor smoke.
 - Consequence: no release, freeze, bundle, or remote replacement chain may proceed on the prior
   narrow drift proof. Iteration 8 is preserved only as terminal `blocked` historical evidence after
   authenticated Run B workflow-output validation. Because this decision changes frozen source, its
@@ -754,10 +793,12 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   minimal correction is focused root/authentication 8/8; pytest 537/537; manifest plus DICOM-QA
   packaging 204/204; Ruff check/format; mypy over 25 package and 11 trust-boundary files; and scoped
   diff, shell, and privacy checks; independent auth and runbook red-teams both pass with no P0/P1.
-  The first complete exact staged D-015 gate then passed on tree
+  The historical first complete exact staged D-015 gate then passed on tree
   `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` over exactly 24 files with the full checks
-  recorded in D-015. This governance reconciliation changes bytes; an immediate identical fully
-  restaged rerun is required, and a PASS without further mutation fixes `complete_final_gate=PASS`.
+  recorded in D-015. That 24-file result is superseded. The later 15-file PASS and failed restaged
+  tree are also historical and superseded. The first 16-file complete gate passed, but these
+  governance bytes require the fully restaged identical rerun and final red-team;
+  `complete_final_gate=PASS` remains unset.
 - Consequence: `audit-0002-manifest-remediation` remains valid historical scientific evidence but is
   superseded as a reusable source root. The new `audit-0003-wheel-sanitization` experiment contract
   must complete and validate `manifest-v2` before a new DICOM-QA bundle is bound to that output. Do
@@ -795,11 +836,12 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Verification: the mismatched-root regression proves zero remote calls. Focused root/authentication
   checks pass 8/8; pytest passes 537/537; manifest plus DICOM-QA packaging passes 204/204;
   Ruff check/format; mypy over 25 package and 11 trust-boundary files; and scoped diff, shell, and
-  privacy checks; independent auth and runbook red-teams both pass with no P0/P1. The first complete
+  privacy checks; independent auth and runbook red-teams both pass with no P0/P1. The historical
   exact staged D-015 gate passed on tree `cdb28c0d1e98dd9c9ce18b7fc1ca415262ff0260` over
-  exactly 24 files with every check recorded in D-015. This governance reconciliation changes bytes,
-  so an immediate identical fully restaged rerun is required; a PASS without further mutation fixes
-  `complete_final_gate=PASS`. The 530/530 gate on tree
+  exactly 24 files with every check recorded in D-015. That result is superseded. The later 15-file
+  PASS and failed restaged tree are also historical and superseded. The first 16-file complete gate
+  passed, but these governance bytes require the fully restaged identical rerun and final red-team;
+  `complete_final_gate=PASS` remains unset. The 530/530 gate on tree
   `5bea3c110e100e9ddd2d94c8b89c29e1f0ff82a0` remains superseded.
 - Consequence: **amended by D-031.** D-030 subsequently authenticated the r10 source and deployment
   chain through input, smoke, Run A, Run B, and comparison. Review-plan v1 then failed safely at
@@ -830,19 +872,20 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   abstraction, log access, or privacy exception.
 - Verification: independent exact two-file red-team passes with no P0/P1; focused identity passes
   41/41; boundary matrix 12/12; combined identity plus packaging 188/188; full development pytest
-  537/537. The first exact staged D-015 gate passed on tree
+  537/537. The historical first exact staged D-015 gate passed on tree
   `959f14e9422db9670d16683ba8effe681cf6641d` over exactly 10 files: locked offline reinstall/lock;
   isolated wheel build/install/import; tracked MIME/symlink and sensitive guards; Ruff check/format;
   mypy over 25 package and 11 trust-boundary files; pytest 537/537; config and synthetic-submission
   checks; contract schema plus protected current `contract_drift=no`; generated-schema byte check;
   pre-commit and detect-secrets; `pip-audit` with no vulnerabilities; cached diff, exact inventory,
-  and unchanged-tree PASS. This governance reconciliation changes bytes, so D-015 requires one
-  immediate identical fully restaged rerun. Its PASS fixes the final gate as passed; failure
-  invalidates and must correct this record.
-- Consequence: r10 remains terminal historical evidence through comparison only. Build a new frozen
-  r11 candidate and execute input, smoke, Run A, Run B, comparison, and review-plan sequentially with
-  no stage splicing. Chunk 5, private QA, every downstream stage, and Chunk 6 remain blocked until the
-  r11 review-plan, authorized human review, and finalizer gates pass.
+  and unchanged-tree PASS. That 10-file result is historical and superseded. The later 15-file PASS
+  and failed restaged tree are also historical and superseded. The first 16-file complete gate
+  passed, but these governance bytes require the fully restaged identical rerun and final red-team;
+  `complete_final_gate=PASS` remains unset.
+- Consequence: r10 remains terminal historical evidence through comparison only. The former r11
+  execution instruction is superseded. Current authorization stops at one fully prepared fresh
+  successor smoke; authenticated terminal/output validation and a fresh decision are required before
+  Run A. Chunk 5, private QA, every downstream stage, and Chunk 6 remain blocked.
 - Reversal condition: replace only with a smaller equally source-scoped discovery rule that retains
   the same exact mount binding and every current fail-closed trust and privacy gate.
 
@@ -864,5 +907,78 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   result is an access/infrastructure blocker, not evidence of absence or failure.
 - Consequence: Chunk 5, Run A/B, comparison, review-plan, UI, human review, finalizer, and Chunk 6
   remain blocked until the fresh r12 chain passes each exact authenticated validator.
+- Current update: this 2026-08-20 decision and its six-file gate are historical and superseded for
+  current action by `docs/competition_contract/2026-08-21T200304Z.md`. The later 15-file PASS and
+  failed restaged tree are also historical and superseded. The first 16-file complete gate passed,
+  but these governance bytes require the fully restaged identical rerun and final red-team.
+  Identity-verification state is unavailable and fail closed. After every recorded prerequisite
+  passes, only a fresh successor smoke is in scope; Run A requires its authenticated terminal/output
+  validation plus a fresh decision.
 - Reversal condition: only a new complete gate and new immutable bundle may replace this identity;
   no tracked byte or remote artifact may be reused across freezes.
+
+## D-033 - Bind failure validation to the producer's exact state machine
+
+- Date: 2026-08-21
+- Owner: Luvi-1 and Codex
+- Question: How should a terminal performance-smoke failure be validated when its producer uses a
+  different closed event protocol from the full-run producer?
+- Evidence: exact r13 performance-smoke version 1 authenticated and reached terminal `ERROR` after
+  input authentication passed. The smoke producer emits smoke-specific start, progress, and failure
+  events across `bundle`, `authentication`, `performance_smoke`, and `output`; the generic consumer
+  accepted only full-run events and phases. It therefore reduced every otherwise well-formed caught
+  smoke failure to `failure_log_completion_invalid`, masking the safe terminal reason.
+- Decision: keep one validator entry point and select the generic or performance-smoke protocol only
+  from the first exact start event. For each protocol, require its exact terminal event, phase
+  allowlist, ordered progress prefix, and phase-specific permitted prefix length. Reject hybrid,
+  reordered, extra, and wrong-phase events. Preserve the generic path and CLI unchanged; add one
+  focused regression rather than a new option, abstraction, dependency, or permissive fallback.
+- Current evidence: the corrected strict validator classifies the exact authenticated r13 failure as
+  `phase=performance_smoke`, `code=throughput_projection_exceeds_budget`. The registry is terminal
+  `failed`, input authentication is `passed`, and Run A, Run B, comparison, review-plan, and human
+  review are `not_started`. No rerun or splice occurred.
+- Consequence: the 15-file tree containing the validator/test protocol correction, separate budget-
+  formula correction, eight governance files, and latest snapshot passed its complete exact staged
+  D-015 gate but is historical and superseded. The failed restaged tree exposed the test-only runtime
+  equality defect. The corrected 16-file tree passed its first complete D-015 gate, but these
+  governance bytes require the fully restaged identical rerun and final red-team before a clean
+  freeze, deterministic bundle, authenticated identity-absence proof, and append-only registry
+  preparation. Those prerequisites authorize one fresh immutable successor smoke only. R13 remains
+  terminal historical evidence; Run A requires the successor smoke's authenticated terminal/output
+  validation and a fresh decision.
+- Reversal condition: replace only with an equally strict producer-bound validator that rejects every
+  mixed or impossible state and preserves the same privacy, authentication, and immutable-chain gates.
+
+## D-034 - Do not double-charge sample time after splitting the smoke kernel
+
+- Date: 2026-08-21
+- Owner: Luvi-1 and Codex
+- Question: Which elapsed time belongs in the standalone performance-smoke admission formula after
+  smoke and full runs became separate kernels?
+- Evidence: the exact r13 safe log contains one smoke progress event, localizing the terminal failure
+  to the inner throughput gate. In monolithic freeze `a36b053`, smoke and the full pass shared one
+  27,000-second kernel, so charging sample elapsed time before the projected full pass was correct.
+  Freeze `01ea270` moved smoke to a standalone 3,600-second kernel and gave each later full run the
+  full 27,000-second budget, but both admission sites retained
+  `elapsed + projected_full_pass + reserve`. The current run contract confirms that neither sample
+  work nor smoke work is repeated inside Run A or Run B.
+- Decision: remove only the stale leading sample `elapsed +` from both shared admission sites. Keep
+  pre-smoke setup accounting in the standalone entry point, the conservative full-pass projection,
+  the 3,600-second post-pass reserve, self and outer deadlines, finite-value checks, source
+  authentication, privacy gates, and every fail-closed error unchanged.
+- Verification: existing boundary tests now distinguish 3,801 seconds from 3,799 seconds and fix the
+  standalone projected ceiling at 4,320 seconds. Targeted tests and scoped static checks pass. Exact
+  15-file tree `afd8909a798d30fa9314fe6568768bca68fbda14` passed its complete D-015 gate with pytest
+  538/538 but is historical and superseded. Restaged tree
+  `e298964891b214bfbf4dc06725f2cde3b3bd3f74` failed the unrelated nondeterministic runtime-equality
+  test with one failure and 537 passes. The minimal test-only correction passed focused 3/3
+  repeatedly, the complete manifest-runner file 12/12, Ruff check/format, and the scoped diff check.
+  Exact 16-file tree `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate
+  with pytest 538/538 in 63.84 seconds and every check recorded in D-015. These governance byte
+  changes require the fully restaged identical complete rerun and final red-team;
+  `complete_final_gate=PASS` remains unset.
+- Consequence: r13 remains terminal failed and cannot be retried or spliced. A fresh immutable
+  successor smoke is still required after the complete gates pass and may fail closed on its own
+  measured projection.
+- Reversal condition: restore sample elapsed time only if a future run contract again performs that
+  sample work inside the same full-run budget and the boundary tests are updated before compute.

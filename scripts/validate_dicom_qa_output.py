@@ -29,6 +29,12 @@ DATASET_CONTENT_CHUNK_BYTES: Final = 1024 * 1024
 HEX_40 = re.compile(r"[0-9a-f]{40}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 FAILURE_PHASES: Final = {"bundle", "selection", "processing", "output"}
+PERFORMANCE_SMOKE_FAILURE_PHASES: Final = {
+    "bundle",
+    "authentication",
+    "performance_smoke",
+    "output",
+}
 DATASET_VERSION: Final = 1
 DATASET_PAGE_SIZE: Final = 200
 KAGGLE_CLI_VERSION: Final = "Kaggle CLI 2.2.4"
@@ -2102,14 +2108,41 @@ def validate_failure_log(
         str(run_config["privacy"]["canary"]),
     )
     progress = events[1:-1]
-    expected_progress = _expected_progress_events(runner)
+    if events[:1] == [{"event": "dicom_qa_performance_smoke_started"}]:
+        started_event = "dicom_qa_performance_smoke_started"
+        failed_event = "dicom_qa_performance_smoke_failed"
+        failure_phases = PERFORMANCE_SMOKE_FAILURE_PHASES
+        allowed_progress_lengths = {
+            "bundle": {0},
+            "authentication": {0},
+            "performance_smoke": {0, 1, 2},
+            "output": {2},
+        }
+        expected_progress = [
+            {
+                "event": "dicom_qa_performance_smoke_progress",
+                "phase": "performance_smoke",
+                "code": code,
+            }
+            for code in ("start", "complete")
+        ]
+    else:
+        started_event = "dicom_qa_started"
+        failed_event = "dicom_qa_failed"
+        failure_phases = FAILURE_PHASES
+        allowed_progress_lengths = None
+        expected_progress = _expected_progress_events(runner)
     if (
         len(events) < 2
-        or events[0] != {"event": "dicom_qa_started"}
+        or events[0] != {"event": started_event}
         or set(events[-1]) != {"event", "phase", "code"}
-        or events[-1]["event"] != "dicom_qa_failed"
-        or events[-1]["phase"] not in FAILURE_PHASES
+        or events[-1]["event"] != failed_event
+        or events[-1]["phase"] not in failure_phases
         or progress != expected_progress[: len(progress)]
+        or (
+            allowed_progress_lengths is not None
+            and len(progress) not in allowed_progress_lengths[events[-1]["phase"]]
+        )
     ):
         raise OutputValidationError("failure_log_completion_invalid")
     return events[-1]["phase"], events[-1]["code"]

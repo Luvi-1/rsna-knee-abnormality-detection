@@ -1626,6 +1626,93 @@ def test_progress_log_requires_an_exact_safe_prefix(tmp_path: Path) -> None:
             validator.validate_failure_log(root, run_config, runner)
 
 
+def test_performance_smoke_failure_log_uses_its_bound_event_protocol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    runner = _runner()
+    run_config = {"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}}
+    root = tmp_path / "failure"
+    root.mkdir()
+    log = root / "session.log"
+    started = {"event": "dicom_qa_performance_smoke_started"}
+    progress = [
+        {
+            "event": "dicom_qa_performance_smoke_progress",
+            "phase": "performance_smoke",
+            "code": code,
+        }
+        for code in ("start", "complete")
+    ]
+    failed = {
+        "event": "dicom_qa_performance_smoke_failed",
+        "phase": "performance_smoke",
+        "code": "self_deadline_exceeded",
+    }
+
+    def write(events: list[dict[str, str]]) -> None:
+        log.write_bytes(b"".join(packager._canonical_json_bytes(event) for event in events))
+
+    for length in range(3):
+        write([started, *progress[:length], failed])
+        assert validator.validate_failure_log(root, run_config, runner) == (
+            "performance_smoke",
+            "self_deadline_exceeded",
+        )
+    for phase, length in (("bundle", 0), ("authentication", 0), ("output", 2)):
+        write([started, *progress[:length], {**failed, "phase": phase}])
+        assert validator.validate_failure_log(root, run_config, runner) == (
+            phase,
+            "self_deadline_exceeded",
+        )
+
+    write([started, progress[0], failed])
+    monkeypatch.setattr(
+        validator,
+        "load_verified_policy",
+        lambda *_args, **_kwargs: (run_config, runner, {}),
+    )
+    result = validator.main(
+        [
+            "--run-config",
+            str(tmp_path / "run-config.json"),
+            "--expected-commit",
+            COMMIT,
+            "--expected-bundle",
+            "b" * 64,
+            "--failure-log-dir",
+            str(root),
+        ]
+    )
+    assert result == 0
+    assert capsys.readouterr().out == (
+        "dicom_qa_output_validation=PASS mode=failure "
+        "phase=performance_smoke code=self_deadline_exceeded\n"
+    )
+    invalid = (
+        [started, progress[1], failed],
+        [started, *progress, progress[-1], failed],
+        [started, progress[0], {**failed, "event": "dicom_qa_failed"}],
+        [started, progress[0], {**failed, "phase": "processing"}],
+        *(
+            [started, *progress[:length], {**failed, "phase": phase}]
+            for phase, length in (
+                ("bundle", 1),
+                ("bundle", 2),
+                ("authentication", 1),
+                ("authentication", 2),
+                ("output", 0),
+                ("output", 1),
+            )
+        ),
+    )
+    for events in invalid:
+        write(events)
+        with pytest.raises(validator.OutputValidationError, match="failure_log_completion_invalid"):
+            validator.validate_failure_log(root, run_config, runner)
+
+
 def test_duplicate_json_keys_and_noncanonical_policy_are_rejected() -> None:
     runner = _runner()
     with pytest.raises(runner.SafeRunError, match="sanitized_summary_invalid"):

@@ -462,7 +462,10 @@ def test_runner_audits_every_file_and_keeps_private_rows_private(tmp_path: Path)
                 "SELECT study_key,patient_group_key FROM study_manifest ORDER BY study_key"
             ).fetchall(),
         }
-    assert rerun_summary["aggregates"] == summary["aggregates"]
+    runner_contract._validate_exact_aggregates(rerun_summary["aggregates"], run_config=run_payload)
+    assert {
+        key: value for key, value in rerun_summary["aggregates"].items() if key != "runtime"
+    } == {key: value for key, value in summary["aggregates"].items() if key != "runtime"}
     assert second_private_state == {
         "table_hashes": first_private_state["table_hashes"],
         "study_keys": first_private_state["study_keys"],
