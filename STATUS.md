@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-08-22 (Chunk 5 r15 loop-breaker)
+Updated: 2026-08-23 (Chunk 5 r15 loop-breaker, live-certified core)
 
 ## Current r15 terminal checkpoint and certified-core policy
 
@@ -16,13 +16,17 @@ arbitrary splicing remains prohibited. The certifier
 (`tests/test_core_execution_certificate.py`, 7/7 PASS offline) exist. Under decision **D-037**,
 workflow authentication now loads the finalizer from the exact file sealed in the verified r15
 bundle rather than the mutable working tree; the frozen hash remains absolute and all temporary
-adapter-bypass scars were removed. Focused checks are 63/63 PASS, full pytest is 599 passes with
-exactly three known sandbox-environment failures (offline wheel cache and process-pool semaphores),
-Ruff/format and both strict mypy scopes PASS, and an offline certificate build/verify round-trip
-PASS with payload digest d455640adfd5c0173a524f997a85ac8583e1da678eed399f687a61e77e2830c1.
-Live end-to-end certification, the single authorized mount-layout diagnostic, the identity-driven
-resolver, and the adapter freeze/bundle remain pending because host network access is still
-unavailable. Chunk 5 is not passed. Submission, merge, publication,
+adapter-bypass scars were removed. Focused checks are now 77/77 PASS, full pytest is 575/575
+exit 0 (zero failures), Ruff check/format and both strict mypy scopes PASS (25 source files,
+3 trust-boundary files). The live end-to-end core certification PASSED at
+2026-08-22T22:08:33Z with payload f7736e681f54dd9d2ae1ad7cd75a3a1208f7efec4967f6d3bdae99e81cbfa55d
+and offline verify PASS; the certificate artifact is retained under
+artifacts/dicom-qa-core-certificates/. The single authorized bounded mount-layout diagnostic
+completed, proving modern Kaggle mounts inputs as competitions/<slug>,
+datasets/<owner>/<slug>, and notebooks/<owner>/<slug>. Commit 0a5fc0e fixed certifier live-fetch
+pattern matching; commit 1bdcc01 extended the resolver to all proven type-prefixed forms with
+duplicate/symlink rejection and full regression coverage. The QA adapter freeze/bundle is the
+next step. Chunk 5 is not passed. Submission, merge, publication,
 and Chunk 6 remain blocked pending explicit human approval.
 
 ## Historical r14 terminal checkpoint

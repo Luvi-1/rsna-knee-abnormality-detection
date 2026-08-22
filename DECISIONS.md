@@ -1085,3 +1085,29 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: require working-tree loading only if the project later proves that sealed
   bundle siblings cannot represent deployed producer code, and replace this rule with an equally
   hash-pinned explicit source contract.
+
+## D-038 - Bind the QA adapter to the live-certified r15 core certificate and proven mount forms
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: After the r15 core passed live end-to-end certification but review-plan still failed
+  on input discovery, how should the QA adapter consume the certified core without weakening any
+  provenance gate or rerunning A/B?
+- Evidence: live certification PASSED at 2026-08-22T22:08:33Z with payload
+  f7736e681f54dd9d2ae1ad7cd75a3a1208f7efec4967f6d3bdae99e81cbfa55d and offline verify PASS. The
+  single authorized mount-layout diagnostic proved Kaggle mounts inputs under type-prefixed
+  parents (competitions/<slug>, datasets/<owner>/<slug>, notebooks/<owner>/<slug>); no legacy
+  direct or qualified form was observed at the expected depths.
+- Decision: the QA adapter resolver searches exactly these proven forms plus the two legacy forms,
+  authenticates candidates by exact marker filenames, rejects duplicates across all four forms,
+  rejects symlinks, and preserves bounded entry-count caps. The adapter is bound to the core
+  certificate; it may be corrected without rerunning the certified core provided every consumed
+  identity remains valid. No core semantics changed; Run A/B/comparison were not rerun.
+- Verification: complete local gate on HEAD (1bdcc01): Ruff check/format PASS (127 files),
+  strict mypy src PASS (25 files), strict mypy trust-boundary PASS (3 files),
+  focused certificate/identity suites 77/77 PASS, full pytest 575/575 exit 0,
+  sensitive-file guard PASS.
+- Consequence: adapter freeze/bundle may proceed against this certified core; Chunk 5 remains
+  technically incomplete until the adapter-only execution chain reaches human visual QA.
+- Reversal condition: if a future diagnostic proves additional mount forms or invalidates any
+  bound identity, re-open discovery under a new bounded authorization before changing resolver code.
