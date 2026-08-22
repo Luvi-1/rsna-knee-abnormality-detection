@@ -4,7 +4,10 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import sqlite3
+import stat
+import textwrap
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -307,3 +310,46 @@ def test_tampered_comparison_proof_is_rejected(certificate: SimpleNamespace) -> 
             live_authenticate=lambda chain: None,
             now=NOW,
         )
+
+
+def _write_stub_kaggle(path: Path, target_name: str, log_name: str) -> None:
+    path.write_text(
+        textwrap.dedent(
+            f"""
+            #!/usr/bin/env python3
+            import pathlib, sys
+            root = pathlib.Path(sys.argv[sys.argv.index("--path") + 1])
+            (root / "{log_name}").write_bytes(b"wrapper log\\n")
+            directory = root / "dicom-qa-output"
+            directory.mkdir(parents=True)
+            (directory / "{target_name}").write_bytes(b"payload")
+            """
+        ).lstrip()
+    )
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def test_default_fetch_accepts_target_with_single_wrapper_log(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub = tmp_path / "kaggle"
+    _write_stub_kaggle(stub, "sanitized_summary.json", "kernel.log")
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=os.pathsep)
+    payload = certifier._default_fetch_output(
+        "owner/slug",
+        r"^(dicom-qa-output/)?sanitized_summary\.json$",
+        1024,
+    )
+    assert payload == b"payload"
+
+
+def test_default_fetch_rejects_pattern_without_match(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub = tmp_path / "kaggle"
+    _write_stub_kaggle(stub, "other.json", "kernel.log")
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=os.pathsep)
+    with pytest.raises(certifier.CertificateError, match="kernel_output_layout_invalid"):
+        certifier._default_fetch_output("owner/slug", r"^sanitized\.json$", 1024)

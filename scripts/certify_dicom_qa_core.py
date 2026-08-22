@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -113,7 +114,8 @@ def _default_fetch_output(reference: str, pattern: str, maximum: int) -> bytes:
         if any(not path.is_dir() and not path.is_file() for path in entries):
             raise CertificateError("kernel_output_layout_invalid")
         files = [path for path in entries if path.is_file() and not path.is_symlink()]
-        targets = [path for path in files if path.name == Path(pattern).name]
+        target_match = re.compile(pattern)
+        targets = [path for path in files if target_match.fullmatch(path.name) is not None]
         logs = [path for path in files if path.suffix == ".log"]
         if len(targets) != 1 or len(logs) > 1 or len(files) != len(targets) + len(logs):
             raise CertificateError("kernel_output_layout_invalid")
