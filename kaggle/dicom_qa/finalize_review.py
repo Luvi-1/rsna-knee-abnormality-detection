@@ -2258,12 +2258,15 @@ def _bounded_children(directory: Path, limit: int) -> list[Path]:
 def _discover_bundle_inputs(input_root: Path) -> tuple[Path, Path, Path]:
     """Return base-bundle config, manifest, and runner paths from one mount root.
 
-    Kaggle may mount the private base dataset directly or beneath an owner directory.  The
-    search stays bounded to those two shallow forms and authenticates candidates by exact
-    marker filenames; cryptographic bundle validation remains in _verified_bundle.
+    Kaggle may mount the private base dataset directly, beneath an owner directory, or
+    beneath a type-prefixed datasets/<owner>/<slug> directory proven by the authorized r15
+    mount diagnostic. The search stays bounded to these shallow forms and authenticates
+    candidates by exact marker filenames; cryptographic bundle validation remains in
+    _verified_bundle.
     """
 
-    # ponytail: one-level search only; extend with forms proven by the authorized diagnostic.
+    # ponytail: bounded two-level search with type-prefixed forms; extend only with
+    # additional forms proven by an authorized diagnostic.
     try:
         if input_root.is_symlink() or not input_root.is_dir():
             raise ReviewFinalizationError("input_discovery_invalid")
@@ -2279,6 +2282,14 @@ def _discover_bundle_inputs(input_root: Path) -> tuple[Path, Path, Path]:
                 for child in _bounded_children(owner, MAX_DISCOVERY_OWNER_ENTRIES)
                 if _marker_bundle_root(child)
             )
+        datasets_parent = input_root / "datasets"
+        if not datasets_parent.is_symlink() and datasets_parent.is_dir():
+            for owner in _bounded_children(datasets_parent, MAX_DISCOVERY_TOP_LEVEL_ENTRIES):
+                candidates.extend(
+                    child
+                    for child in _bounded_children(owner, MAX_DISCOVERY_OWNER_ENTRIES)
+                    if _marker_bundle_root(child)
+                )
         resolved = sorted({candidate.resolve(strict=True) for candidate in candidates})
     except ReviewFinalizationError:
         raise
@@ -2302,12 +2313,16 @@ def _kernel_source_root(root: Path, kernel_ref: str) -> Path | None:
         or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,99}", slug) is None
     ):
         raise ReviewFinalizationError("input_discovery_invalid")
-    qualified_parent = root / owner
-    candidates = (root / slug, qualified_parent / slug)
+    candidates = (
+        root / "notebooks" / owner / slug,
+        root / "datasets" / owner / slug,
+        root / slug,
+        root / owner / slug,
+    )
     existing = [
         candidate for candidate in candidates if candidate.exists() or candidate.is_symlink()
     ]
-    if len(existing) > 1 or (existing and qualified_parent.is_symlink()):
+    if len(existing) > 1 or any(candidate.is_symlink() for candidate in existing):
         raise ReviewFinalizationError("input_discovery_invalid")
     return existing[0] if existing else None
 

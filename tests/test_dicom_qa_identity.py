@@ -92,6 +92,24 @@ def test_bundle_discovery_accepts_direct_and_qualified_mount_forms(
     )
 
 
+@pytest.mark.parametrize(
+    "bundle_parent",
+    ["datasets/owner", "datasets/owner/slug"],
+)
+def test_bundle_discovery_accepts_type_prefixed_mount_forms(
+    tmp_path: Path,
+    bundle_parent: str,
+) -> None:
+    input_root = tmp_path / "input"
+    bundle_root = input_root / bundle_parent
+    _write_bundle_fixture(bundle_root)
+    assert finalize_review._discover_bundle_inputs(input_root) == (
+        bundle_root / "run-config.json",
+        bundle_root / "bundle-manifest.json",
+        bundle_root / "qa_runner.py",
+    )
+
+
 def test_bundle_discovery_is_deterministic_beside_large_unrelated_tree(
     tmp_path: Path,
 ) -> None:
@@ -104,6 +122,26 @@ def test_bundle_discovery_is_deterministic_beside_large_unrelated_tree(
     (input_root / "README").write_bytes(b"ignored\n")
     results = [finalize_review._discover_bundle_inputs(input_root) for _ in range(2)]
     assert results[0] == results[1]
+
+
+def test_bundle_discovery_rejects_duplicate_across_direct_and_datasets_forms(
+    tmp_path: Path,
+) -> None:
+    input_root = tmp_path / "input"
+    _write_bundle_fixture(input_root / "bundle")
+    _write_bundle_fixture(input_root / "datasets/owner/bundle")
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._discover_bundle_inputs(input_root)
+
+
+def test_bundle_discovery_rejects_symlinked_datasets_parent(tmp_path: Path) -> None:
+    input_root = tmp_path / "input"
+    input_root.mkdir()
+    backing = tmp_path / "backing"
+    _write_bundle_fixture(backing / "owner/bundle")
+    (input_root / "datasets").symlink_to(backing, target_is_directory=True)
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._discover_bundle_inputs(input_root)
 
 
 @pytest.mark.parametrize(
@@ -170,6 +208,68 @@ def test_bundle_discovery_rejects_top_level_entry_limit(tmp_path: Path) -> None:
         (input_root / f"mount-{index:03d}").mkdir()
     with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
         finalize_review._discover_bundle_inputs(input_root)
+
+
+@pytest.mark.parametrize(
+    ("mount_parent", "expected_relative"),
+    [
+        ("", "slug"),
+        ("owner", "owner/slug"),
+        ("notebooks/owner", "notebooks/owner/slug"),
+        ("datasets/owner", "datasets/owner/slug"),
+    ],
+)
+def test_kernel_source_root_accepts_all_proven_mount_forms(
+    tmp_path: Path,
+    mount_parent: str,
+    expected_relative: str,
+) -> None:
+    input_root = tmp_path / "input"
+    source_root = input_root / mount_parent / "slug" if mount_parent else input_root / "slug"
+    source_root.mkdir(parents=True)
+    assert finalize_review._kernel_source_root(input_root, "owner/slug") == source_root
+
+
+def test_kernel_source_root_returns_none_for_missing_source(tmp_path: Path) -> None:
+    input_root = tmp_path / "input"
+    input_root.mkdir()
+    assert finalize_review._kernel_source_root(input_root, "owner/slug") is None
+
+
+def test_kernel_source_root_rejects_duplicate_direct_and_qualified(
+    tmp_path: Path,
+) -> None:
+    input_root = tmp_path / "input"
+    (input_root / "slug").mkdir(parents=True)
+    (input_root / "owner/slug").mkdir(parents=True)
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._kernel_source_root(input_root, "owner/slug")
+
+
+def test_kernel_source_root_rejects_duplicate_direct_and_type_prefixed(
+    tmp_path: Path,
+) -> None:
+    input_root = tmp_path / "input"
+    (input_root / "slug").mkdir(parents=True)
+    (input_root / "notebooks/owner/slug").mkdir(parents=True)
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._kernel_source_root(input_root, "owner/slug")
+
+
+def test_kernel_source_root_rejects_symlinked_source(tmp_path: Path) -> None:
+    input_root = tmp_path / "input"
+    input_root.mkdir()
+    backing = tmp_path / "backing"
+    backing.mkdir()
+    (backing / "slug").mkdir()
+    (input_root / "notebooks").mkdir()
+    (input_root / "notebooks/owner").mkdir()
+    (input_root / "notebooks/owner/slug").symlink_to(
+        backing / "slug",
+        target_is_directory=True,
+    )
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._kernel_source_root(input_root, "owner/slug")
 
 
 def test_bundle_discovery_is_invariant_to_filesystem_enumeration_order(
