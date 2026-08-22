@@ -2107,7 +2107,10 @@ def validate_failure_log(
         runner,
         str(run_config["privacy"]["canary"]),
     )
+    if len(events) < 2:
+        raise OutputValidationError("failure_log_completion_invalid")
     progress = events[1:-1]
+    terminal = events[-1]
     if events[:1] == [{"event": "dicom_qa_performance_smoke_started"}]:
         started_event = "dicom_qa_performance_smoke_started"
         failed_event = "dicom_qa_performance_smoke_failed"
@@ -2126,26 +2129,41 @@ def validate_failure_log(
             }
             for code in ("start", "complete")
         ]
+        terminal_keys = {"event", "phase", "code"}
+        terminal_phase = terminal.get("phase")
+    elif events[:1] == [{"event": "dicom_qa_review_started"}]:
+        started_event = "dicom_qa_review_started"
+        failed_event = "dicom_qa_review_failed"
+        terminal_phase = "review"
+        failure_phases = {terminal_phase}
+        expected_progress = _expected_progress_events(
+            runner,
+            sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+            event_name="dicom_qa_plan_progress",
+        )
+        allowed_progress_lengths = {terminal_phase: set(range(len(expected_progress) + 1))}
+        terminal_keys = {"event", "code"}
     else:
         started_event = "dicom_qa_started"
         failed_event = "dicom_qa_failed"
         failure_phases = FAILURE_PHASES
         allowed_progress_lengths = None
         expected_progress = _expected_progress_events(runner)
+        terminal_keys = {"event", "phase", "code"}
+        terminal_phase = terminal.get("phase")
     if (
-        len(events) < 2
-        or events[0] != {"event": started_event}
-        or set(events[-1]) != {"event", "phase", "code"}
-        or events[-1]["event"] != failed_event
-        or events[-1]["phase"] not in failure_phases
+        events[0] != {"event": started_event}
+        or set(terminal) != terminal_keys
+        or terminal["event"] != failed_event
+        or terminal_phase not in failure_phases
         or progress != expected_progress[: len(progress)]
         or (
             allowed_progress_lengths is not None
-            and len(progress) not in allowed_progress_lengths[events[-1]["phase"]]
+            and len(progress) not in allowed_progress_lengths[terminal_phase]
         )
     ):
         raise OutputValidationError("failure_log_completion_invalid")
-    return events[-1]["phase"], events[-1]["code"]
+    return terminal_phase, terminal["code"]
 
 
 def validate_local_output(

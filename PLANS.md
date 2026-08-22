@@ -3,6 +3,25 @@
 This file records the continuous sequence of work. A historical chunk can have useful deliverables
 while still requiring correction before cumulative merge. “Complete” below never means merged.
 
+## Current r14 terminal checkpoint
+
+R14 authenticated inputs, performance smoke, Run A, Run B, and deterministic comparison `PASS`.
+Review-plan v1 is terminal failed before cohort replay with safely validated
+`phase=review`, `code=input_discovery_invalid`. The recovery candidate adds the missing exact review
+failure protocol and supports only Kaggle's direct or collision-safe owner-qualified derived mount,
+requiring exactly one. Focused and complete DICOM-QA suites plus Ruff, format, mypy, and diff checks
+pass. Next: update governance, run the complete exact staged gate and independent red-team, create a
+new clean freeze and deterministic bundle, append a fresh registry successor, then repeat the
+immutable private chain. Do not splice r14, create v2, launch UI, claim human review, submit, or
+start Chunk 6.
+The latest official snapshot is `docs/competition_contract/2026-08-22T062926Z.md` with no material
+drift.
+The first complete D-015 gate passed on exact 13-file tree
+`b9cf3ab0b5494e1bc85f1cd498b1108d1e7f20b0` with pytest 539/539 and every recorded offline,
+static, configuration, contract, privacy, dependency, and inventory check. Release rule: only an
+identical complete gate and final red-team PASS on the fully restaged tree containing this paragraph,
+with no later byte change, fixes `complete_final_gate=PASS` and permits a new freeze.
+
 ## Current r13 terminal checkpoint
 
 Legacy Kaggle authentication was restored without credential exposure. Exact r13 performance-smoke
@@ -20,7 +39,7 @@ disclosure, and schema behavior remain correct. The minimal test-only correction
 `_validate_exact_aggregates` on the rerun, excludes only `runtime` from cross-run aggregate equality,
 and retains exact table-hash, study-key, QA-byte, and audit-key equality. Focused 3/3 passed
 repeatedly, the complete manifest-runner file passed 12/12, and Ruff check/format plus the scoped diff
-check pass. The current candidate is exactly 16 files: seven source/tests, eight governance files,
+check pass. The then-current r13 candidate was exactly 16 files: seven source/tests, eight governance files,
 and `docs/competition_contract/2026-08-21T200304Z.md`. Exact staged tree
 `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate: locked offline
 `uv` lock/sync; full pytest 538/538 in 63.84 seconds; isolated wheel build, offline install, and
@@ -74,10 +93,10 @@ Delivered evidence:
 - Rules, metric, schema, dates, notebook/runtime and submission limits, data interface, external
   assets, team/sharing constraints, licenses, and contradictions are recorded with conservative
   defaults.
-- The latest live refresh at `2026-08-21T20:03:04Z` used the official Kaggle MCP first. The
+- The latest live refresh at `2026-08-22T06:29:26Z` used the official Kaggle MCP first. The
   819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines, runtime, limits, entered
   state, and recorded Host clarification were unchanged with no material drift. Latest snapshot:
-  `docs/competition_contract/2026-08-21T200304Z.md`.
+  `docs/competition_contract/2026-08-22T062926Z.md`.
 - Host topic `733965` continues to permit compliant commercial LLM or external inference under
   the Rules, equal-access, and minimal-cost conditions and says report processing is not itself
   private sharing.
@@ -343,35 +362,29 @@ are not authorized by the current checkpoint and require a fresh post-smoke deci
   authenticated revalidation returns `phase=performance_smoke`,
   `code=throughput_projection_exceeds_budget`. This is terminal failure evidence, not permission to
   retry or launch Run A. The 15-file PASS and failed restaged tree are historical and superseded.
-  The first exact 16-file gate passed, but the fully restaged identical complete rerun and final
-  red-team remain pending.
+  The first exact 16-file gate and its later recovery requirements are historical and superseded by
+  the r14 terminal checkpoint above.
 - D-034 records the stale monolithic budget term exposed by that strict classification. The safe log
   has one progress event, proving the inner throughput gate failed. The standalone smoke no longer
   shares its sample work with a full run, so both admission sites now compare only projected full-pass
   time plus the unchanged 3,600-second reserve; pre-smoke setup accounting, deadlines, privacy, and
   source gates remain intact. Existing 3,801/3,799-second boundaries and the 4,320-second standalone
   ceiling pass targeted/static checks. Fresh successor smoke remains mandatory and may fail closed.
-- The checkpoint relay could not connect to Chrome. No new reviewer response or decision exists;
-  the standing Chunk 5 authorization is bounded by the latest smoke-only checkpoint and does not
-  authorize Run A.
+- Historical r13 note: the checkpoint relay could not connect to Chrome, and the then-current
+  smoke-only checkpoint did not authorize Run A. The r14 authorization and outcome above supersede
+  that operational boundary.
 
 Exit evidence still required:
 
-1. Preserve r13 as terminal failed historical evidence; never resume, rerun, mutate, delete, or
-   splice it. Run A and all downstream stages remain `not_started`.
-2. Fully restage exactly the current 16-file candidate—seven source/tests, eight governance files,
-   and the latest snapshot—then immediately rerun the identical complete D-015 gate and final red-
-   team. Exact tree `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed the first complete 16-file
-   gate, but this eight-file governance reconciliation changes bytes. The 15-file PASS on
-   tree `afd8909a798d30fa9314fe6568768bca68fbda14` and the failed restaged tree
-   `e298964891b214bfbf4dc06725f2cde3b3bd3f74` are historical and superseded. Only PASS with no
-   later byte change fixes `complete_final_gate=PASS`; any failure invalidates the first-pass final-
-   gate evidence and requires this record to be corrected. The older 10-file and 24-file results
-   also remain historical and superseded.
-3. Only after that fresh gate and final red-team PASS, complete a clean freeze, deterministic bundle,
+1. Preserve r14 and every earlier failed chain as terminal historical evidence; never resume,
+   rerun, mutate, delete, or splice them.
+2. Fully restage the current 13-file r14 recovery candidate and rerun the identical complete D-015
+   gate plus final red-team. Only PASS on the tree containing this reconciliation, with no later
+   byte change, fixes `complete_final_gate=PASS`.
+3. Only after that exact PASS, complete a clean freeze, deterministic bundle,
    authenticated identity-absence proof, and append-only registry preparation, then run one fresh
    private/offline/version-bound successor smoke under every existing D-030 gate. No historical
    result substitutes for it.
-4. Authenticate and validate the successor smoke's terminal state and allowlisted output, then stop
-   and record a fresh decision. Do not start Run A, Run B, comparison, review-plan, UI, human review,
-   finalization, ontology, folds, labels, model work, Chunk 6, or submission under this checkpoint.
+4. Authenticate and validate every successor stage before its dependent stage, and stop at the
+   human-only pixel QA boundary. Do not start ontology, folds, labels, model work, Chunk 6, or
+   submission.

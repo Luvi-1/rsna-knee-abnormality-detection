@@ -2228,15 +2228,34 @@ def _discover_optional_one(root: Path, basename: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def _kernel_source_root(root: Path, kernel_ref: str) -> Path | None:
+    owner, separator, slug = kernel_ref.partition("/")
+    if (
+        separator != "/"
+        or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}", owner) is None
+        or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,99}", slug) is None
+    ):
+        raise ReviewFinalizationError("input_discovery_invalid")
+    qualified_parent = root / owner
+    candidates = (root / slug, qualified_parent / slug)
+    existing = [
+        candidate for candidate in candidates if candidate.exists() or candidate.is_symlink()
+    ]
+    if len(existing) > 1 or (existing and qualified_parent.is_symlink()):
+        raise ReviewFinalizationError("input_discovery_invalid")
+    return existing[0] if existing else None
+
+
 def _discover_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path:
-    slug = kernel_ref.partition("/")[2]
-    return _discover_one(root / slug, basename)
+    source_root = _kernel_source_root(root, kernel_ref)
+    if source_root is None:
+        raise ReviewFinalizationError("input_discovery_invalid")
+    return _discover_one(source_root, basename)
 
 
 def _discover_optional_from_kernel(root: Path, basename: str, kernel_ref: str) -> Path | None:
-    slug = kernel_ref.partition("/")[2]
-    source_root = root / slug
-    if not source_root.exists() and not source_root.is_symlink():
+    source_root = _kernel_source_root(root, kernel_ref)
+    if source_root is None:
         return None
     return _discover_optional_one(source_root, basename)
 

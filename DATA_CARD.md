@@ -1,10 +1,26 @@
 # Data Card
 
-Status: `audit-0002-manifest-remediation` remains historical scientific evidence only; the sanitized
-audit-0003 successor supplied the authenticated private source root. Exact r13 input authentication
-passed, but performance-smoke version 1 is terminal `ERROR` with
-`throughput_projection_exceeds_budget`. R13 is terminal failed, every downstream stage is
-`not_started`, and Chunk 5 has not passed.
+Status: the sanitized audit-0003 / `manifest-v2` source root remains authenticated. R14 inputs,
+smoke, two complete full-data runs, and deterministic comparison passed; review-plan is terminal
+failed before replay with `input_discovery_invalid`. No pixels, identifiers, or private artifacts
+left Kaggle. Chunk 5 has not passed.
+
+## Current r14 terminal identity
+
+R14 binds freeze `dc63e615431af2f7e29b98579e534fe8c06302b4`, its deterministic bundle, audit-0003,
+`manifest-v2`, and `dicom-model-v1`. Run A completed in 7h21m20s, Run B in 6h36m06s, and the exact
+comparison validator passed. Review-plan v1 failed before cohort replay. Its bounded no-match log
+now validates against the exact review protocol as `phase=review`, `code=input_discovery_invalid`.
+The recovery accepts only exact direct or owner-qualified Kaggle source mounts and preserves every
+privacy, provenance, ambiguity, and bounded-discovery rejection. R14 is terminal and cannot be
+resumed or spliced; a new fully gated successor is required.
+The latest official contract snapshot is `docs/competition_contract/2026-08-22T062926Z.md`; no
+material drift changes the data boundary.
+Exact staged tree `b9cf3ab0b5494e1bc85f1cd498b1108d1e7f20b0` passed the first complete 13-file
+gate with pytest 539/539 and every offline build, static, contract, privacy, dependency, and
+inventory check. Release rule: only an identical complete rerun and final red-team PASS on the fully
+restaged tree containing these documentation bytes, with no later byte change, fixes
+`complete_final_gate=PASS` and permits a new freeze.
 
 ## Current r13 terminal identity
 
@@ -25,7 +41,7 @@ disclosure, and schema contracts remain correct. The minimal test-only correctio
 `_validate_exact_aggregates` on the rerun, excludes only `runtime` from cross-run aggregate equality,
 and retains exact table-hash, study-key, QA-byte, and audit-key equality. Focused 3/3 passed
 repeatedly, the complete manifest-runner file passed 12/12, and Ruff check/format plus the scoped diff
-check pass. The current candidate is exactly 16 files: seven source/tests, eight governance files,
+check pass. The then-current r13 candidate was exactly 16 files: seven source/tests, eight governance files,
 and `docs/competition_contract/2026-08-21T200304Z.md`. Exact staged tree
 `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate: locked offline
 `uv` lock/sync; full pytest 538/538 in 63.84 seconds; isolated wheel build, offline install, and
@@ -46,8 +62,8 @@ validation and a fresh decision.
 ## Source, scope, and license
 
 - Competition: RSNA Knee Abnormality Detection.
-- Latest live contract snapshot: `docs/competition_contract/2026-08-21T200304Z.md`, retrieved
-  `2026-08-21T20:03:04Z`, with no material drift. The account is entered; identity-verification state
+- Latest live contract snapshot: `docs/competition_contract/2026-08-22T062926Z.md`, retrieved
+  `2026-08-22T06:29:26Z`, with no material drift. The account is entered; identity-verification state
   is unavailable through the read-only official interface and remains fail closed.
 - Canonical live inventory: 569.76 GB, 819,640 files, including 819,635 DICOM files and five CSV
   metadata files. These are official competition-level inventory facts, not released private audit
@@ -154,23 +170,15 @@ future safe aggregate comparison must meet the joint disclosure policy and minim
 
 ## Next evidence required
 
-`dicom-model-v1` has local and partial private implementation evidence, but it is not promoted data
-readiness. The current authenticated evidence stops at r13 input plus terminal performance-smoke
-failure. The smoke producer uses a distinct closed start/progress/failure protocol, but the generic
-consumer previously accepted only full-run events and phases. D-033 binds validation to the first
-exact start event, then requires that protocol's exact terminal event, phase allowlist, ordered
-progress prefix, and legal prefix length; hybrid, reordered, extra, and wrong-phase logs fail closed.
-That strict classification exposes the separate D-034 runtime defect: the standalone smoke retained
-the old monolithic kernel's `elapsed + projected_full_pass + reserve` formula even though Run A and
-Run B no longer repeat the sample work. The minimal correction removes only the stale leading term at
-both admission sites. It preserves pre-smoke setup accounting, the conservative projection,
-3,600-second reserve, deadlines, and all privacy/source gates. Existing 3,801/3,799-second boundaries,
-the 4,320-second standalone ceiling, and scoped static checks pass. The 15-file PASS is historical,
-the restaged tree failed its mandatory rerun, and the first exact 16-file gate passed. These
-governance bytes require the fully restaged identical complete rerun and final red-team;
-`complete_final_gate=PASS` remains unset. That rerun plus clean freeze, deterministic bundle,
-authenticated identity-absence proof, and append-only
-registry preparation authorize only a fresh successor smoke. Historical evidence follows.
+`dicom-model-v1` is not promoted data readiness. R14 authenticated inputs, smoke, two independent
+full-data runs, and deterministic comparison, then failed review-plan before replay. D-035 binds the
+consumer to the exact review producer protocol and accepts only one exact direct or owner-qualified
+derived Kaggle mount while preserving every bounded-discovery and privacy/provenance rejection.
+The complete 13-file gate passed twice before this reconciliation, and the source-focused red-team
+passed 190/190 with no code P0/P1; it blocked only stale current-state wording. The fully restaged
+tree containing this correction must pass the identical complete gate and final red-team with no
+later byte change. Only then may a clean immutable successor repeat the chain; historical evidence
+must not be spliced. Historical evidence follows.
 
 D-026 passed its complete exact-set gate with pytest 528/528 and produced iteration-8
 freeze `4958c4a` and immutable bundle `09502a...`. Its private/offline/version-bound inputs,

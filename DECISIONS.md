@@ -681,9 +681,9 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   chain. The 15-file PASS and failed restaged tree are historical and superseded. The first 16-file
   complete gate passed, but no freeze or smoke may proceed before the fully restaged identical rerun
   and final red-team pass with no later byte change.
-- Reviewer state: the checkpoint relay could not connect to Chrome, so no new reviewer response or
-  decision exists. The standing Chunk 5 authorization is now bounded by the latest smoke-only
-  checkpoint and does not authorize Run A.
+- Historical reviewer state: the checkpoint relay could not connect to Chrome, and the then-current
+  smoke-only checkpoint did not authorize Run A. The later r14 authorization and outcome supersede
+  that operational boundary.
 - Consequence: Chunk 5 remains not passed. Comparison, review-plan materialization, UI/session
   creation, human review, and finalization remain blocked until the D-027 replacement chain reaches
   and validates each gate in order.
@@ -982,3 +982,34 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   measured projection.
 - Reversal condition: restore sample elapsed time only if a future run contract again performs that
   sample work inside the same full-run budget and the boundary tests are updated before compute.
+
+## D-035 - Bind review failures and both official Kaggle mount forms
+
+- Date: 2026-08-22
+- Owner: Luvi-1 and Codex
+- Question: How should the r14 review-plan failure be classified and how should authenticated
+  notebook-output sources be found without reopening global input traversal?
+- Evidence: r14 inputs, smoke, Run A, Run B, and comparison authenticated `PASS`; review-plan v1 was
+  stably terminal `ERROR`. The frozen workflow validator returned `kernel_status_invalid`, and the
+  frozen failure consumer rejected the producer's exact review start/progress/failure protocol.
+  After the smallest consumer correction, the retained no-match log validates as
+  `phase=review`, `code=input_discovery_invalid`. The producer failed before cohort replay. Official
+  Kaggle supports direct `<slug>` mounts and collision-safe `<owner>/<slug>` mounts, while the
+  frozen helper accepted only the first. Snapshot `2026-08-22T062926Z` records no material drift.
+- Decision: extend the shared failure validator with the exact review producer state machine and
+  fixed `review` phase. Resolve each derived kernel source only through the exact direct or fully
+  qualified mount, require exactly one, and preserve bounded depth, entry caps, symlink/file/type,
+  duplicate, and counterfeit-source rejection. Add no broad scan, dependency, fallback heuristic,
+  or version-2 repair.
+- Verification: focused producer/consumer and automatic-discovery tests pass; both complete DICOM-QA
+  identity/packaging files pass. Exact 13-file staged tree
+  `b9cf3ab0b5494e1bc85f1cd498b1108d1e7f20b0` passed its first complete D-015 gate with pytest
+  539/539, offline build/install/import, Ruff, format, strict mypy, config/submission,
+  contract/schema/no-drift, privacy/secrets, zero-vulnerability dependency audit, inventory, and
+  residue checks. Release rule: only an identical complete rerun and final red-team PASS on the
+  fully restaged tree containing these governance bytes, with no later byte change, fixes
+  `complete_final_gate=PASS` and permits a new freeze/bundle or append-only successor.
+- Consequence: r14 is terminal failed and cannot be resumed or spliced. Human QA remains
+  `not_started`; Chunk 5 is not passed.
+- Reversal condition: remove the qualified form only if Kaggle guarantees direct mounts for all
+  attached notebook outputs and a target-runtime regression proves that guarantee.

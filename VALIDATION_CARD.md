@@ -1,10 +1,25 @@
 # Validation Card
 
-Hard-group version: `protected-groups-v2`; `audit-0002-manifest-remediation` remains historical
-scientific evidence only. The sanitized audit-0003 successor supplied the authenticated private
-source root. R13 is terminal failed at performance smoke and cannot be resumed or spliced.
+Hard-group version: `protected-groups-v2`; audit-0003 / `manifest-v2` remains the authenticated
+private source root. R14 passed inputs, smoke, two full runs, and exact comparison, then failed at
+review-plan before cohort replay. It cannot be resumed or spliced.
 
 Fold version: `unassigned`; no folds exist.
+
+## Current r14 terminal checkpoint
+
+Run A and Run B independently processed the full authorized training set and passed authenticated
+output validation. Their deterministic comparison passed. Review-plan v1 was stably terminal
+`ERROR`; the corrected producer-bound failure validator safely returns `phase=review`,
+`code=input_discovery_invalid`. No visual QA occurred. The recovery candidate recognizes the exact
+review event state machine and only Kaggle's exact direct/owner-qualified derived source roots,
+requiring one unambiguous root. Focused and complete DICOM-QA tests and scoped static checks pass.
+The official `2026-08-22T062926Z` snapshot records no material contract drift.
+Exact staged tree `b9cf3ab0b5494e1bc85f1cd498b1108d1e7f20b0` passed the first complete 13-file
+D-015 gate with 539/539 tests and the full offline, static, configuration, contract, privacy,
+dependency, and inventory suite. Release rule: only an identical complete rerun and final red-team
+PASS on the fully restaged tree containing these governance bytes, with no later byte change, fixes
+`complete_final_gate=PASS` and permits a new freeze.
 
 ## Current r13 terminal checkpoint
 
@@ -24,7 +39,7 @@ disclosure, and schema behavior remain correct. The minimal test-only correction
 `_validate_exact_aggregates` on the rerun, excludes only `runtime` from cross-run aggregate equality,
 and retains exact table-hash, study-key, QA-byte, and audit-key equality. Focused 3/3 passed
 repeatedly, the complete manifest-runner file passed 12/12, and Ruff check/format plus the scoped diff
-check pass. The current candidate is exactly 16 files: seven source/tests, eight governance files,
+check pass. The then-current r13 candidate was exactly 16 files: seven source/tests, eight governance files,
 and `docs/competition_contract/2026-08-21T200304Z.md`. Exact staged tree
 `22c80aaa8f30d47a21e1a43fc3e945ab831c79ea` passed its first complete D-015 gate: locked offline
 `uv` lock/sync; full pytest 538/538 in 63.84 seconds; isolated wheel build, offline install, and
@@ -51,10 +66,10 @@ validation and a fresh decision.
   one negative for every target and fail closed otherwise.
 - No threshold, transform, fold, label rule, calibration, or ensemble weight may be fit on
   validation rows.
-- The live contract refreshed through the official Kaggle MCP at `2026-08-21T20:03:04Z`. The
+- The live contract refreshed through the official Kaggle MCP at `2026-08-22T06:29:26Z`. The
   819,640-file / 819,635-DICOM / five-CSV aggregate inventory, deadlines, runtime, limits, entered
   state, and recorded Host clarification were unchanged with no material drift. Latest snapshot:
-  `docs/competition_contract/2026-08-21T200304Z.md`. Identity-verification state is unavailable
+  `docs/competition_contract/2026-08-22T062926Z.md`. Identity-verification state is unavailable
   through the read-only official interface and remains fail closed, not known incomplete.
 - Host topic `733965` permits compliant commercial LLM or external inference under the Rules,
   equal-access, and minimal-cost conditions and clarifies that report processing is not itself

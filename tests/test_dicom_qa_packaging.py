@@ -1713,6 +1713,42 @@ def test_performance_smoke_failure_log_uses_its_bound_event_protocol(
             validator.validate_failure_log(root, run_config, runner)
 
 
+def test_review_failure_log_uses_its_bound_event_protocol(tmp_path: Path) -> None:
+    runner = _runner()
+    run_config = {"privacy": {"canary": "RSNA_PRIVATE_CANARY_TEST"}}
+    root = tmp_path / "failure"
+    root.mkdir()
+    log = root / "session.log"
+    started = {"event": "dicom_qa_review_started"}
+    progress = validator._expected_progress_events(
+        runner,
+        sequence_attribute="PLAN_PROGRESS_EVENT_SEQUENCE",
+        event_name="dicom_qa_plan_progress",
+    )
+    failed = {"event": "dicom_qa_review_failed", "code": "input_discovery_invalid"}
+
+    def write(events: list[dict[str, str]]) -> None:
+        log.write_bytes(b"".join(packager._canonical_json_bytes(event) for event in events))
+
+    for length in range(len(progress) + 1):
+        write([started, *progress[:length], failed])
+        assert validator.validate_failure_log(root, run_config, runner) == (
+            "review",
+            "input_discovery_invalid",
+        )
+
+    invalid = (
+        [started, progress[1], failed],
+        [started, *progress, progress[-1], failed],
+        [started, {**failed, "event": "dicom_qa_failed"}],
+        [started, {**failed, "phase": "review"}],
+    )
+    for events in invalid:
+        write(events)
+        with pytest.raises(validator.OutputValidationError, match="failure_log_completion_invalid"):
+            validator.validate_failure_log(root, run_config, runner)
+
+
 def test_duplicate_json_keys_and_noncanonical_policy_are_rejected() -> None:
     runner = _runner()
     with pytest.raises(runner.SafeRunError, match="sanitized_summary_invalid"):

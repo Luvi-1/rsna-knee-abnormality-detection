@@ -829,9 +829,10 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
         finalize_review._canonical_json_bytes({"fixture": True}),
     )
     _write_private(bundle_root / "qa_runner.py", b"# fixture\n")
-    run_a_root = input_root / refs["run_a"].partition("/")[2] / "output"
+    owner = refs["run_a"].partition("/")[0]
+    run_a_root = input_root / owner / refs["run_a"].partition("/")[2] / "output"
     comparison_root = input_root / refs["comparison"].partition("/")[2] / "output"
-    smoke_root = input_root / refs["performance_smoke"].partition("/")[2] / "output"
+    smoke_root = input_root / owner / refs["performance_smoke"].partition("/")[2] / "output"
     for path in (
         run_a_root / "private_full_run_manifest.jsonl",
         run_a_root / "private_full_run_metrics.json",
@@ -861,6 +862,12 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
         smoke_root / "sanitized_performance_smoke.json"
     )
 
+    ambiguous_run_a_mount = input_root / refs["run_a"].partition("/")[2]
+    ambiguous_run_a_mount.mkdir()
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._automatic_args()
+    ambiguous_run_a_mount.rmdir()
+
     duplicate = run_a_root.parent / "duplicate/private_full_run_manifest.jsonl"
     _write_private(duplicate, b"duplicate\n")
     with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
@@ -876,7 +883,7 @@ def test_automatic_discovery_materializes_then_finalizes_review_plan_outputs(
         finalize_review._automatic_args()
     review_session_mount.unlink()
 
-    review_plan_root = input_root / refs["review_plan"].partition("/")[2] / "output"
+    review_plan_root = input_root / owner / refs["review_plan"].partition("/")[2] / "output"
     review_session_root = input_root / refs["review_session"].partition("/")[2] / "output"
     for path in (
         review_plan_root / "private_case_index.json",
