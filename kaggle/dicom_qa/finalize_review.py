@@ -38,6 +38,9 @@ MAX_PRIVATE_ARTIFACT_FILES: Final = 20_000
 MAX_PRIVATE_ARTIFACT_BYTES: Final = 8 * 1024**3
 REVIEW_PLAN_BASENAME: Final = "private_review_plan.json"
 REVIEW_LEDGER_BASENAME: Final = "completed_review_ledger.json"
+BUNDLE_MARKER_BASENAMES: Final = ("bundle-manifest.json", "qa_runner.py", "run-config.json")
+MAX_DISCOVERY_TOP_LEVEL_ENTRIES: Final = 256
+MAX_DISCOVERY_OWNER_ENTRIES: Final = 4096
 REVIEW_PROTOCOL_VERSION: Final = "private-dicom-qa-human-review-v2"
 REVIEW_INSTRUCTIONS_VERSION: Final = "private-dicom-qa-review-instructions-v2"
 QA_COHORT_SELECTION_VERSION: Final = "qa-cohort-selection-v3"
@@ -2228,6 +2231,69 @@ def _discover_optional_one(root: Path, basename: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def _marker_bundle_root(directory: Path) -> bool:
+    try:
+        return (
+            not directory.is_symlink()
+            and directory.is_dir()
+            and all(
+                not (directory / basename).is_symlink() and (directory / basename).is_file()
+                for basename in BUNDLE_MARKER_BASENAMES
+            )
+        )
+    except OSError:
+        return False
+
+
+def _bounded_children(directory: Path, limit: int) -> list[Path]:
+    try:
+        children = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError as error:
+        raise ReviewFinalizationError("input_discovery_invalid") from error
+    if len(children) > limit:
+        raise ReviewFinalizationError("input_discovery_invalid")
+    return children
+
+
+def _discover_bundle_inputs(input_root: Path) -> tuple[Path, Path, Path]:
+    """Return base-bundle config, manifest, and runner paths from one mount root.
+
+    Kaggle may mount the private base dataset directly or beneath an owner directory.  The
+    search stays bounded to those two shallow forms and authenticates candidates by exact
+    marker filenames; cryptographic bundle validation remains in _verified_bundle.
+    """
+
+    # ponytail: one-level search only; extend with forms proven by the authorized diagnostic.
+    try:
+        if input_root.is_symlink() or not input_root.is_dir():
+            raise ReviewFinalizationError("input_discovery_invalid")
+        candidates: list[Path] = []
+        for owner in _bounded_children(input_root, MAX_DISCOVERY_TOP_LEVEL_ENTRIES):
+            if _marker_bundle_root(owner):
+                candidates.append(owner)
+                continue
+            if owner.is_symlink() or not owner.is_dir():
+                continue
+            candidates.extend(
+                child
+                for child in _bounded_children(owner, MAX_DISCOVERY_OWNER_ENTRIES)
+                if _marker_bundle_root(child)
+            )
+        resolved = sorted({candidate.resolve(strict=True) for candidate in candidates})
+    except ReviewFinalizationError:
+        raise
+    except OSError as error:
+        raise ReviewFinalizationError("input_discovery_invalid") from error
+    if len(resolved) != 1:
+        raise ReviewFinalizationError("input_discovery_invalid")
+    bundle_root = resolved[0]
+    return (
+        bundle_root / "run-config.json",
+        bundle_root / "bundle-manifest.json",
+        bundle_root / "qa_runner.py",
+    )
+
+
 def _kernel_source_root(root: Path, kernel_ref: str) -> Path | None:
     owner, separator, slug = kernel_ref.partition("/")
     if (
@@ -2263,11 +2329,7 @@ def _discover_optional_from_kernel(root: Path, basename: str, kernel_ref: str) -
 def _automatic_args() -> argparse.Namespace:
     input_root = Path(os.environ.get("KAGGLE_INPUT_ROOT", "/kaggle/input"))
     working_root = Path(os.environ.get("KAGGLE_WORKING_ROOT", "/kaggle/working"))
-    manifest = _discover_one(input_root, "bundle-manifest.json")
-    run_config = _discover_one(input_root, "run-config.json")
-    runner = _discover_one(input_root, "qa_runner.py")
-    if manifest.parent != run_config.parent or manifest.parent != runner.parent:
-        raise ReviewFinalizationError("input_discovery_invalid")
+    run_config, manifest, runner = _discover_bundle_inputs(input_root)
     run_config_value = _json_object(
         _read_bounded(run_config, 2 * 1024**2, "run_config_invalid"), "run_config_invalid"
     )

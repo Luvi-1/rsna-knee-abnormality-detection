@@ -1,8 +1,31 @@
 # Status
 
-Updated: 2026-08-22 (Chunk 5 r14 review-plan recovery)
+Updated: 2026-08-22 (Chunk 5 r15 loop-breaker)
 
-## Current r14 terminal checkpoint
+## Current r15 terminal checkpoint and certified-core policy
+
+R15 is terminal `failed` at review-plan (`phase=review`,
+`code=input_discovery_invalid`) with human review `not_started`. Its protected registry row
+`preprocess-0001-dicom-pipeline-r15` records inputs, performance smoke, Run A, Run B, and
+deterministic comparison all authenticated `passed`; live Kaggle confirms the A/B/comparison
+kernels `COMPLETE` and the plan kernel `ERROR`. The r14 row remains preserved below. Under
+decision **D-036**, passed cores from such chains may be bound into a Core Execution Certificate
+and consumed by an independently versioned QA Adapter without rerunning A/B/comparison;
+arbitrary splicing remains prohibited. The certifier
+(`scripts/certify_dicom_qa_core.py`) and its tamper matrix
+(`tests/test_core_execution_certificate.py`, 7/7 PASS offline) exist. Under decision **D-037**,
+workflow authentication now loads the finalizer from the exact file sealed in the verified r15
+bundle rather than the mutable working tree; the frozen hash remains absolute and all temporary
+adapter-bypass scars were removed. Focused checks are 63/63 PASS, full pytest is 599 passes with
+exactly three known sandbox-environment failures (offline wheel cache and process-pool semaphores),
+Ruff/format and both strict mypy scopes PASS, and an offline certificate build/verify round-trip
+PASS with payload digest d455640adfd5c0173a524f997a85ac8583e1da678eed399f687a61e77e2830c1.
+Live end-to-end certification, the single authorized mount-layout diagnostic, the identity-driven
+resolver, and the adapter freeze/bundle remain pending because host network access is still
+unavailable. Chunk 5 is not passed. Submission, merge, publication,
+and Chunk 6 remain blocked pending explicit human approval.
+
+## Historical r14 terminal checkpoint
 
 R14 is terminal `failed` at review-plan. Its exact authenticated inputs, performance smoke, Run A,
 Run B, and deterministic comparison all passed. Run A completed in 7h21m20s; Run B completed in

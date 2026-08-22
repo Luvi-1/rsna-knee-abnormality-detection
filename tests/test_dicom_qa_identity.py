@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import shutil
 import sqlite3
 import sys
 import zipfile
@@ -66,6 +67,129 @@ def _write_private(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.write_bytes(payload)
     path.chmod(0o600)
+
+
+def _write_bundle_fixture(root: Path) -> None:
+    for basename in finalize_review.BUNDLE_MARKER_BASENAMES:
+        _write_private(root / basename, b"fixture\n")
+
+
+@pytest.mark.parametrize(("mount_parent", "bundle_name"), [("", "bundle"), ("owner", "bundle")])
+def test_bundle_discovery_accepts_direct_and_qualified_mount_forms(
+    tmp_path: Path,
+    mount_parent: str,
+    bundle_name: str,
+) -> None:
+    input_root = tmp_path / "input"
+    bundle_root = (
+        input_root / mount_parent / bundle_name if mount_parent else input_root / bundle_name
+    )
+    _write_bundle_fixture(bundle_root)
+    assert finalize_review._discover_bundle_inputs(input_root) == (
+        bundle_root / "run-config.json",
+        bundle_root / "bundle-manifest.json",
+        bundle_root / "qa_runner.py",
+    )
+
+
+def test_bundle_discovery_is_deterministic_beside_large_unrelated_tree(
+    tmp_path: Path,
+) -> None:
+    input_root = tmp_path / "input"
+    bundle_root = input_root / "owner/bundle"
+    _write_bundle_fixture(bundle_root)
+    crowded = input_root / "competition/train_series"
+    for index in range(4097):
+        (crowded / f"study-{index:04d}").mkdir(parents=True)
+    (input_root / "README").write_bytes(b"ignored\n")
+    results = [finalize_review._discover_bundle_inputs(input_root) for _ in range(2)]
+    assert results[0] == results[1]
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "missing",
+        "duplicate_direct_and_qualified",
+        "two_roots_claiming_same_markers",
+        "correct_name_wrong_identity_files",
+        "malformed_marker_object",
+        "symlinked_source",
+        "nested_beyond_approved_depth",
+        "empty_root",
+        "crowded_owner_directory",
+        "permission_denied_root",
+    ],
+)
+def test_bundle_discovery_rejects_invalid_mount_matrix(tmp_path: Path, layout: str) -> None:
+    input_root = tmp_path / "input"
+    bundle_root = input_root / "owner/bundle"
+    _write_bundle_fixture(bundle_root)
+    backing = tmp_path / "backing-bundle"
+    if layout == "missing":
+        shutil.rmtree(bundle_root)
+    elif layout == "duplicate_direct_and_qualified":
+        _write_bundle_fixture(input_root / "bundle")
+    elif layout == "two_roots_claiming_same_markers":
+        _write_bundle_fixture(input_root / "other-owner/bundle")
+    elif layout == "correct_name_wrong_identity_files":
+        (bundle_root / "bundle-manifest.json").unlink()
+    elif layout == "malformed_marker_object":
+        (bundle_root / "qa_runner.py").unlink()
+        (bundle_root / "qa_runner.py").mkdir()
+    elif layout == "symlinked_source":
+        shutil.move(str(bundle_root), str(backing))
+        bundle_root.symlink_to(backing, target_is_directory=True)
+    elif layout == "nested_beyond_approved_depth":
+        shutil.move(str(bundle_root), str(input_root / "a/b/bundle"))
+    elif layout == "empty_root":
+        shutil.rmtree(bundle_root)
+        bundle_root.parent.rmdir()
+    elif layout == "crowded_owner_directory":
+        for index in range(4097):
+            (bundle_root.parent / f"entry-{index:04d}").mkdir()
+    elif layout == "permission_denied_root":
+        input_root.chmod(0o000)
+    else:
+        raise AssertionError(layout)
+    try:
+        with pytest.raises(
+            finalize_review.ReviewFinalizationError,
+            match="input_discovery_invalid",
+        ):
+            finalize_review._discover_bundle_inputs(input_root)
+    finally:
+        if layout == "permission_denied_root":
+            input_root.chmod(0o700)
+
+
+def test_bundle_discovery_rejects_top_level_entry_limit(tmp_path: Path) -> None:
+    input_root = tmp_path / "input"
+    _write_bundle_fixture(input_root / "owner/bundle")
+    for index in range(257):
+        (input_root / f"mount-{index:03d}").mkdir()
+    with pytest.raises(finalize_review.ReviewFinalizationError, match="input_discovery_invalid"):
+        finalize_review._discover_bundle_inputs(input_root)
+
+
+def test_bundle_discovery_is_invariant_to_filesystem_enumeration_order(
+    tmp_path: Path,
+) -> None:
+    observed = []
+    for ordinal, names in enumerate(
+        (
+            tuple(f"mount-{index:02d}" for index in range(20)),
+            tuple(f"mount-{19 - index:02d}" for index in range(20)),
+        )
+    ):
+        input_root = tmp_path / f"input-{ordinal}"
+        for name in names:
+            (input_root / name).mkdir(parents=True)
+        _write_bundle_fixture(input_root / "mount-07/bundle")
+        observed.append(
+            finalize_review._discover_bundle_inputs(input_root)[0].relative_to(input_root)
+        )
+    assert observed[0] == observed[1]
 
 
 def _source_manifest_bundle(tmp_path: Path) -> tuple[Path, Path]:

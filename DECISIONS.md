@@ -1013,3 +1013,75 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   `not_started`; Chunk 5 is not passed.
 - Reversal condition: remove the qualified form only if Kaggle guarantees direct mounts for all
   attached notebook outputs and a target-runtime regression proves that guarantee.
+
+## D-036 - Certify passed cores for stage-aware downstream reuse
+
+- Date: 2026-08-22
+- Owner: Luvi-1 and Codex
+- Question: May an already-authenticated passed core (inputs, performance smoke, Run A, Run B,
+  deterministic comparison) from a recovery chain that later failed at review-plan be formally
+  reused by a downstream QA adapter without rerunning the expensive core, without weakening
+  reproducibility or provenance?
+- Evidence: r14 and r15 both reached five authenticated core-stage passes and then failed only at
+  review-plan input discovery (phase=review, code=input_discovery_invalid), each time after
+  six-plus hours of core compute. The protected registry preserves these rows append-only, and the
+  existing workflow validator already authenticates the exact dataset/kernel identities,
+  version-1 pins, source graphs, version-race snapshots, and sanitized output contracts end to end.
+  Repeating full chains for downstream-only defects wastes compute and adds no upstream evidence.
+- Decision: adopt a stage-aware lineage policy. A terminal-failed chain stays terminal as a whole;
+  its independently passed stages may be bound into a Core Execution Certificate when: the stage
+  reached authenticated terminal PASS; its output contract is immutable; all source and output
+  identities are cryptographically bound; every downstream consumer validates the certificate; no
+  upstream semantics changed; and the stage is not mixed with an incompatible lineage. Copying
+  arbitrary files from failed runs, mixing Run A and Run B across freezes, consuming unvalidated
+  partial artifacts, silently changing preprocessing, or accepting failed or ambiguous core stages
+  remain prohibited. The certificate binds lineage identifier, source-input snapshot, dataset
+  identity and version, freeze commit, bundle SHA, kernel identities and versions, run-output
+  digests, comparison digest, contract versions, preprocessing/canonical-manifest/evidence-ledger/
+  QA-registry membership versions, validation timestamps, and validator identity, and states
+  core_status=passed, qa_adapter_status=not_passed, human_review_status=not_started. Changing any
+  bound field must invalidate verification.
+- Verification: tests/test_core_execution_certificate.py proves the offline round-trip against the
+  real r15 registry/bundle and rejects every bound-field tamper, status flip, missing row,
+  non-reusable failure shape, tampered run summary, and tampered comparison proof. Live end-to-end
+  certification re-runs the authenticated workflow gate and is recorded separately once executed;
+  a transient host network outage deferred it during this session and blocks no local gate.
+- Consequence: r14 and r15 remain terminal failed as whole chains while their certified cores may
+  feed an independently versioned QA Adapter. A review-path resolver correction never justifies
+  another full Run A/B cycle by itself. Overall Chunk 5 remains not passed until genuine human
+  review passes.
+- Reversal condition: revoke certified-core consumption if any consumed artifact fails identity
+  revalidation, if Kaggle invalidates derived notebook outputs as immutable provenance sources, or
+  if a core semantic defect is proven; then require a fresh fully gated chain.
+
+## D-037 - Authenticate the sealed finalizer, never the mutable working tree
+
+- Date: 2026-08-22
+- Owner: Luvi-1 and Codex
+- Question: When the immutable r15 bundle pins the pre-D-036 finalizer but the local recovery tree
+  contains corrected finalizer bytes, how should workflow authentication load the trusted
+  finalizer without either weakening the frozen hash pin or falsely failing the already-passed core?
+- Evidence: the r15 bundle manifest and packaged dataset both pin and contain finalizer SHA-256
+  c1a3b7c2cfa5db14fead0e8e3378c73ab30de41baefeed16481e42c5b8ab64bf; Run A, Run B, comparison,
+  and their validators passed against that identity. The default finalizer loader instead read the
+  repository working tree, whose D-036 discovery correction necessarily has different bytes.
+  Loading that mutable file eagerly caused a false trusted_finalizer_hash_mismatch before remote
+  validation. A temporary adapter bypass was rejected because it weakened the frozen pin.
+- Decision: keep the frozen finalizer hash absolute. Add an explicit optional source path to the
+  authenticated-workflow gate and have CLI certification pass the exact finalize_review.py sealed
+  in the verified r15 bundle directory; the normal validator CLI likewise consumes the bundle
+  sibling after policy verification. No adapter mode, mismatch allowance, lazy pin, or
+  working-tree fallback is permitted. The correction changes validator provenance only and does not
+  alter any passed core semantic, output, resolver behavior, or frozen identity.
+- Verification: all 63 focused certificate/identity tests pass; selected packaging workflow tests
+  pass; full pytest reports 553 passes with exactly three known sandbox-environment failures
+  (offline wheel build denied at the user cache and two process-pool semaphore denials); Ruff check
+  and format pass on all files; strict mypy passes both configured scopes; sensitive-file guard and
+  tracked-Python secret scan pass. Live end-to-end certification remains deferred by the host
+  network outage and must be recorded separately when connectivity returns.
+- Consequence: core certification can authenticate the exact sealed r15 code despite unrelated
+  local review-discovery work. The failed r15 chain remains terminal, and its certificate still
+  requires live authentication plus adapter gates before QA-adapter reuse.
+- Reversal condition: require working-tree loading only if the project later proves that sealed
+  bundle siblings cannot represent deployed producer code, and replace this rule with an equally
+  hash-pinned explicit source contract.

@@ -3053,6 +3053,7 @@ def validate_authenticated_workflow(
     run_config: Mapping[str, Any],
     runner: ModuleType,
     manifest: Mapping[str, Any],
+    finalizer_source: Path | None = None,
 ) -> None:
     """Authenticate the complete immutable private Chunk 5 QA/review chain."""
 
@@ -3063,7 +3064,10 @@ def validate_authenticated_workflow(
     stage_index = WORKFLOW_STAGES.index(stage)
     interpreter = _supported_kaggle_cli_interpreter()
     finalizer_record = cast(Mapping[str, Any], manifest.get("review_finalizer"))
-    finalizer = _finalizer_module(cast(str, finalizer_record.get("sha256")))
+    finalizer = _finalizer_module(
+        cast(str, finalizer_record.get("sha256")),
+        finalizer_source,
+    )
     source, refs = _validated_workflow_identity(run_config, manifest, finalizer)
     dataset_ref = _bundle_dataset_ref(run_config)
     dataset_content = _bundle_dataset_content_policy(manifest)
@@ -3220,12 +3224,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         failure: tuple[str, str] | None = None
         suffix = ""
         if args.workflow_kernel_version is not None:
+            finalizer_record = cast(Mapping[str, Any], manifest.get("review_finalizer"))
+            finalizer_file = (
+                finalizer_record.get("code_file") if isinstance(finalizer_record, Mapping) else None
+            )
             validate_authenticated_workflow(
                 expected_version=args.workflow_kernel_version,
                 stage=args.workflow_stage,
                 run_config=run_config,
                 runner=runner,
                 manifest=manifest,
+                finalizer_source=(
+                    manifest_path.parent / finalizer_file if finalizer_file is not None else None
+                ),
             )
             mode = "workflow"
             suffix = f" stage={args.workflow_stage}"
