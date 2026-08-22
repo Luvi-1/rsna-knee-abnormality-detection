@@ -361,9 +361,35 @@ def _derived_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
         "review_session": "rsna-knee-dqa-review",
         "review_finalizer": "rsna-knee-dqa-final",
     }
-    return {
+    refs = {
         role: f"{owner}/{prefix}-{commit[:7]}-{bundle[:12]}" for role, prefix in prefixes.items()
     }
+    # ponytail: stage-aware reuse via one optional core_reuse block; expand only if a
+    # future certificate format adds fields beyond these four upstream roles.
+    reuse = run_config.get("core_reuse")
+    if reuse is not None:
+        if not isinstance(reuse, dict):
+            raise ReviewFinalizationError("review_identity_invalid")
+        lineage = reuse.get("core_lineage_id")
+        payload = reuse.get("core_certificate_payload_sha256")
+        upstream = reuse.get("upstream_refs")
+        if (
+            not isinstance(lineage, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,99}", lineage) is None
+            or not isinstance(payload, str)
+            or HEX_64.fullmatch(payload) is None
+            or not isinstance(upstream, dict)
+            or set(upstream) - {"performance_smoke", "run_a", "run_b", "comparison"}
+        ):
+            raise ReviewFinalizationError("review_identity_invalid")
+        for role, ref in upstream.items():
+            if (
+                not isinstance(ref, str)
+                or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}/[a-z0-9][a-z0-9_-]{0,99}", ref) is None
+            ):
+                raise ReviewFinalizationError("review_identity_invalid")
+            refs[role] = ref
+    return refs
 
 
 def _public_review_identity(

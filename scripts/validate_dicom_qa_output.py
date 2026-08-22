@@ -1193,7 +1193,7 @@ def _bundle_dataset_files(manifest: Mapping[str, Any]) -> dict[str, int]:
 
 
 def _workflow_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
-    return {
+    refs = {
         "performance_smoke": _derived_stage_kernel_ref(run_config, "performance_smoke"),
         "run_a": _derived_stage_kernel_ref(run_config, "run_a"),
         "run_b": _derived_stage_kernel_ref(run_config, "run_b"),
@@ -1203,6 +1203,39 @@ def _workflow_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
         "review_session": _derived_stage_kernel_ref(run_config, "review_session"),
         "review_finalizer": _derived_stage_kernel_ref(run_config, "finalizer"),
     }
+    return _apply_core_reuse(run_config, refs)
+
+
+_CORE_REUSE_UPSTREAM_ROLES: Final = frozenset({"performance_smoke", "run_a", "run_b", "comparison"})
+
+
+def _apply_core_reuse(run_config: Mapping[str, Any], refs: dict[str, str]) -> dict[str, str]:
+    """Redirect certified-core upstream kernel refs for stage-aware QA-adapter reuse."""
+    reuse = run_config.get("core_reuse")
+    if reuse is None:
+        return refs
+    if not isinstance(reuse, dict):
+        raise OutputValidationError("kernel_identity_invalid")
+    lineage = reuse.get("core_lineage_id")
+    payload = reuse.get("core_certificate_payload_sha256")
+    upstream = reuse.get("upstream_refs")
+    if (
+        not isinstance(lineage, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,99}", lineage) is None
+        or not isinstance(payload, str)
+        or HEX_64.fullmatch(payload) is None
+        or not isinstance(upstream, dict)
+        or set(upstream) - _CORE_REUSE_UPSTREAM_ROLES
+    ):
+        raise OutputValidationError("kernel_identity_invalid")
+    for role, ref in upstream.items():
+        if (
+            not isinstance(ref, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}/[a-z0-9][a-z0-9_-]{0,99}", ref) is None
+        ):
+            raise OutputValidationError("kernel_identity_invalid")
+        refs[str(role)] = ref
+    return refs
 
 
 def _source_manifest_dataset_content_policy(

@@ -1171,6 +1171,7 @@ def _assemble_bundle(
     source_manifest_registry_path: Path,
     source_manifest_audit_id: str,
     workers: int = 4,
+    core_reuse: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Assemble deterministic dataset/kernel directories from immutable inputs."""
 
@@ -1424,6 +1425,8 @@ def _assemble_bundle(
         )
         bundle_sha256 = _sha256_bytes(_canonical_json_bytes(identity))
         run_config["bundle_sha256"] = bundle_sha256
+        if core_reuse is not None:
+            run_config["core_reuse"] = core_reuse
         run_config_path = dataset_dir / "run-config.json"
         _write_bytes(run_config_path, _canonical_json_bytes(run_config), git_commit_timestamp)
         records.append(_file_record(run_config_path, "run_config", "generated/run-config.json"))
@@ -1697,6 +1700,7 @@ def package_from_clean_repo(args: argparse.Namespace) -> dict[str, str]:
             source_manifest_registry_path=args.source_manifest_registry,
             source_manifest_audit_id=args.source_manifest_audit_id,
             workers=args.workers,
+            core_reuse=args.core_reuse,
         )
 
 
@@ -1723,12 +1727,33 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="Completed manifest-v2 audit ID; audit-0001 is superseded and invalid.",
     )
+    parser.add_argument(
+        "--core-reuse",
+        type=str,
+        default=None,
+        help=(
+            "Optional JSON object with core_lineage_id, "
+            "core_certificate_payload_sha256, and upstream_refs for stage-aware reuse."
+        ),
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        result = package_from_clean_repo(_parser().parse_args(argv))
+        args = _parser().parse_args(argv)
+        if getattr(args, "core_reuse", None) is not None:
+            try:
+                args.core_reuse = json.loads(args.core_reuse)
+            except json.JSONDecodeError:
+                print("dicom_qa_bundle=FAIL code=core_reuse_json_invalid")
+                return 2
+            if not isinstance(args.core_reuse, dict):
+                print("dicom_qa_bundle=FAIL code=core_reuse_not_object")
+                return 2
+        else:
+            args.core_reuse = None
+        result = package_from_clean_repo(args)
     except PackagingError as error:
         print(f"dicom_qa_bundle=FAIL code={error.code}")
         return 2

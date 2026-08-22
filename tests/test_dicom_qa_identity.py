@@ -230,6 +230,77 @@ def test_kernel_source_root_accepts_all_proven_mount_forms(
     assert finalize_review._kernel_source_root(input_root, "owner/slug") == source_root
 
 
+def test_core_reuse_redirects_upstream_refs_and_keeps_downstream_fresh() -> None:
+    run_config = {
+        "code_commit": "a" * 40,
+        "bundle_sha256": "b" * 64,
+        "deployment": {"owner": "test-owner"},
+        "core_reuse": {
+            "core_lineage_id": "preprocess-0001-dicom-pipeline-r15",
+            "core_certificate_payload_sha256": "c" * 64,
+            "upstream_refs": {
+                "performance_smoke": "lavicheema/rsna-knee-dqa-smoke-d3771e7-61963849d8ec",
+                "run_a": "lavicheema/rsna-knee-dqa-a-d3771e7-61963849d8ec",
+                "run_b": "lavicheema/rsna-knee-dqa-b-d3771e7-61963849d8ec",
+                "comparison": "lavicheema/rsna-knee-dqa-cmp-d3771e7-61963849d8ec",
+            },
+        },
+    }
+    refs = finalize_review._derived_refs(run_config)
+    assert refs["run_a"] == "lavicheema/rsna-knee-dqa-a-d3771e7-61963849d8ec"
+    assert refs["comparison"] == "lavicheema/rsna-knee-dqa-cmp-d3771e7-61963849d8ec"
+    # Downstream adapter roles must stay bound to the current commit/bundle identity.
+    assert refs["review_plan"] == "test-owner/rsna-knee-dqa-plan-aaaaaaa-bbbbbbbbbbbb"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_fragment"),
+    [
+        ({"core_reuse": {"core_lineage_id": "BAD LINEAGE"}}, "review_identity_invalid"),
+        (
+            {
+                "core_reuse": {
+                    "core_lineage_id": "r15",
+                    "core_certificate_payload_sha256": "short",
+                }
+            },
+            "review_identity_invalid",
+        ),
+        (
+            {
+                "core_reuse": {
+                    "core_lineage_id": "r15",
+                    "core_certificate_payload_sha256": "c" * 64,
+                    "upstream_refs": {"review_plan": "owner/injected-slug"},
+                }
+            },
+            "review_identity_invalid",
+        ),
+        (
+            {
+                "core_reuse": {
+                    "core_lineage_id": "r15",
+                    "core_certificate_payload_sha256": "c" * 64,
+                    "upstream_refs": {"run_a": "/absolute/path"},
+                }
+            },
+            "review_identity_invalid",
+        ),
+    ],
+)
+def test_core_reuse_rejects_invalid_configurations(
+    mutation: dict[str, object], expected_fragment: str
+) -> None:
+    run_config = {
+        "code_commit": "a" * 40,
+        "bundle_sha256": "b" * 64,
+        "deployment": {"owner": "test-owner"},
+    }
+    run_config.update(mutation)  # type: ignore[arg-type]
+    with pytest.raises(finalize_review.ReviewFinalizationError, match=expected_fragment):
+        finalize_review._derived_refs(run_config)
+
+
 def test_kernel_source_root_returns_none_for_missing_source(tmp_path: Path) -> None:
     input_root = tmp_path / "input"
     input_root.mkdir()
