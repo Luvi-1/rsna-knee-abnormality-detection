@@ -1427,6 +1427,7 @@ def _assemble_bundle(
         run_config["bundle_sha256"] = bundle_sha256
         if core_reuse is not None:
             run_config["core_reuse"] = core_reuse
+        upstream_refs = core_reuse.get("upstream_refs", {}) if isinstance(core_reuse, dict) else {}
         run_config_path = dataset_dir / "run-config.json"
         _write_bytes(run_config_path, _canonical_json_bytes(run_config), git_commit_timestamp)
         records.append(_file_record(run_config_path, "run_config", "generated/run-config.json"))
@@ -1520,7 +1521,10 @@ def _assemble_bundle(
             ref=refs["comparison"],
             code_file="compare_runs.py",
             payload=comparison_payload,
-            kernel_sources=[refs["run_a"], refs["run_b"]],
+            kernel_sources=[
+                upstream_refs.get("run_a", refs["run_a"]),
+                upstream_refs.get("run_b", refs["run_b"]),
+            ],
         )
         write_kernel(
             review_plan_dir,
@@ -1528,17 +1532,17 @@ def _assemble_bundle(
             code_file="finalize_review.py",
             payload=review_finalizer_payload,
             kernel_sources=[
-                refs["performance_smoke"],
-                refs["run_a"],
-                refs["run_b"],
-                refs["comparison"],
+                upstream_refs.get("performance_smoke", refs["performance_smoke"]),
+                upstream_refs.get("run_a", refs["run_a"]),
+                upstream_refs.get("run_b", refs["run_b"]),
+                upstream_refs.get("comparison", refs["comparison"]),
             ],
             competition_sources=[COMPETITION_SLUG],
         )
         review_sources = [
-            refs["run_a"],
-            refs["run_b"],
-            refs["comparison"],
+            upstream_refs.get("run_a", refs["run_a"]),
+            upstream_refs.get("run_b", refs["run_b"]),
+            upstream_refs.get("comparison", refs["comparison"]),
             refs["review_plan"],
         ]
         write_kernel(
@@ -1555,9 +1559,9 @@ def _assemble_bundle(
             code_file="finalize_review.py",
             payload=review_finalizer_payload,
             kernel_sources=[
-                refs["run_a"],
-                refs["run_b"],
-                refs["comparison"],
+                upstream_refs.get("run_a", refs["run_a"]),
+                upstream_refs.get("run_b", refs["run_b"]),
+                upstream_refs.get("comparison", refs["comparison"]),
                 refs["review_plan"],
                 refs["review_session"],
             ],

@@ -1111,3 +1111,29 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   technically incomplete until the adapter-only execution chain reaches human visual QA.
 - Reversal condition: if a future diagnostic proves additional mount forms or invalidates any
   bound identity, re-open discovery under a new bounded authorization before changing resolver code.
+
+## D-039 - Stage-aware core_reuse binding for certified-core adapter execution
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: How should the QA adapter consume the live-certified r15 core outputs without
+  rerunning A/B/comparison and without weakening any identity gate?
+- Evidence: the sealed resolver previously derived all kernel refs from the current commit/bundle
+  identity, making certified r15 upstream outputs unreachable. The single authorized mount
+  diagnostic proved type-prefixed mount forms; the core certificate binds every upstream identity.
+- Decision: add one optional `core_reuse` block to run-config with exactly three fields:
+  `core_lineage_id`, `core_certificate_payload_sha256`, and an `upstream_refs` map limited to
+  exactly four roles (performance_smoke, run_a, run_b, comparison). The resolver redirects only
+  these roles; all downstream adapter identities remain bound to the current commit/bundle.
+  Invalid lineage, payload digest, role injection, or malformed refs fail closed with
+  review_identity_invalid. The packager accepts --core-reuse JSON and writes it into run-config
+  before bundle-manifest sealing. Both finalizer and validator enforce identical validation rules.
+- Verification: focused identity tests cover positive redirect, downstream freshness,
+  wrong-lineage rejection, short-payload rejection, downstream-role injection rejection, and
+  path-like ref rejection; full pytest 575/575 exit 0 on commit d1a2d53; Ruff check/format PASS;
+  both strict mypy scopes PASS. Adapter bundle e49ebe396206 built from clean tree at this commit.
+- Consequence: the QA adapter can consume certified r15 upstream outputs directly without a new
+  core freeze or A/B rerun. Adapter-only corrections may iterate under D-036/D-038 recovery-loop
+  bounds while every consumed upstream identity remains valid.
+- Reversal condition: if the certified core contract changes or any upstream identity becomes
+  invalid, re-certify before adapter reuse; never widen the allowed role set beyond these four.
