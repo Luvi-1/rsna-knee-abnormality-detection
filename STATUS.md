@@ -2,6 +2,21 @@
 
 Updated: 2026-08-23 (Chunk 5 r15 loop-breaker, live-certified core)
 
+### r16 fresh successor authorization 2026-08-23 (D-044)
+
+The operator approved Option 2: a fresh end-to-end r16 successor chain, superseding further
+adapter-reuse attempts. Preparation evidence on this tree (parent `8e57bab2`): live contract
+refresh `PASS_NO_MATERIAL_DRIFT` at `docs/competition_contract/2026-08-23T043419Z.md`;
+known-fix checklist fully present (D-035/D-037/D-042 and cohort registry); packaged synthetic
+preflight `status=pass` (10/10 checks); complete local gate PASS - Ruff format/check (129
+files), strict mypy src (25) + trust boundary (3), pytest 589 passed exit 0, sensitive-file
+guard, tracked secret scan, pre-commit hooks, pip-audit --strict clean, contract drift none,
+`git diff --check` clean; and a synthetic lineage rehearsal proving same-identity Run A/B
+review preparation passes while foreign-core identity fails closed as
+`private_cohort_plan_invalid` (tests/test_dicom_qa_successor_lineage.py). Remote stages have
+not started; next gated steps are final red team -> freeze commit -> bundle ->
+identity-absence proof -> registry row -> dataset v1.
+
 ## Current r15 terminal checkpoint and certified-core policy
 
 R15 is terminal `failed` at review-plan (`phase=review`,
