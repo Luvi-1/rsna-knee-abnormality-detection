@@ -1,10 +1,21 @@
 # Validation Card
 
 Hard-group version: `protected-groups-v2`; audit-0003 / `manifest-v2` remains the authenticated
-private source root. R14 passed inputs, smoke, two full runs, and exact comparison, then failed at
-review-plan before cohort replay. It cannot be resumed or spliced.
+private source root. R16 passed inputs, smoke, two full runs, and substantive deterministic
+comparison. Its frozen ordered-source validator remains failed; an independent exact,
+duplicate-free, order-insensitive source-set verifier passes. The preprocessing core is only
+provisionally approved for nonclinical research pending human visual QA.
 
 Fold version: `unassigned`; no folds exist.
+
+## Current r16 provisional research checkpoint
+
+`ordered_source_validator=FAIL` remains controlling for formal orchestration.
+`exact_duplicate_free_source_set_verifier=PASS` establishes exactly two unique authenticated
+version-1 sources, Run A and Run B, with exact hashes and no unexpected source; all other available
+deterministic-comparison fields passed. This does not establish visual correctness. Human QA is
+required before Chunk 5 can pass; submission readiness and clinical use remain prohibited. R17 is
+cancelled, and no full-data replay is authorized for the source-order issue.
 
 ## Current r14 terminal checkpoint
 

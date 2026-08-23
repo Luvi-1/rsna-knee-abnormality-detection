@@ -1234,3 +1234,40 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   and comparison identities.
 - Consequence: Chunk 5 remains technically incomplete. Human review never started. Final status is
   `BLOCKED WITH PROVEN ROOT CAUSE`.
+
+## D-046 - Provisionally release the r16 preprocessing core for nonclinical research
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Does r16's nonsemantic authenticated source-order mismatch justify another complete
+  successor chain, or may the substantively validated preprocessing core proceed to a simpler
+  human-QA path while preserving the formal failure?
+- Evidence: R16 inputs, smoke, Run A, and Run B passed exact authenticated validation. Comparison
+  v1 completed and every available deterministic-comparison field passed except the frozen ordered
+  `kernel_sources` equality check. The expected and observed lists each contain exactly one Run A
+  and one Run B source at version 1 with the exact expected code hash, no duplicate, no missing or
+  unexpected source, and stable before/after metadata. The independent order-insensitive verifier
+  returns `exact_duplicate_free_source_set_verifier = PASS`; eight focused regressions cover reverse
+  order, same order, duplicates, missing/extra sources, hash drift, version drift, and repeated
+  random permutations. The original ordered validator remains `FAIL`.
+- Decision: The r16 preprocessing core is approved for nonclinical Kaggle model-development
+  research because two independent full-data runs passed authenticated validation and their
+  deterministic result comparison passed substantively. The remaining formal workflow failure is
+  an ordering difference in an otherwise exact, duplicate-free, authenticated two-source set. The
+  original ordered-validator failure remains preserved. Human visual QA is still required before
+  Chunk 5 formally passes.
+- Recorded statuses: `preprocessing_research_status=PROVISIONALLY_APPROVED`;
+  `formal_multi_kernel_orchestration=DEFERRED`; `human_visual_qa=REQUIRED`;
+  `final_submission_readiness=NOT_APPROVED`; `clinical_use=PROHIBITED`.
+- R17 disposition: `CANCELLED_BY_STRATEGIC_DECISION`; reason: a nonsemantic source-order issue does
+  not justify another 14-hour A/B cycle. No r17 dataset, smoke, Run A, Run B, comparison, adapter,
+  or review-plan artifact may be created. No orchestration-only change may trigger another full-data
+  A/B replay.
+- Consequence: prepare exactly one fresh private, offline, version-1 human-QA notebook using the
+  frozen r16 bundle, approved competition input, and authenticated private manifest. It derives only
+  cohort-selection metadata, renders one selected study on demand, keeps all identifiers and pixels
+  private, and stops for exclusive human control before `START`. This decision does not approve
+  training, submission, merge, publication, team action, or Chunk 6.
+- Reversal condition: any exact-set verification failure, source/hash/version drift, substantive
+  preprocessing defect, privacy or competition-rule violation, or human `BLOCK` revokes provisional
+  use and requires fail-closed classification. A metadata-ordering issue alone does not.

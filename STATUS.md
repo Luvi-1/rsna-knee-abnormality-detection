@@ -1,6 +1,29 @@
 # Status
 
-Updated: 2026-08-23 (Chunk 5 r16 terminal comparison-metadata failure)
+Updated: 2026-08-23 (Chunk 5 r16 provisional research release; human QA preparation)
+
+### r16 provisional nonclinical research release 2026-08-23 (D-046)
+
+R16 remains immutable and terminal under D-045: inputs, smoke, Run A, and Run B passed;
+comparison v1 completed with a deterministic PASS summary; the frozen ordered-source validator
+remains `FAIL` because Kaggle returned the exact two authenticated sources in reverse order; human
+review remains `NOT_STARTED`; and clinical use is prohibited. The independent verifier in
+`scripts/verify_dicom_qa_source_set.py` accepted the reversed list as the exact duplicate-free
+Run A/Run B set and rejected duplicate, missing, extra, wrong-hash, and wrong-version fixtures.
+Its required result is:
+
+```text
+ordered_source_validator = FAIL
+exact_duplicate_free_source_set_verifier = PASS
+```
+
+The r16 preprocessing core is therefore `PROVISIONALLY_APPROVED` only for nonclinical Kaggle
+model-development research. Formal multi-kernel orchestration is deferred, human visual QA remains
+required before Chunk 5 can pass, final submission readiness is not approved, and clinical use is
+prohibited. The proposed r17 chain is `CANCELLED_BY_STRATEGIC_DECISION`: a nonsemantic source-order
+issue does not justify another full A/B cycle. No r17 artifact may be created and no r16 remote
+artifact, hash, registry row, or frozen validator result may be changed. Current work is limited to
+one private, offline, on-demand human-QA notebook that stops before `START`.
 
 ### r16 terminal comparison authentication failure 2026-08-23 (D-045)
 

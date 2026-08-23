@@ -1,9 +1,20 @@
 # Data Card
 
-Status: the sanitized audit-0003 / `manifest-v2` source root remains authenticated. R14 inputs,
-smoke, two complete full-data runs, and deterministic comparison passed; review-plan is terminal
-failed before replay with `input_discovery_invalid`. No pixels, identifiers, or private artifacts
-left Kaggle. Chunk 5 has not passed.
+Status: the sanitized audit-0003 / `manifest-v2` source root remains authenticated. R16 inputs,
+smoke, and two complete full-data runs passed. Its comparison completed with a substantive
+deterministic PASS; the frozen ordered-source validator remains failed while an independent exact,
+duplicate-free source-set verifier passes. `dicom-model-v1` is provisionally approved only for
+nonclinical Kaggle research. Human visual QA has not started, Chunk 5 has not passed, submission
+readiness is not approved, and clinical use is prohibited.
+
+## Current r16 research-release identity
+
+R16 remains immutable at freeze `da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f` and bundle
+`91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b`. The only formal failure is
+the API order of the exact two authenticated comparison sources. The original ordered-validator
+failure is preserved. R17 is cancelled; no new dataset or A/B/comparison replay is allowed. The
+next evidence is a private, metadata-selected, on-demand human review that keeps pixels,
+identifiers, cohort rows, and the incremental ledger inside Kaggle.
 
 ## Current r14 terminal identity
 

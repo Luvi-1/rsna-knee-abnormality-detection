@@ -1,10 +1,33 @@
 # Chunk 5 private-run and output-retrieval recovery incidents
 
-Status: **r14 inputs, smoke, Run A, Run B, and comparison passed; review-plan v1 terminal failed
-before replay with `input_discovery_invalid`; recovery candidate validated locally; Chunk 5 remains
-not passed**
+Status: **r16 core provisionally approved for nonclinical research after independent exact-set
+verification; frozen ordered validator remains failed; human visual QA not started**
 
-Date: 2026-08-22
+Date: 2026-08-23
+
+## R16 research-release disposition
+
+R16's authenticated inputs, smoke, Run A, and Run B passed. Comparison v1 completed and its
+deterministic summary passed, but the frozen workflow validator failed because its ordered
+`kernel_sources` list was `[Run A, Run B]` while Kaggle returned the same exact two sources as
+`[Run B, Run A]`. That failure remains immutable and is not relabelled.
+
+One independent verifier now checks the sanitized source records as an exact duplicate-free set.
+It requires exactly two unique entries, both roles, version 1 and exact code hashes, rejects every
+extra/missing/duplicate source, and requires all other available comparison fields to pass. Reverse
+and same-order lists pass; duplicate, missing, third-source, wrong-hash, and wrong-version fixtures
+fail; repeated seeded permutations remain deterministic. Result:
+
+```text
+ordered_source_validator = FAIL
+exact_duplicate_free_source_set_verifier = PASS
+```
+
+Under D-046, this is sufficient for provisional nonclinical Kaggle research use but not formal
+Chunk 5 completion, submission readiness, or clinical use. R17 is cancelled because another full
+A/B cycle would add no evidence for a nonsemantic API-order discrepancy. Human visual QA remains
+mandatory and is being prepared as one on-demand private notebook without Run A/B/comparison
+attachments or cohort-wide pre-rendering.
 
 ## Current r14 review-plan incident
 

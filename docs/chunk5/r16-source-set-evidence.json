@@ -1,0 +1,55 @@
+{
+  "artifact_type": "r16-sanitized-source-set-evidence",
+  "deterministic_comparison": {
+    "before_after_source_metadata_stable": true,
+    "comparison_code_hash_match": true,
+    "comparison_output_inventory_match": true,
+    "comparison_version": 1,
+    "deterministic_summary_status": "PASS",
+    "every_other_available_comparison_field_passed": true,
+    "internet_disabled": true,
+    "private": true
+  },
+  "expected_sources": [
+    {
+      "code_sha256_bytes": [
+        91, 113, 203, 195, 227, 111, 134, 44, 65, 237, 254, 147, 229, 81, 134, 188,
+        70, 237, 84, 27, 65, 141, 224, 199, 50, 82, 56, 179, 21, 184, 191, 74
+      ],
+      "ref": "lavicheema/rsna-knee-dqa-a-da5b9c8-91ed07921059",
+      "role": "run_a",
+      "version": 1
+    },
+    {
+      "code_sha256_bytes": [
+        91, 113, 203, 195, 227, 111, 134, 44, 65, 237, 254, 147, 229, 81, 134, 188,
+        70, 237, 84, 27, 65, 141, 224, 199, 50, 82, 56, 179, 21, 184, 191, 74
+      ],
+      "ref": "lavicheema/rsna-knee-dqa-b-da5b9c8-91ed07921059",
+      "role": "run_b",
+      "version": 1
+    }
+  ],
+  "observed_sources": [
+    {
+      "code_sha256_bytes": [
+        91, 113, 203, 195, 227, 111, 134, 44, 65, 237, 254, 147, 229, 81, 134, 188,
+        70, 237, 84, 27, 65, 141, 224, 199, 50, 82, 56, 179, 21, 184, 191, 74
+      ],
+      "ref": "lavicheema/rsna-knee-dqa-b-da5b9c8-91ed07921059",
+      "role": "run_b",
+      "version": 1
+    },
+    {
+      "code_sha256_bytes": [
+        91, 113, 203, 195, 227, 111, 134, 44, 65, 237, 254, 147, 229, 81, 134, 188,
+        70, 237, 84, 27, 65, 141, 224, 199, 50, 82, 56, 179, 21, 184, 191, 74
+      ],
+      "ref": "lavicheema/rsna-knee-dqa-a-da5b9c8-91ed07921059",
+      "role": "run_a",
+      "version": 1
+    }
+  ],
+  "ordered_source_validator": "FAIL",
+  "schema_version": 1
+}

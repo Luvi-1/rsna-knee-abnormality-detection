@@ -341,6 +341,46 @@ state, internet access, a symlink/path escape, or any identity mismatch blocks e
 resource references, URLs, identifiers, hashes, and paths remain in ignored mode-0600 state or
 inside Kaggle and never enter repository documents or command output.
 
+## D-046 r16 on-demand human-QA execution contract
+
+- Experiment ID: `preprocess-0001-dicom-pipeline-r16-on-demand-qa-v1`.
+- Hypothesis: the substantively validated frozen r16 preprocessing core can be placed before an
+  authorized human reviewer without another A/B/comparison cycle by selecting the fixed private
+  QA cohort from authenticated metadata, then decoding and rendering only the study the reviewer
+  explicitly advances.
+- One primary change: replace pre-rendered full-cohort QA materialization with one private,
+  internet-disabled, version-1 notebook that builds a metadata-only cohort and renders one selected
+  study on demand.
+- Frozen controls: r16 bundle SHA-256
+  `91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b`, frozen r16 runner and
+  preprocessing bytes, `dicom-model-v1`, `manifest-v2`, QA selector v3, 25-dimension registry v1,
+  represented-value quota `min(2, population)`, mandatory singleton coverage, minimum 100 studies
+  with no maximum, original competition input, nine review checks, and exact human attestation.
+- Data/label/fold/preprocessing versions: original authorized competition input; authenticated
+  audit-0003 private manifest; labels and folds not accessed; preprocessing `dicom-model-v1`.
+- Model/loss/augmentation: not applicable; no training, inference, thresholding, pseudo-labeling,
+  or model promotion occurs.
+- Determinism: selector v3 and its frozen registry determine the cohort; no random sampling or
+  configurable seed is introduced by this notebook.
+- Compute estimate: one bounded header-only metadata pass to construct the cohort during the batch
+  readiness run; after `START`, one selected study at a time, one model preprocessing pass and one
+  QA preprocessing pass per eligible series, one render per series, and immediate temporary-file
+  cleanup. No full-cohort pixel pass or pre-render directory is permitted.
+- Expected information gain: establish whether the fixed nine-check human protocol accepts every
+  selected series while preserving r16 provenance, orientation, laterality, intensity, geometry,
+  sequence-slot, duplicate/missing/abnormal handling, and preprocessing appearance.
+- Promotion criterion: independent source-set verifier PASS with the original ordered failure
+  preserved; complete local engineering gate PASS; authenticated fresh private/offline/CPU
+  notebook v1 with exact three inputs and exact source hash; terminal `COMPLETE`; sanitized
+  `human_review_ready` output; no private ledger and no human review started during batch execution.
+- Kill criterion: any source/hash/version mismatch, duplicate/missing/unexpected input, symlink,
+  unbounded discovery, cohort quota failure, selected-study source drift, second render, resume
+  identity mismatch, private-output leak, notebook error, or evidence that automation crossed the
+  `START` boundary. Any need to rerun A/B/comparison, create r17, train, submit, merge, publish, or
+  begin Chunk 6 also stops the experiment.
+- Runtime/cost and outcome: pending the one authorized private version-1 launch. Human decisions
+  remain `NOT_STARTED`; submission is not approved and clinical use is prohibited.
+
 ## Promotion criteria
 
 - Every required synthetic fixture and existing regression passes.
