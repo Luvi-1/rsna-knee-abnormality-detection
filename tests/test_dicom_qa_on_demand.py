@@ -105,7 +105,22 @@ def test_input_discovery_accepts_competition_mount_metadata_but_checks_entry_typ
         review.discover_inputs(input_root, refs)
 
 
-def test_input_discovery_rejects_duplicate_unexpected_and_symlink_roots(
+def test_input_discovery_accepts_source_mount_metadata_but_checks_entry_types(
+    tmp_path: Path,
+) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "source-kernel"
+    (source / "kernel-metadata.json").write_bytes(b"{}")
+
+    assert review.discover_inputs(input_root, refs).source == source
+
+    (source / "audit_key.bin").unlink()
+    (source / "audit_key.bin").mkdir()
+    with pytest.raises(review.OnDemandReviewError, match="input_root_invalid"):
+        review.discover_inputs(input_root, refs)
+
+
+def test_input_discovery_rejects_duplicate_and_symlink_roots(
     tmp_path: Path,
 ) -> None:
     input_root, refs = _mounts(tmp_path)
@@ -115,11 +130,6 @@ def test_input_discovery_rejects_duplicate_unexpected_and_symlink_roots(
         review.discover_inputs(input_root, refs)
 
     duplicate.rename(input_root / "owner/old-bundle")
-    (input_root / "source-kernel/unexpected.txt").write_bytes(b"x")
-    with pytest.raises(review.OnDemandReviewError, match="input_missing"):
-        review.discover_inputs(input_root, refs)
-
-    (input_root / "source-kernel/unexpected.txt").unlink()
     real = tmp_path / "real-source"
     (input_root / "source-kernel").rename(real)
     (input_root / "source-kernel").symlink_to(real, target_is_directory=True)

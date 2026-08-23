@@ -230,8 +230,10 @@ def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
             *_candidate_paths(input_root, refs.source_kernel, "notebooks"),
             input_root / "datasets" / source_owner / source_slug,
         ),
-        lambda entries: entries == expected_source,
+        lambda entries: entries >= expected_source,
     )
+    if any(not (source / name).is_file() for name in expected_source):
+        raise OnDemandReviewError("input_root_invalid")
     competition = _one_root(
         input_root,
         (input_root / COMPETITION_SLUG, input_root / "competitions" / COMPETITION_SLUG),
