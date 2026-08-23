@@ -111,14 +111,19 @@ def _notebook_payload(
     invocation = "\n".join(
         (
             "import hashlib",
+            "import sys",
+            "import types",
             f"MODULE_SOURCE = {source!r}",
             f"EXPECTED_SOURCE_SHA256 = {source_sha256!r}",
             "if hashlib.sha256(MODULE_SOURCE.encode('utf-8')).hexdigest() != "
             "EXPECTED_SOURCE_SHA256:",
             "    raise RuntimeError('notebook_source_hash_mismatch')",
-            "namespace = {'__name__': 'chunk5_on_demand_runtime'}",
-            "exec(compile(MODULE_SOURCE, 'on_demand_review.py', 'exec'), namespace)",
-            "exit_code = namespace['run_on_demand_review'](",
+            "runtime_module = types.ModuleType('chunk5_on_demand_runtime')",
+            "runtime_module.__file__ = 'on_demand_review.py'",
+            "sys.modules[runtime_module.__name__] = runtime_module",
+            "exec(compile(MODULE_SOURCE, runtime_module.__file__, 'exec'), "
+            "runtime_module.__dict__)",
+            "exit_code = runtime_module.run_on_demand_review(",
             f"    bundle_dataset_ref={bundle_ref!r},",
             f"    source_kernel_ref={source_ref!r},",
             f"    source_entries={SOURCE_ENTRIES!r},",
@@ -134,6 +139,7 @@ def _notebook_payload(
         "cells": [
             {
                 "cell_type": "markdown",
+                "id": "chunk5-overview",
                 "metadata": {},
                 "source": [
                     "# Chunk 5 private on-demand DICOM QA\n",
@@ -143,6 +149,7 @@ def _notebook_payload(
             },
             {
                 "cell_type": "code",
+                "id": "chunk5-on-demand-review",
                 "execution_count": None,
                 "metadata": {},
                 "outputs": [],

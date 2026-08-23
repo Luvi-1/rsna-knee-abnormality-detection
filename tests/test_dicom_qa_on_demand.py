@@ -456,7 +456,15 @@ def test_readiness_remains_pre_start_without_a_review_ledger(tmp_path: Path) -> 
 
 
 def test_packaged_notebook_attests_embedded_source_hash() -> None:
-    source = "def run_on_demand_review(**kwargs):\n    return 0\n"
+    source = (
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class EmbeddedIdentity:\n"
+        "    value: str\n"
+        "def run_on_demand_review(**kwargs):\n"
+        "    return 0 if EmbeddedIdentity('ok').value == 'ok' else 2\n"
+    )
     source_hash = hashlib.sha256(source.encode()).hexdigest()
     payload = packager._notebook_payload(
         source=source,
@@ -474,3 +482,4 @@ def test_packaged_notebook_attests_embedded_source_hash() -> None:
     assert "expected_runner_sha256" in code
     assert "run_on_demand_review" in code
     assert payload == packager._canonical_json_bytes(notebook)
+    exec(compile(code, "packaged-on-demand-test.ipynb", "exec"), {})
