@@ -21,8 +21,14 @@ Kaggle mount metadata before the frozen runner authenticated the expected manife
 hashes. Commits `6d8f133` and `4ad9a08` add only the missing source-root form,
 allow bounded extra mount metadata while requiring every expected source entry to be a regular
 file, and canonicalize notebook JSON only for the on-demand remote hash check. Focused discovery,
-semantic-hash tamper, Ruff, and strict-mypy checks pass. The complete local gate and a fresh package
-remain pending. A new launch requires renewed explicit approval; human review is `NOT_STARTED`.
+semantic-hash tamper, Ruff, and strict-mypy checks pass. The first complete local gate on clean
+commit `71d87ee2df8186a8ec27da2d17c7f7bff3ca0563` passed: locked offline sync; Ruff check/format
+(136 files); mypy src (25 files) plus strict trust-boundary scope (5 files); pytest 615/615;
+sensitive-file guard; pre-commit and full tracked detect-secrets; pip-audit with no known
+vulnerabilities; canonical contract schema; required source-set verifier output; frozen runner hash
+equality; no r17 path; and clean diff/tree checks. The same gate must pass once more after this
+governance update before a fresh package is built. A new launch requires renewed explicit approval;
+human review is `NOT_STARTED`.
 
 ### r16 provisional nonclinical research release 2026-08-23 (D-046)
 

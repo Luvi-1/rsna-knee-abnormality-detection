@@ -1296,10 +1296,13 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   the on-demand validator, rejecting duplicate JSON keys and every semantic notebook mutation.
   Do not change the frozen r16 runner, selector, preprocessing, A/B outputs, comparison, or D-046.
 - Verification: commits `6d8f133` and `4ad9a08`; focused input-discovery checks 7/7 PASS; normalized
-  notebook hash accepts Kaggle formatting and rejects a semantic mutation; Ruff and strict mypy
-  PASS. A live read-only validation now passes source hashing and stops at the preserved terminal
-  status with `kernel_status_invalid`. Complete local gate and fresh-package identity proof remain
-  required before requesting another launch.
+  notebook hash accepts Kaggle formatting and rejects a semantic mutation. A live read-only
+  validation now passes source hashing and stops at the preserved terminal status with
+  `kernel_status_invalid`. The first complete clean-tree gate at `71d87ee` passed locked offline
+  sync, Ruff, mypy src plus strict trust scope, pytest 615/615, sensitive/secret/pre-commit checks,
+  pip-audit, contract schema, required exact-set output, frozen-runner equality, and clean-tree
+  checks. The identical post-governance gate and fresh-package identity proof remain required before
+  requesting another launch.
 - Consequence: no additional remote launch is authorized. Human review remains `NOT_STARTED` and
   Chunk 5 remains technically incomplete. A fresh private v1 may be launched only after the complete
   gate, fresh absent-identity proof, and renewed explicit human approval.

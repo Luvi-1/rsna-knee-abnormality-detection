@@ -382,10 +382,12 @@ inside Kaggle and never enter repository documents or command output.
   private/offline/CPU-only version 1 and reached terminal `ERROR`. The bounded failure token was
   `input_missing` at 11.467 seconds; output inventory was empty, and execution stopped before
   runtime installation, cohort construction, pixel access, `START`, ledger creation, UI display, or
-  human review. D-047 records the bounded mount and canonical-notebook corrections. The complete
-  local gate, fresh absent identity, and renewed explicit approval are required before any new
-  launch. Human decisions remain `NOT_STARTED`; submission is not approved and clinical use is
-  prohibited.
+  human review. D-047 records the bounded mount and canonical-notebook corrections. The first
+  complete clean-tree gate passed at `71d87ee` with pytest 615/615 and every declared static,
+  typing, privacy, secret, dependency, contract-schema, exact-set, frozen-hash, and clean-tree check.
+  The identical post-governance gate, fresh absent identity, and renewed explicit approval are
+  required before any new launch. Human decisions remain `NOT_STARTED`; submission is not approved
+  and clinical use is prohibited.
 
 ## Promotion criteria
 
