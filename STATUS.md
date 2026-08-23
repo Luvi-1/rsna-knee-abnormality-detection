@@ -29,6 +29,20 @@ duplicate/symlink rejection and full regression coverage. The QA adapter freeze/
 next step. Chunk 5 is not passed. Submission, merge, publication,
 and Chunk 6 remain blocked pending explicit human approval.
 
+### r15 adapter remediation-two terminal update 2026-08-23
+
+Remediation two is committed at `1c4fa7e594ece3752b32281ccc7c23d49814986f`, packaged as bundle
+`fd8238f94ef1f91282b8a9d904c3a273e56e5499779a2b5700b920a1bf42b8cf`, and privately deployed once
+as dataset `lavicheema/rsna-knee-dicom-qa-bundle-1c4fa7e-fd8238f94ef1` version 1 (`ready`). Its
+runner is byte-identical to the certified producer
+`5b71cbc3e36f862c41edfe93e55186bc46ed541b418de0c7325238b315b8bf4a`, the sealed finalizer contains
+the intended core-reuse policy, and the retained Core Execution Certificate verifies PASS. The
+single exact authenticated inputs validation failed closed locally with `review_identity_invalid`
+before any remote launch: the validator still expects upstream refs from mutable run-config
+`core_reuse`, while remediation two intentionally seals them in the finalizer. Live checks confirm
+all four r15 upstream kernels remain COMPLETE and plan identity
+`lavicheema/rsna-knee-dqa-plan-1c4fa7e-fd8238f94ef1` is absent. Under D-041 this third adapter
+attempt is terminal; no fourth iteration is authorized without explicit human approval.
 ## Historical r14 terminal checkpoint
 
 R14 is terminal `failed` at review-plan. Its exact authenticated inputs, performance smoke, Run A,

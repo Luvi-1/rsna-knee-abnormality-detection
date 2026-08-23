@@ -1163,3 +1163,14 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   further extension must be schema-versioned rather than adding another unversioned key.
 - Reversal condition: if authenticating sealed legacy bundles and covered reuse requires weakening
   another invariant, stop and redesign the config contract.
+
+## D-041 - Terminal classification of sealed-policy adapter after validator mismatch
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Why did remediation-two adapter validation fail closed at exact authenticated inputs before any remote launch, and what is the evidence-preserving disposition?
+- Evidence: D-039 made run-config core_reuse the validator's only reuse input, but D-040/remediation two removed that field from run-config and injected the equivalent policy into the sealed finalizer. On commit 1c4fa7e594ece3752b32281ccc7c23d49814986f, offline reproduction proved that sealed _public_review_identity correctly emits upstream refs bound to d3771e7-61963849d8ec, while validate_dicom_qa_output._workflow_refs -> _apply_core_reuse still derives those roles from the current 1c4fa7e-fd8238f94ef1 identity because it reads only run-config. The one exact authenticated inputs invocation returned dicom_qa_output_validation=FAIL code=review_identity_invalid with exit 2 before Kaggle mutation. Independent checks confirmed certificate verification PASS, deployed dataset ready, plan-kernel identity absent, and all four r15 upstream kernels live COMPLETE.
+- Decision: classify this as the third and final authorized adapter attempt under the objective's bounded loop. Do not create a fourth iteration or a third remediation. Preserve commit, bundle SHA fd8238f94ef1f91282b8a9d904c3a273e56e5499779a2b5700b920a1bf42b8cf, and dataset lavicheema/rsna-knee-dicom-qa-bundle-1c4fa7e-fd8238f94ef1 version 1 as immutable failure evidence. A human must choose whether to authorize one narrowly scoped, fully gated validator-only correction that consumes the already-sealed finalizer policy, or abandon the certified-core adapter route.
+- Verification: no remote write occurred; no downstream kernel was pushed; plan identity remains absent; registry integrity is OK; protected history unchanged.
+- Consequence: review-plan remains blocked pending explicit human decision. The defect is localized to validator/finalizer integration, not core validity or mount layout.
+- Reversal condition: only explicit human approval may supersede the limit; a correction must bind validator expectations to the sealed policy, add regressions, rerun the complete gate, and deploy a fresh adapter identity.
