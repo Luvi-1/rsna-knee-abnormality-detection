@@ -56,6 +56,23 @@ format/check (127 files), strict mypy src (25 files), strict mypy trust boundary
 runner, finalizer, packaging, certified-core evidence, or remote state changed yet. Next gated
 steps are one fresh bundle/deployment, one inputs validation, and one review-plan push; stop again
 at the human visual-QA boundary.
+
+### r15 adapter route terminal classification 2026-08-23 (D-043)
+
+The corrected adapter committed at `533ae53d2899e190e97751d3018ad493faf2aa52`, packaged as bundle
+`988a62aa6688f42d4defb56e9e3b2821dff64bde37db9995986a3aa078ae375d`, deployed once as dataset
+`lavicheema/rsna-knee-dicom-qa-bundle-533ae53-988a62aa6688` v1 (`ready`), passed exact
+authenticated inputs validation (`dicom_qa_output_validation=PASS mode=workflow stage=inputs`),
+proved plan identity absent, then pushed review-plan v1 exactly once. Plan kernel
+`lavicheema/rsna-knee-dqa-plan-533ae53-988a62aa6688` reached terminal `ERROR` in about 12.5s with
+`phase=review code=private_cohort_plan_invalid` before any replay, rendering, or human review.
+Root cause is proven static: the sealed certified runner's preparation path binds consumed core
+artifacts' embedded provenance to the executing bundle identity; certified outputs permanently
+carry the frozen r15 identity while any compliant fresh adapter carries a different content-derived
+identity, so this gate cannot pass without changing certified runner semantics. Per the approved
+bounds no further autonomous iteration occurred. Chunk 5 remains technically incomplete pending a
+human decision: authorize a runner-semantics redesign plus recertification, schedule a fully gated
+fresh successor chain, or park the effort.
 ## Historical r14 terminal checkpoint
 
 R14 is terminal `failed` at review-plan. Its exact authenticated inputs, performance smoke, Run A,
