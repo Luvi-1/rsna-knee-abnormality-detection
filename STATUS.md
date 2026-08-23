@@ -43,6 +43,19 @@ before any remote launch: the validator still expects upstream refs from mutable
 all four r15 upstream kernels remain COMPLETE and plan identity
 `lavicheema/rsna-knee-dqa-plan-1c4fa7e-fd8238f94ef1` is absent. Under D-041 this third adapter
 attempt is terminal; no fourth iteration is authorized without explicit human approval.
+
+### r15 adapter validator correction 2026-08-23 (human-approved, in progress)
+
+The operator approved exactly one validator-only correction under D-042. The output validator now
+sources optional certified-core reuse from the authenticated sealed finalizer's
+`CORE_REUSE_POLICY` instead of run-config, preserving every existing fail-closed policy check and
+keeping downstream adapter identities fresh. Regression coverage proves sealed-policy agreement and
+malformed-policy rejection. Complete local gate PASS on this change against d3d2d7c: Ruff
+format/check (127 files), strict mypy src (25 files), strict mypy trust boundary (3 files), pytest
+587 passed exit 0, sensitive-file guard, tracked secret scan, and git diff --check. No DICOM,
+runner, finalizer, packaging, certified-core evidence, or remote state changed yet. Next gated
+steps are one fresh bundle/deployment, one inputs validation, and one review-plan push; stop again
+at the human visual-QA boundary.
 ## Historical r14 terminal checkpoint
 
 R14 is terminal `failed` at review-plan. Its exact authenticated inputs, performance smoke, Run A,

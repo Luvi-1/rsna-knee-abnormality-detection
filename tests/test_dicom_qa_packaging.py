@@ -324,6 +324,73 @@ def test_bundle_with_core_reuse_stays_verifiable(tmp_path: Path) -> None:
     assert dependencies
 
 
+def test_workflow_identity_matches_sealed_finalizer_core_reuse_policy(
+    tmp_path: Path,
+) -> None:
+    inputs = _bundle_inputs(tmp_path)
+    core_reuse = {
+        "core_lineage_id": "preprocess-0001-dicom-pipeline-r15",
+        "core_certificate_payload_sha256": "c" * 64,
+        "upstream_refs": {
+            "performance_smoke": "owner/core-smoke",
+            "run_a": "owner/core-a",
+            "run_b": "owner/core-b",
+            "comparison": "owner/core-cmp",
+        },
+    }
+    bundle = tmp_path / "bundle"
+    result = packager._assemble_bundle(output=bundle, **inputs, core_reuse=core_reuse)
+    run_config, _runner, manifest = validator.load_verified_policy(
+        bundle / "dataset/run-config.json",
+        bundle / "dataset/bundle-manifest.json",
+        expected_commit=COMMIT,
+        expected_bundle=result["bundle_sha256"],
+    )
+    assert "core_reuse" not in run_config
+
+    finalizer_path = bundle / "dataset/finalize_review.py"
+    finalizer = validator._finalizer_module(
+        hashlib.sha256(finalizer_path.read_bytes()).hexdigest(),
+        path=finalizer_path,
+    )
+    _source, refs = validator._validated_workflow_identity(run_config, manifest, finalizer)
+
+    assert refs["performance_smoke"] == "owner/core-smoke"
+    assert refs["run_a"] == "owner/core-a"
+    assert refs["run_b"] == "owner/core-b"
+    assert refs["comparison"] == "owner/core-cmp"
+    suffix = f"{COMMIT[:7]}-{result['bundle_sha256'][:12]}"
+    assert refs["review_plan"] == f"test-owner/rsna-knee-dqa-plan-{suffix}"
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        "not-a-policy",
+        {"core_lineage_id": "BAD LINEAGE"},
+        {
+            "core_lineage_id": "r15",
+            "core_certificate_payload_sha256": "short",
+            "upstream_refs": {},
+        },
+        {
+            "core_lineage_id": "r15",
+            "core_certificate_payload_sha256": "c" * 64,
+            "upstream_refs": {"review_plan": "owner/injected-slug"},
+        },
+        {
+            "core_lineage_id": "r15",
+            "core_certificate_payload_sha256": "c" * 64,
+            "upstream_refs": {"run_a": "/absolute/path"},
+        },
+    ],
+)
+def test_validator_core_reuse_rejects_invalid_sealed_policies(policy: Any) -> None:
+    refs = {"run_a": "test-owner/rsna-knee-dqa-a-aaaaaaa-bbbbbbbbbbbb"}
+    with pytest.raises(validator.OutputValidationError, match="kernel_identity_invalid"):
+        validator._apply_core_reuse(refs, policy)
+
+
 def _comparator() -> Any:
     path = ROOT / "kaggle/dicom_qa/compare_runs.py"
     return validator._comparison_module(hashlib.sha256(path.read_bytes()).hexdigest())

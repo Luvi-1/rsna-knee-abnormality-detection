@@ -1174,3 +1174,14 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Verification: no remote write occurred; no downstream kernel was pushed; plan identity remains absent; registry integrity is OK; protected history unchanged.
 - Consequence: review-plan remains blocked pending explicit human decision. The defect is localized to validator/finalizer integration, not core validity or mount layout.
 - Reversal condition: only explicit human approval may supersede the limit; a correction must bind validator expectations to the sealed policy, add regressions, rerun the complete gate, and deploy a fresh adapter identity.
+
+## D-042 - Human-approved validator-only correction binding sealed core-reuse policy
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: May remediation-two's terminal validator mismatch be corrected once, narrowly, without changing DICOM semantics, runner bytes, certified-core evidence, or packaging semantics?
+- Evidence: On 2026-08-23 the operator explicitly approved one narrowly scoped validator-only correction, superseding the two-remediation limit recorded by D-041 for exactly this defect. Offline reproduction had proved that the sealed finalizer's CORE_REUSE_POLICY emitted the intended d3771e7-61963849d8ec upstream refs while the validator still derived expectations from run-config and therefore expected 1c4fa7e-fd8238f94ef1 refs.
+- Decision: source the validator's certified-core reuse policy from the already-authenticated sealed finalizer module (CORE_REUSE_POLICY) instead of run-config. Apply identical fail-closed checks: exact three-field policy schema, lineage regex, HEX64 certificate payload digest, role allowlist limited to performance_smoke/run_a/run_b/comparison, and owner/slug ref regex. Downstream adapter roles remain bound to the current commit/bundle. Do not modify finalize_review.py, qa_runner.py, run.py bytes, packager semantics, or any certified-core output.
+- Verification: regression proves a packaged core-reuse bundle's workflow identity matches the sealed finalizer policy while keeping review_plan bound to the fresh bundle identity, and five malformed-policy cases fail closed with kernel_identity_invalid. Complete local gate on this change against parent d3d2d7c: Ruff format/check PASS (127 files), strict mypy src PASS (25 files), strict mypy trust-boundary PASS (3 files), full pytest 587 passed exit 0, sensitive-file guard PASS, tracked secret scan clean, git diff --check clean.
+- Consequence: one fresh adapter bundle may be packaged, deployed, inputs-validated, and used for the single approved review-plan push under the existing external-action gates. Any further adapter failure stops for human decision again.
+- Reversal condition: if authenticating the sealed policy would require widening the role allowlist, trusting unsealed configuration, or weakening another invariant, stop and redesign under a new authorization.
