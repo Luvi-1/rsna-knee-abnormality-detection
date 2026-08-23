@@ -141,11 +141,11 @@ def _notebook_payload(
                 "cell_type": "markdown",
                 "id": "chunk5-overview",
                 "metadata": {},
-                "source": [
-                    "# Chunk 5 private on-demand DICOM QA\n",
+                "source": (
+                    "# Chunk 5 private on-demand DICOM QA\n"
                     "Private, offline, research-only human review. Stop all automation before "
-                    "typing `START`.\n",
-                ],
+                    "typing `START`.\n"
+                ),
             },
             {
                 "cell_type": "code",
@@ -153,7 +153,7 @@ def _notebook_payload(
                 "execution_count": None,
                 "metadata": {},
                 "outputs": [],
-                "source": [line + "\n" for line in invocation.splitlines()],
+                "source": invocation + "\n",
             },
         ],
         "metadata": {

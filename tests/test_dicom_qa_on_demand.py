@@ -86,6 +86,21 @@ def test_input_discovery_accepts_only_explicit_bounded_layouts(tmp_path: Path, l
     assert roots.competition.name == review.COMPETITION_SLUG
 
 
+def test_input_discovery_accepts_competition_mount_metadata_but_checks_entry_types(
+    tmp_path: Path,
+) -> None:
+    input_root, refs = _mounts(tmp_path, "typed")
+    competition = input_root / "competitions" / review.COMPETITION_SLUG
+    (competition / "dataset-metadata.json").write_bytes(b"{}")
+
+    assert review.discover_inputs(input_root, refs).competition == competition
+
+    (competition / "train_series").rmdir()
+    (competition / "train_series").write_bytes(b"not-a-directory")
+    with pytest.raises(review.OnDemandReviewError, match="input_root_invalid"):
+        review.discover_inputs(input_root, refs)
+
+
 def test_input_discovery_rejects_duplicate_unexpected_and_symlink_roots(
     tmp_path: Path,
 ) -> None:
@@ -475,11 +490,12 @@ def test_packaged_notebook_attests_embedded_source_hash() -> None:
         runner_sha256="b" * 64,
     )
     notebook = json.loads(payload)
-    code = "".join(notebook["cells"][1]["source"])
+    code = notebook["cells"][1]["source"]
 
     assert notebook["nbformat"] == 4
     assert source_hash in code
     assert "expected_runner_sha256" in code
     assert "run_on_demand_review" in code
+    assert all(isinstance(cell["source"], str) for cell in notebook["cells"])
     assert payload == packager._canonical_json_bytes(notebook)
     exec(compile(code, "packaged-on-demand-test.ipynb", "exec"), {})

@@ -49,17 +49,17 @@ SOURCE_REQUIRED_ENTRIES: Final = frozenset(
         "private_qa_samples.csv",
     }
 )
-COMPETITION_ENTRIES: Final = frozenset(
+COMPETITION_FILES: Final = frozenset(
     {
         "sample_submission.csv",
         "test.csv",
-        "test_series",
         "test_series.csv",
         "train.csv",
-        "train_series",
         "train_series.csv",
     }
 )
+COMPETITION_DIRECTORIES: Final = frozenset({"test_series", "train_series"})
+COMPETITION_ENTRIES: Final = COMPETITION_FILES | COMPETITION_DIRECTORIES
 
 
 class OnDemandReviewError(RuntimeError):
@@ -231,8 +231,12 @@ def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
     competition = _one_root(
         input_root,
         (input_root / COMPETITION_SLUG, input_root / "competitions" / COMPETITION_SLUG),
-        lambda entries: entries == COMPETITION_ENTRIES,
+        lambda entries: entries >= COMPETITION_ENTRIES,
     )
+    if any(not (competition / name).is_file() for name in COMPETITION_FILES) or any(
+        not (competition / name).is_dir() for name in COMPETITION_DIRECTORIES
+    ):
+        raise OnDemandReviewError("input_root_invalid")
     resolved = {path.resolve(strict=True) for path in (bundle, source, competition)}
     if len(resolved) != 3:
         raise OnDemandReviewError("input_duplicate")
