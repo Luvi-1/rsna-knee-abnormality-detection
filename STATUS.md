@@ -2,6 +2,28 @@
 
 Updated: 2026-08-23 (Chunk 5 r16 provisional research release; human QA preparation)
 
+### r16 on-demand QA launch terminal update 2026-08-23 (D-047)
+
+The operator approved one additional private version-1 launch. The exact two-file package at commit
+`43215041603323c23d1e0b2201429b7973b5ce65` was pushed once as
+`lavicheema/rsna-knee-dqa-ondemand-4321504-035044f26a47` v1 and reached terminal `ERROR`.
+The bounded safe log emitted only `ON_DEMAND_REVIEW_FAILED=input_missing` at 11.467 seconds before
+runtime installation, cohort construction, pixel access, `START`, ledger creation, UI display, or
+human review. Its authenticated output listing was empty. No version 2, retry, duplicate identity,
+remote deletion, A/B/comparison rerun, training, submission, merge, or publication occurred.
+
+A read-only pull proved the remote metadata remained the exact private/offline/CPU-only three-input
+graph and that Kaggle changed only notebook JSON serialization; canonical notebook content was
+identical. The generic token cannot identify which candidate failed; static root-cause tracing found
+two bounded discovery incompatibilities capable of producing it: the source resolver did not mirror
+the frozen resolver's full bounded root set, and exact directory equality could reject harmless
+Kaggle mount metadata before the frozen runner authenticated the expected manifest inventory and
+hashes. Commits `6d8f133` and `4ad9a08` add only the missing source-root form,
+allow bounded extra mount metadata while requiring every expected source entry to be a regular
+file, and canonicalize notebook JSON only for the on-demand remote hash check. Focused discovery,
+semantic-hash tamper, Ruff, and strict-mypy checks pass. The complete local gate and a fresh package
+remain pending. A new launch requires renewed explicit approval; human review is `NOT_STARTED`.
+
 ### r16 provisional nonclinical research release 2026-08-23 (D-046)
 
 R16 remains immutable and terminal under D-045: inputs, smoke, Run A, and Run B passed;

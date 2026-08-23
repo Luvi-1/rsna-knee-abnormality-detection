@@ -378,8 +378,14 @@ inside Kaggle and never enter repository documents or command output.
   identity mismatch, private-output leak, notebook error, or evidence that automation crossed the
   `START` boundary. Any need to rerun A/B/comparison, create r17, train, submit, merge, publish, or
   begin Chunk 6 also stops the experiment.
-- Runtime/cost and outcome: pending the one authorized private version-1 launch. Human decisions
-  remain `NOT_STARTED`; submission is not approved and clinical use is prohibited.
+- Runtime/cost and outcome: the approved package at commit `4321504` was pushed once as a fresh
+  private/offline/CPU-only version 1 and reached terminal `ERROR`. The bounded failure token was
+  `input_missing` at 11.467 seconds; output inventory was empty, and execution stopped before
+  runtime installation, cohort construction, pixel access, `START`, ledger creation, UI display, or
+  human review. D-047 records the bounded mount and canonical-notebook corrections. The complete
+  local gate, fresh absent identity, and renewed explicit approval are required before any new
+  launch. Human decisions remain `NOT_STARTED`; submission is not approved and clinical use is
+  prohibited.
 
 ## Promotion criteria
 

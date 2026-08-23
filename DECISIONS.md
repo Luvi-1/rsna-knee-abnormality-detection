@@ -1271,3 +1271,38 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: any exact-set verification failure, source/hash/version drift, substantive
   preprocessing defect, privacy or competition-rule violation, or human `BLOCK` revokes provisional
   use and requires fail-closed classification. A metadata-ordering issue alone does not.
+
+## D-047 - Preserve the failed on-demand v1 and correct only its input boundary
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: How should the single approved on-demand v1 `input_missing` result be classified and
+  corrected without changing the frozen r16 core or crossing the human-review boundary?
+- Evidence: the approved package at commit `43215041603323c23d1e0b2201429b7973b5ce65` was pushed
+  exactly once and reached terminal `ERROR`. Its bounded log emitted the fixed token
+  `ON_DEMAND_REVIEW_FAILED=input_missing` at 11.467 seconds; its output listing was empty. It did
+  not install the frozen runtime, build a cohort, access pixels, create a review ledger, display a
+  UI, or reach `START`. An authenticated read-only pull preserved the exact private/offline/CPU-only
+  three-input metadata. Canonical local and pulled notebook JSON matched exactly, proving the raw
+  hash mismatch was serialization-only. The generic failure token does not identify which candidate
+  failed. Static trace against D-038 found two incompatibilities capable of producing it: the
+  on-demand resolver omitted one root form already accepted by the frozen resolver and required
+  exact source-directory equality even though the frozen runner later authenticates the required
+  inventory, schema, private artifacts, and hashes.
+- Decision: preserve the failed identity unchanged with no v2 or deletion. Add only the proven
+  source-root form; permit bounded mount-added entries while requiring every API-authenticated
+  expected entry to remain a regular file; retain symlink, duplicate-root, entry-count, identity,
+  inventory, schema, hash, and privacy rejection. Canonicalize notebook JSON before hashing only in
+  the on-demand validator, rejecting duplicate JSON keys and every semantic notebook mutation.
+  Do not change the frozen r16 runner, selector, preprocessing, A/B outputs, comparison, or D-046.
+- Verification: commits `6d8f133` and `4ad9a08`; focused input-discovery checks 7/7 PASS; normalized
+  notebook hash accepts Kaggle formatting and rejects a semantic mutation; Ruff and strict mypy
+  PASS. A live read-only validation now passes source hashing and stops at the preserved terminal
+  status with `kernel_status_invalid`. Complete local gate and fresh-package identity proof remain
+  required before requesting another launch.
+- Consequence: no additional remote launch is authorized. Human review remains `NOT_STARTED` and
+  Chunk 5 remains technically incomplete. A fresh private v1 may be launched only after the complete
+  gate, fresh absent-identity proof, and renewed explicit human approval.
+- Reversal condition: any failure of required-file, hash, schema, duplicate, symlink, privacy, or
+  semantic-notebook tamper checks blocks packaging; any post-`START` evidence or private output leak
+  terminates this route.
