@@ -1137,3 +1137,29 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   bounds while every consumed upstream identity remains valid.
 - Reversal condition: if the certified core contract changes or any upstream identity becomes
   invalid, re-certify before adapter reuse; never widen the allowed role set beyond these four.
+
+## D-040 - Seal optional core_reuse inside bundle identity and allow it in the runner schema
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Why did adapter input validation fail closed with bundle_verification_failed despite
+  a complete remote dataset, and what is the minimal evidence-preserving correction?
+- Evidence: every deployed file matched its manifest record, but the runner rejected the deployed
+  run-config because its strict key set omitted the post-seal core_reuse addition. Recomputing
+  identity returned
+  648562a89527d01b3a61eb8f13fd3ad5f2b03415445638024cd1ec407c7b95eb rather than sealed
+  cff25c8d5d1ec22658b4835e9f1647d5208bc6d85a096621675a400c19504908.
+- Decision: insert an optional core_reuse block before normalized-run-record derivation so bundle
+  identity covers it, while retaining all other D-039 semantics. Permit that same single optional
+  key in the runner's exact config-key check. Do not mutate DICOM semantics or certified-core
+  outputs; this is adapter remediation one of at most two under the authorized loop.
+- Verification: a new packager regression builds and verifies a core-reuse bundle through the
+  runner; focused packaging and identity checks pass after the change. The failed v1 dataset is
+  preserved as evidence and not reused remotely; fresh adapter deployment follows the full gate.
+- During the post-change gate, the certifier was additionally corrected to load the policy runner
+  from the sealed dataset qa_runner file instead of the mutable working tree; the optional runner
+  path parameter defaults to prior behavior so every other caller remains unchanged.
+- Consequence: adapter-only repackaging can proceed without rerunning Run A/B/comparison. Any
+  further extension must be schema-versioned rather than adding another unversioned key.
+- Reversal condition: if authenticating sealed legacy bundles and covered reuse requires weakening
+  another invariant, stop and redesign the config contract.

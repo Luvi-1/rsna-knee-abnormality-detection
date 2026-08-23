@@ -331,6 +331,7 @@ def load_verified_policy(
     *,
     expected_commit: str,
     expected_bundle: str,
+    runner_path: Path | None = None,
 ) -> tuple[dict[str, Any], ModuleType, dict[str, Any]]:
     if not HEX_40.fullmatch(expected_commit):
         raise OutputValidationError("expected_commit_invalid")
@@ -344,7 +345,7 @@ def load_verified_policy(
         or not isinstance(kernel.get("sha256"), str)
     ):
         raise OutputValidationError("bundle_manifest_invalid")
-    runner = _runner_module(str(kernel["sha256"]))
+    runner = _runner_module(str(kernel["sha256"]), runner_path)
     requested_config = _json_object(run_config_path, MAX_POLICY_BYTES, "run_config_invalid")
     try:
         records = runner._validated_records(bundle_manifest_path.parent, manifest)

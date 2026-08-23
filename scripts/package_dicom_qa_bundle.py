@@ -1408,6 +1408,8 @@ def _assemble_bundle(
             dependency_records=dependency_records,
             workers=workers,
         )
+        if core_reuse is not None:
+            run_config["core_reuse"] = core_reuse
         normalized_record = _normalized_run_record(run_config)
         identity = _bundle_identity(
             owner=owner,
@@ -1425,8 +1427,6 @@ def _assemble_bundle(
         )
         bundle_sha256 = _sha256_bytes(_canonical_json_bytes(identity))
         run_config["bundle_sha256"] = bundle_sha256
-        if core_reuse is not None:
-            run_config["core_reuse"] = core_reuse
         upstream_refs = core_reuse.get("upstream_refs", {}) if isinstance(core_reuse, dict) else {}
         run_config_path = dataset_dir / "run-config.json"
         _write_bytes(run_config_path, _canonical_json_bytes(run_config), git_commit_timestamp)

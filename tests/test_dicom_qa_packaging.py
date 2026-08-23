@@ -295,6 +295,30 @@ def _runner() -> Any:
     return validator._runner_module(hashlib.sha256(path.read_bytes()).hexdigest())
 
 
+def test_bundle_with_core_reuse_stays_verifiable(tmp_path: Path) -> None:
+    inputs = _bundle_inputs(tmp_path)
+    core_reuse = {
+        "core_lineage_id": "preprocess-0001-dicom-pipeline-r15",
+        "core_certificate_payload_sha256": "c" * 64,
+        "upstream_refs": {
+            "performance_smoke": "owner/core-smoke",
+            "run_a": "owner/core-a",
+            "run_b": "owner/core-b",
+            "comparison": "owner/core-cmp",
+        },
+    }
+    bundle = tmp_path / "bundle"
+    packager._assemble_bundle(output=bundle, **inputs, core_reuse=core_reuse)
+
+    runner = _runner()
+    manifest = json.loads((bundle / "dataset/bundle-manifest.json").read_text())
+    records = runner._validated_records(bundle / "dataset", manifest)
+    run_config, _, dependencies = runner._verify_run_config(bundle / "dataset", manifest, records)
+
+    assert run_config["core_reuse"] == core_reuse
+    assert dependencies
+
+
 def _comparator() -> Any:
     path = ROOT / "kaggle/dicom_qa/compare_runs.py"
     return validator._comparison_module(hashlib.sha256(path.read_bytes()).hexdigest())

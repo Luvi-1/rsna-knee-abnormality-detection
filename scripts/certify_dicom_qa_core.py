@@ -229,6 +229,7 @@ def build_certificate(
         bundle_root / "bundle-manifest.json",
         expected_commit=str(run_config_value(bundle_root / "run-config.json", "code_commit")),
         expected_bundle=str(run_config_value(bundle_root / "run-config.json", "bundle_sha256")),
+        runner_path=bundle_root / "qa_runner.py",
     )
     refs = validator._workflow_refs(run_config)
     dataset_ref = validator._bundle_dataset_ref(run_config)
