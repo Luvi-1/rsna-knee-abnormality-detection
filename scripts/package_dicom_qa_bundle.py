@@ -1213,7 +1213,6 @@ def _assemble_bundle(
     comparison_sha256 = _sha256_bytes(comparison_payload)
     review_finalizer_payload = _read_bounded(review_finalizer_path, 1024 * 1024)
     _scan_for_secrets(review_finalizer_payload)
-    review_finalizer_sha256 = _sha256_bytes(review_finalizer_payload)
     review_ui_payload = _read_bounded(review_ui_path, 1024 * 1024)
     _scan_for_secrets(review_ui_payload)
     review_ui_sha256 = _sha256_bytes(review_ui_payload)
@@ -1398,7 +1397,7 @@ def _assemble_bundle(
             performance_smoke_sha256=performance_smoke_sha256,
             performance_smoke_policy_sha256=performance_smoke_policy_sha256,
             comparison_sha256=comparison_sha256,
-            review_finalizer_sha256=review_finalizer_sha256,
+            review_finalizer_sha256="",
             review_ui_sha256=review_ui_sha256,
             review_notebook_sha256=review_notebook_sha256,
             output_validator_sha256=output_validator_sha256,
@@ -1408,9 +1407,34 @@ def _assemble_bundle(
             dependency_records=dependency_records,
             workers=workers,
         )
-        if core_reuse is not None:
-            run_config["core_reuse"] = core_reuse
+        # ponytail: finalizer hash is finalized after packaging-time policy injection.
+        run_config["provenance"]["review_finalizer_sha256"] = ""
+        if core_reuse is not None and set(core_reuse) != {
+            "core_lineage_id",
+            "core_certificate_payload_sha256",
+            "upstream_refs",
+        }:
+            raise PackagingError("core_reuse_invalid")
+        finalizer_text = _read_bounded(review_finalizer_path, 1024 * 1024).decode("ascii")
+        marker = "CORE_REUSE_POLICY: Final = "
+        prefix, marker_present, suffix = finalizer_text.partition(marker)
+        if not marker_present or "\n" not in suffix:
+            raise PackagingError("review_finalizer_binding_invalid")
+        suffix = suffix.split("\n", 1)[1]
+        reuse_payload = None if core_reuse is None else _canonical_json_bytes(core_reuse)
+        reuse_literal = "None" if reuse_payload is None else reuse_payload.decode("ascii").strip()
+        finalizer_text = f"{prefix}{marker}{reuse_literal}\n{suffix}"
+        review_finalizer_payload = finalizer_text.encode("ascii")
+        review_finalizer_sha256 = _sha256_bytes(review_finalizer_payload)
+        run_config["provenance"]["review_finalizer_sha256"] = review_finalizer_sha256
+        finalizer_record = next(item for item in records if item["path"] == "finalize_review.py")
+        with open(dataset_dir / "finalize_review.py", "r+b") as handle:
+            handle.write(review_finalizer_payload)
+            handle.truncate()
+        finalizer_record["bytes"] = len(review_finalizer_payload)
+        finalizer_record["sha256"] = review_finalizer_sha256
         normalized_record = _normalized_run_record(run_config)
+        upstream_refs = core_reuse["upstream_refs"] if core_reuse is not None else {}
         identity = _bundle_identity(
             owner=owner,
             git_commit=git_commit,
@@ -1427,7 +1451,6 @@ def _assemble_bundle(
         )
         bundle_sha256 = _sha256_bytes(_canonical_json_bytes(identity))
         run_config["bundle_sha256"] = bundle_sha256
-        upstream_refs = core_reuse.get("upstream_refs", {}) if isinstance(core_reuse, dict) else {}
         run_config_path = dataset_dir / "run-config.json"
         _write_bytes(run_config_path, _canonical_json_bytes(run_config), git_commit_timestamp)
         records.append(_file_record(run_config_path, "run_config", "generated/run-config.json"))

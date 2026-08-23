@@ -235,18 +235,26 @@ def test_core_reuse_redirects_upstream_refs_and_keeps_downstream_fresh() -> None
         "code_commit": "a" * 40,
         "bundle_sha256": "b" * 64,
         "deployment": {"owner": "test-owner"},
-        "core_reuse": {
-            "core_lineage_id": "preprocess-0001-dicom-pipeline-r15",
-            "core_certificate_payload_sha256": "c" * 64,
-            "upstream_refs": {
-                "performance_smoke": "lavicheema/rsna-knee-dqa-smoke-d3771e7-61963849d8ec",
-                "run_a": "lavicheema/rsna-knee-dqa-a-d3771e7-61963849d8ec",
-                "run_b": "lavicheema/rsna-knee-dqa-b-d3771e7-61963849d8ec",
-                "comparison": "lavicheema/rsna-knee-dqa-cmp-d3771e7-61963849d8ec",
-            },
+    }
+    policy = {
+        "core_lineage_id": "preprocess-0001-dicom-pipeline-r15",
+        "core_certificate_payload_sha256": "c" * 64,
+        "upstream_refs": {
+            "performance_smoke": "lavicheema/rsna-knee-dqa-smoke-d3771e7-61963849d8ec",
+            "run_a": "lavicheema/rsna-knee-dqa-a-d3771e7-61963849d8ec",
+            "run_b": "lavicheema/rsna-knee-dqa-b-d3771e7-61963849d8ec",
+            "comparison": "lavicheema/rsna-knee-dqa-cmp-d3771e7-61963849d8ec",
         },
     }
-    refs = finalize_review._derived_refs(run_config)
+    previous = finalize_review.__dict__.get("CORE_REUSE_POLICY")
+    finalize_review.CORE_REUSE_POLICY = policy
+    try:
+        refs = finalize_review._derived_refs(run_config)
+    finally:
+        if previous is None:
+            finalize_review.__dict__.pop("CORE_REUSE_POLICY", None)
+        else:
+            finalize_review.CORE_REUSE_POLICY = previous
     assert refs["run_a"] == "lavicheema/rsna-knee-dqa-a-d3771e7-61963849d8ec"
     assert refs["comparison"] == "lavicheema/rsna-knee-dqa-cmp-d3771e7-61963849d8ec"
     # Downstream adapter roles must stay bound to the current commit/bundle identity.
@@ -254,51 +262,49 @@ def test_core_reuse_redirects_upstream_refs_and_keeps_downstream_fresh() -> None
 
 
 @pytest.mark.parametrize(
-    ("mutation", "expected_fragment"),
+    ("policy", "expected_fragment"),
     [
-        ({"core_reuse": {"core_lineage_id": "BAD LINEAGE"}}, "review_identity_invalid"),
+        ({"core_lineage_id": "BAD LINEAGE"}, "review_identity_invalid"),
+        (
+            {"core_lineage_id": "r15", "core_certificate_payload_sha256": "short"},
+            "review_identity_invalid",
+        ),
         (
             {
-                "core_reuse": {
-                    "core_lineage_id": "r15",
-                    "core_certificate_payload_sha256": "short",
-                }
+                "core_lineage_id": "r15",
+                "core_certificate_payload_sha256": "c" * 64,
+                "upstream_refs": {"review_plan": "owner/injected-slug"},
             },
             "review_identity_invalid",
         ),
         (
             {
-                "core_reuse": {
-                    "core_lineage_id": "r15",
-                    "core_certificate_payload_sha256": "c" * 64,
-                    "upstream_refs": {"review_plan": "owner/injected-slug"},
-                }
-            },
-            "review_identity_invalid",
-        ),
-        (
-            {
-                "core_reuse": {
-                    "core_lineage_id": "r15",
-                    "core_certificate_payload_sha256": "c" * 64,
-                    "upstream_refs": {"run_a": "/absolute/path"},
-                }
+                "core_lineage_id": "r15",
+                "core_certificate_payload_sha256": "c" * 64,
+                "upstream_refs": {"run_a": "/absolute/path"},
             },
             "review_identity_invalid",
         ),
     ],
 )
 def test_core_reuse_rejects_invalid_configurations(
-    mutation: dict[str, object], expected_fragment: str
+    policy: dict[str, object], expected_fragment: str
 ) -> None:
     run_config = {
         "code_commit": "a" * 40,
         "bundle_sha256": "b" * 64,
         "deployment": {"owner": "test-owner"},
     }
-    run_config.update(mutation)  # type: ignore[arg-type]
-    with pytest.raises(finalize_review.ReviewFinalizationError, match=expected_fragment):
-        finalize_review._derived_refs(run_config)
+    previous = finalize_review.__dict__.get("CORE_REUSE_POLICY")
+    finalize_review.CORE_REUSE_POLICY = policy
+    try:
+        with pytest.raises(finalize_review.ReviewFinalizationError, match=expected_fragment):
+            finalize_review._derived_refs(run_config)
+    finally:
+        if previous is None:
+            finalize_review.__dict__.pop("CORE_REUSE_POLICY", None)
+        else:
+            finalize_review.CORE_REUSE_POLICY = previous
 
 
 def test_kernel_source_root_returns_none_for_missing_source(tmp_path: Path) -> None:

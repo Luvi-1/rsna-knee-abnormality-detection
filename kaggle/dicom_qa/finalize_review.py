@@ -25,6 +25,8 @@ from typing import Any, Final, cast
 
 OUTPUT_DIRECTORY: Final = "dicom-qa-review-output"
 TEMPLATE_OUTPUT_DIRECTORY: Final = "dicom-qa-review-template-output"
+# ponytail: optional packaging-time injection point; the packager replaces this line.
+CORE_REUSE_POLICY: Final = None
 SANITIZED_SUMMARY: Final = "human_review_summary.json"
 SANITIZED_PERFORMANCE: Final = "final_performance_report.json"
 PRIVATE_COMPLETION: Final = "private_human_review_completion.json"
@@ -364,15 +366,24 @@ def _derived_refs(run_config: Mapping[str, Any]) -> dict[str, str]:
     refs = {
         role: f"{owner}/{prefix}-{commit[:7]}-{bundle[:12]}" for role, prefix in prefixes.items()
     }
-    # ponytail: stage-aware reuse via one optional core_reuse block; expand only if a
-    # future certificate format adds fields beyond these four upstream roles.
-    reuse = run_config.get("core_reuse")
-    if reuse is not None:
-        if not isinstance(reuse, dict):
+    # ponytail: packaging-time injection point for stage-aware certified-core reuse;
+    # expand only if a future certificate format adds fields beyond these three keys.
+    policy = globals().get("CORE_REUSE_POLICY")
+    if policy is not None:
+        if (
+            not isinstance(policy, Mapping)
+            or set(policy)
+            != {
+                "core_lineage_id",
+                "core_certificate_payload_sha256",
+                "upstream_refs",
+            }
+            or not isinstance(policy["upstream_refs"], dict)
+        ):
             raise ReviewFinalizationError("review_identity_invalid")
-        lineage = reuse.get("core_lineage_id")
-        payload = reuse.get("core_certificate_payload_sha256")
-        upstream = reuse.get("upstream_refs")
+        lineage = policy["core_lineage_id"]
+        payload = policy["core_certificate_payload_sha256"]
+        upstream = policy["upstream_refs"]
         if (
             not isinstance(lineage, str)
             or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,99}", lineage) is None

@@ -901,30 +901,28 @@ def _verify_run_config(
         ),
         "run_config_invalid",
     )
-    expected_keys = {
-        "schema_version",
-        "run_id",
-        "code_commit",
-        "bundle_sha256",
-        "deployment",
-        "competition",
-        "provenance",
-        "input_identity",
-        "review_policy",
-        "runtime_dependencies",
-        "selection",
-        "workers",
-        "privacy",
-        "anatomical_safety",
-        "runtime",
-        "output_policy",
-    }
-    # ponytail: one optional reuse key keeps certified-core adapters self-describing;
-    # use a schema-versioned extension list if another key is ever required.
-    if set(run_config) not in (expected_keys, expected_keys | {"core_reuse"}):
-        raise SafeRunError("run_config_invalid")
     if (
-        run_config.get("run_id") != f"dicom-qa-{cast(str, run_config.get('code_commit', ''))[:12]}"
+        set(run_config)
+        != {
+            "schema_version",
+            "run_id",
+            "code_commit",
+            "bundle_sha256",
+            "deployment",
+            "competition",
+            "provenance",
+            "input_identity",
+            "review_policy",
+            "runtime_dependencies",
+            "selection",
+            "workers",
+            "privacy",
+            "anatomical_safety",
+            "runtime",
+            "output_policy",
+        }
+        or run_config.get("run_id")
+        != f"dicom-qa-{cast(str, run_config.get('code_commit', ''))[:12]}"
         or run_config.get("schema_version") != 1
         or run_config.get("bundle_sha256") != bundle_sha256
         or _sha256_bytes(_canonical_json_bytes(_identity_payload(manifest, records, run_config)))

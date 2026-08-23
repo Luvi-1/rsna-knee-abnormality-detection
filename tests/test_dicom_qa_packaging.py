@@ -315,7 +315,12 @@ def test_bundle_with_core_reuse_stays_verifiable(tmp_path: Path) -> None:
     records = runner._validated_records(bundle / "dataset", manifest)
     run_config, _, dependencies = runner._verify_run_config(bundle / "dataset", manifest, records)
 
-    assert run_config["core_reuse"] == core_reuse
+    assert "core_reuse" not in run_config
+    policy_literal = json.dumps(
+        core_reuse, separators=(",", ":"), ensure_ascii=True, sort_keys=True
+    )
+    expected_policy = f"CORE_REUSE_POLICY: Final = {policy_literal}"
+    assert expected_policy in (bundle / "dataset/finalize_review.py").read_text()
     assert dependencies
 
 
