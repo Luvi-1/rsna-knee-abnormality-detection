@@ -210,6 +210,7 @@ def validate_remote(
         expected_dataset_sources=(bundle_ref,),
         expected_kernel_sources=(source_ref,),
         expected_competition_sources=(COMPETITION_SLUG,),
+        normalize_notebook_json=True,
     )
     base._kernel_status_complete(ref)
     _validate_listing(ref)

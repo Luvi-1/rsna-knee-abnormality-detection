@@ -57,9 +57,13 @@ def _mounts(tmp_path: Path, layout: str = "direct") -> tuple[Path, Any]:
         bundle = input_root / "owner/frozen-bundle"
         source = input_root / "owner/source-kernel"
         competition = input_root / review.COMPETITION_SLUG
-    else:
+    elif layout == "typed":
         bundle = input_root / "datasets/owner/frozen-bundle"
         source = input_root / "notebooks/owner/source-kernel"
+        competition = input_root / "competitions" / review.COMPETITION_SLUG
+    else:
+        bundle = input_root / "datasets/owner/frozen-bundle"
+        source = input_root / "datasets/owner/source-kernel"
         competition = input_root / "competitions" / review.COMPETITION_SLUG
     _touch_entries(bundle, {"bundle-manifest.json"})
     _touch_entries(source, set(source_entries))
@@ -72,7 +76,7 @@ def _mounts(tmp_path: Path, layout: str = "direct") -> tuple[Path, Any]:
     return input_root, refs
 
 
-@pytest.mark.parametrize("layout", ["direct", "owner", "typed"])
+@pytest.mark.parametrize("layout", ["direct", "owner", "typed", "typed-dataset-source"])
 def test_input_discovery_accepts_only_explicit_bounded_layouts(tmp_path: Path, layout: str) -> None:
     input_root, refs = _mounts(tmp_path, layout)
     train_root = next(input_root.rglob("train_series"))

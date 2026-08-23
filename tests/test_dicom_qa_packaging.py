@@ -2417,6 +2417,7 @@ def test_kernel_source_pull_authenticates_exact_file_and_rejects_unexpected_sour
         result["review_plan_ref"],
     ]
     include_extra = True
+    mutate_source = False
 
     def fake_cli(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
         assert arguments[:2] == ("kernels", "pull")
@@ -2427,7 +2428,10 @@ def test_kernel_source_pull_authenticates_exact_file_and_rejects_unexpected_sour
         metadata = json.loads(metadata_path.read_text())
         metadata.update({"id_no": 1729, "keywords": [], "docker_image": ""})
         (root / "kernel-metadata.json").write_text(json.dumps(metadata))
-        target.write_bytes(source_path.read_bytes())
+        source = json.loads(source_path.read_bytes())
+        if mutate_source:
+            source["nbformat_minor"] += 1
+        target.write_text(json.dumps(source, indent=2))
         if include_extra:
             (root / "pydicom.py").write_text("raise RuntimeError('shadowed import')\n")
         return b"source_pulled\n"
@@ -2443,6 +2447,7 @@ def test_kernel_source_pull_authenticates_exact_file_and_rejects_unexpected_sour
             expected_dataset_sources=[result["dataset_ref"]],
             expected_kernel_sources=expected_sources,
             expected_competition_sources=[],
+            normalize_notebook_json=True,
         )
 
     include_extra = False
@@ -2455,9 +2460,24 @@ def test_kernel_source_pull_authenticates_exact_file_and_rejects_unexpected_sour
         expected_dataset_sources=[result["dataset_ref"]],
         expected_kernel_sources=expected_sources,
         expected_competition_sources=[],
+        normalize_notebook_json=True,
     )
     assert verified["id_no"] == 1729
     assert verified["dataset_sources"] == [result["dataset_ref"]]
+
+    mutate_source = True
+    with pytest.raises(validator.OutputValidationError, match="kernel_source_hash_mismatch"):
+        validator._pull_and_verify_exact_kernel(
+            ref,
+            1,
+            "review_ui.ipynb",
+            hashlib.sha256(source_path.read_bytes()).hexdigest(),
+            expected_kernel_type="notebook",
+            expected_dataset_sources=[result["dataset_ref"]],
+            expected_kernel_sources=expected_sources,
+            expected_competition_sources=[],
+            normalize_notebook_json=True,
+        )
 
 
 @pytest.mark.parametrize(

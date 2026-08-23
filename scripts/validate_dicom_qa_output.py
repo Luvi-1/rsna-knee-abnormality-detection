@@ -1634,8 +1634,9 @@ def _pull_and_verify_exact_kernel(
     expected_kernel_sources: Sequence[str],
     expected_competition_sources: Sequence[str],
     expected_model_sources: Sequence[str] = (),
+    normalize_notebook_json: bool = False,
 ) -> dict[str, Any]:
-    if expected_version != 1:
+    if expected_version != 1 or (normalize_notebook_json and expected_kernel_type != "notebook"):
         raise OutputValidationError("kernel_version_invalid")
     with tempfile.TemporaryDirectory(prefix="rsna-knee-kernel-source-") as temporary:
         root = Path(temporary)
@@ -1674,6 +1675,8 @@ def _pull_and_verify_exact_kernel(
         if code_file != expected_code_file or metadata.get("id") != ref:
             raise OutputValidationError("kernel_source_invalid")
         payload = _read_bounded(code_path, 1024 * 1024, "kernel_source_invalid")
+        if normalize_notebook_json:
+            payload = _canonical_json_bytes(_json_bytes(payload, "kernel_source_invalid"))
         if hashlib.sha256(payload).hexdigest() != expected_code_sha256:
             raise OutputValidationError("kernel_source_hash_mismatch")
         return _validate_exact_kernel_metadata(

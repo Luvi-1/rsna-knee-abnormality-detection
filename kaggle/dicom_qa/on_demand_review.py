@@ -223,9 +223,13 @@ def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
         lambda entries: "bundle-manifest.json" in entries,
     )
     expected_source = frozenset(refs.source_entries)
+    source_owner, _, source_slug = refs.source_kernel.partition("/")
     source = _one_root(
         input_root,
-        _candidate_paths(input_root, refs.source_kernel, "notebooks"),
+        (
+            *_candidate_paths(input_root, refs.source_kernel, "notebooks"),
+            input_root / "datasets" / source_owner / source_slug,
+        ),
         lambda entries: entries == expected_source,
     )
     competition = _one_root(
