@@ -56,6 +56,13 @@ def test_duplicate_source_fails() -> None:
     with pytest.raises(verifier.SourceSetError):
         verifier.verify_evidence(value)
 
+    aliased = _evidence()
+    for collection in (aliased["expected_sources"], aliased["observed_sources"]):
+        for source in collection:
+            source["ref"] = "test-owner/source-shared"
+    with pytest.raises(verifier.SourceSetError):
+        verifier.verify_evidence(aliased)
+
 
 def test_missing_source_fails() -> None:
     value = _evidence()

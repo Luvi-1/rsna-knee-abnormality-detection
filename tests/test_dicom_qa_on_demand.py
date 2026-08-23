@@ -238,7 +238,7 @@ def test_actual_processing_is_scoped_to_requested_study() -> None:
             self.__dict__.update(values)
 
     def files(_root: Path, row: Any) -> tuple[Path, ...]:
-        calls.append(row.study_uid)
+        calls.append(row.series_uid)
         return (Path("one"), Path("two"), Path("three"))
 
     runner = SimpleNamespace(
@@ -267,6 +267,19 @@ def test_actual_processing_is_scoped_to_requested_study() -> None:
         "study_uid": "1.2.3.4",
         "all_series": [
             {
+                "series_ordinal": 0,
+                "series_uid": "1.2.3.4.0",
+                "fluid_sensitive": "absent",
+                "fat_suppression": "absent",
+                "plane": "axial",
+                "slot": "additional_or_duplicate",
+                "original_slot": "axial_structural",
+                "retention_reasons": [],
+                "terminal_state": "quality_blocked",
+                "model_eligible": False,
+            },
+            {
+                "series_ordinal": 1,
                 "series_uid": "1.2.3.4.5",
                 "fluid_sensitive": "present",
                 "fat_suppression": "present",
@@ -276,6 +289,13 @@ def test_actual_processing_is_scoped_to_requested_study() -> None:
                 "retention_reasons": [],
                 "terminal_state": "model_eligible",
                 "model_eligible": True,
+            },
+        ],
+        "eligible_series": [
+            {
+                "review_index": 0,
+                "series_ordinal": 1,
+                "series_uid": "1.2.3.4.5",
             }
         ],
     }
@@ -290,7 +310,7 @@ def test_actual_processing_is_scoped_to_requested_study() -> None:
     )
 
     assert len(states) == 1
-    assert calls == ["1.2.3.4"]
+    assert calls == ["1.2.3.4.5"]
 
 
 ATTESTATION = (
@@ -368,8 +388,17 @@ def test_interactive_path_renders_once_checkpoints_attests_and_cleans(
         return [output]
 
     answers = iter(("NEXT", "PPPPPPPPN", ATTESTATION))
+    times = iter(
+        (
+            "2020-01-01T00:00:00Z",
+            "2020-01-01T00:00:01Z",
+            "2020-01-01T00:00:02Z",
+            "2020-01-01T00:00:03Z",
+        )
+    )
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
-    monkeypatch.setattr(review, "_actual_study_states", lambda **_kwargs: [{}])
+    monkeypatch.setattr(review, "_utc_now", lambda: next(times, "2020-01-01T00:00:03Z"))
+    monkeypatch.setattr(review, "_actual_study_states", lambda **_kwargs: [{"series_ordinal": 0}])
     monkeypatch.setattr(review, "_render_one", render)
     runner = SimpleNamespace(
         _preprocessing_config=lambda *_args: object(),
@@ -433,6 +462,19 @@ def test_resume_rejects_identity_timestamp_and_na_mismatch() -> None:
     with pytest.raises(review.OnDemandReviewError, match="resume_invalid"):
         review._validate_resume(ledger, plan, "c" * 64)
 
+    ledger["series"][0]["decisions"]["slice_order"] = "PASS"
+    ledger["status"] = "complete"
+    ledger["completed_at_utc"] = ledger["started_at_utc"]
+    ledger["human_attestation"] = {
+        "statement": ATTESTATION,
+        "authorized_human_reviewer": True,
+        "direct_visual_review": True,
+        "no_llm_or_browser_automation_pixel_access": True,
+        "attested_at_utc": ledger["started_at_utc"],
+    }
+    with pytest.raises(review.OnDemandReviewError, match="resume_invalid"):
+        review._validate_resume(ledger, plan, "c" * 64)
+
 
 def test_sanitized_output_rejects_identifiers_paths_and_comments(tmp_path: Path) -> None:
     valid = {"status": "human_review_ready", "cohort_hash": "a" * 64}
@@ -468,6 +510,20 @@ def test_readiness_remains_pre_start_without_a_review_ledger(tmp_path: Path) -> 
         "not_started"
     )
     assert not (tmp_path / review.LEDGER_BASENAME).exists()
+
+
+@pytest.mark.parametrize(
+    "error_type", [EOFError, type("StdinNotImplementedError", (Exception,), {})]
+)
+def test_batch_stdin_unavailable_stops_before_start(
+    monkeypatch: pytest.MonkeyPatch, error_type: type[BaseException]
+) -> None:
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda _prompt="": (_ for _ in ()).throw(error_type()),
+    )
+
+    assert review._pre_start_input("START: ") is None
 
 
 def test_packaged_notebook_attests_embedded_source_hash() -> None:

@@ -864,6 +864,17 @@ def _utc(value: object) -> datetime | None:
         return None
 
 
+def _pre_start_input(prompt: str) -> str | None:
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return None
+    except Exception as error:
+        if type(error).__name__ == "StdinNotImplementedError":
+            return None
+        raise
+
+
 def _new_ledger(plan: Mapping[str, Any], plan_sha256: str) -> dict[str, Any]:
     session_id = uuid.uuid4().hex
     return {
@@ -1105,7 +1116,14 @@ def _validate_resume(ledger: Mapping[str, Any], plan: Mapping[str, Any], plan_sh
     attestation = ledger.get("human_attestation")
     if (
         (is_complete and completed != len(series))
-        or (is_complete and (completed_at is None or not last_time <= completed_at <= now))
+        or (
+            is_complete
+            and (
+                completed_at is None
+                or completed_at <= started
+                or not last_time <= completed_at <= now
+            )
+        )
         or (not is_complete and (completed_at is not None or attestation is not None))
         or (
             is_complete
@@ -1151,8 +1169,21 @@ def _actual_study_states(
     plan_study: Mapping[str, Any],
     reconciliation: Any,
 ) -> list[dict[str, Any]]:
+    planned_by_uid = {item["series_uid"]: item for item in plan_study["all_series"]}
+    requested = []
+    for eligible in plan_study["eligible_series"]:
+        planned = planned_by_uid.get(eligible["series_uid"])
+        if (
+            planned is None
+            or planned["series_ordinal"] != eligible["series_ordinal"]
+            or planned["model_eligible"] is not True
+        ):
+            raise OnDemandReviewError("selected_study_source_changed")
+        requested.append(planned)
+    if len(requested) != len({item["series_uid"] for item in requested}):
+        raise OnDemandReviewError("selected_study_source_changed")
     states = []
-    for planned in plan_study["all_series"]:
+    for planned in requested:
         row = runner.SeriesRow(
             study_uid=plan_study["study_uid"],
             series_uid=planned["series_uid"],
@@ -1213,11 +1244,12 @@ def _actual_study_states(
                 "quality": quality,
                 "candidate": candidate,
                 "terminal_state": terminal,
+                "series_ordinal": planned["series_ordinal"],
             }
         )
     assignment = slots.assign_series_slots(tuple(item["candidate"] for item in states))
     assigned = runner._slot_assignment_by_series(assignment)
-    for state, planned in zip(states, plan_study["all_series"], strict=True):
+    for state, planned in zip(states, requested, strict=True):
         slot, original_slot, reasons = assigned[state["row"].series_uid]
         observed = {
             "slot": slot,
@@ -1396,7 +1428,7 @@ def _interactive_review(
             plan_study=plan_study,
             reconciliation=reconciliation,
         )
-        by_series_ordinal = {index: state for index, state in enumerate(states)}
+        by_series_ordinal = {state["series_ordinal"]: state for state in states}
         study_temp = Path(
             tempfile.mkdtemp(
                 prefix=f".review-study-{plan_study['review_study_index']:06d}-",
@@ -1544,9 +1576,8 @@ def run_on_demand_review(
             "HUMAN_ONLY_BOUNDARY=Before typing START, stop all LLM/browser automation, "
             "screenshots, accessibility inspection, screen sharing, and recording."
         )
-        try:
-            start = input("Type START to begin the private review: ").strip()
-        except EOFError:
+        start = _pre_start_input("Type START to begin the private review: ")
+        if start is None:
             print("INTERACTIVE_REVIEW_REQUIRED")
             return 0
         if start != "START":

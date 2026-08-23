@@ -62,7 +62,11 @@ def _source_set(value: object) -> frozenset[tuple[str, str, int, str]]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) != 2:
         raise SourceSetError("source_count_invalid")
     records = tuple(_canonical_source(item) for item in value)
-    if len(set(records)) != 2 or len({item[0] for item in records}) != 2:
+    if (
+        len(set(records)) != 2
+        or len({item[0] for item in records}) != 2
+        or len({item[1] for item in records}) != 2
+    ):
         raise SourceSetError("duplicate_source_invalid")
     return frozenset(records)
 
