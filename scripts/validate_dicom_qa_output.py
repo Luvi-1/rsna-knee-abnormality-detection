@@ -1024,6 +1024,9 @@ def _authenticate_dataset_content(
 
             if deadline is None:
                 deadline = time.monotonic() + MAX_DATASET_CONTENT_SECONDS
+            # ponytail: 0.25s pacing keeps ~60 per-file downloads under Kaggle's
+            # HTTP-429 throttle; batched archive download if this ever grows.
+            download_pacing_seconds: Final = 0.25
             for name in sorted(validated):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -1044,6 +1047,7 @@ def _authenticate_dataset_content(
                     allow_empty=True,
                     timeout_seconds=min(300.0, remaining),
                 )
+                time.sleep(download_pacing_seconds)
                 if time.monotonic() > deadline:
                     raise OutputValidationError("dataset_download_timeout")
 
