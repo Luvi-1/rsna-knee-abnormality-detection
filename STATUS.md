@@ -1,6 +1,24 @@
 # Status
 
-Updated: 2026-08-23 (Chunk 5 r15 loop-breaker, live-certified core)
+Updated: 2026-08-23 (Chunk 5 r16 terminal comparison-metadata failure)
+
+### r16 terminal comparison authentication failure 2026-08-23 (D-045)
+
+The fresh r16 chain froze commit `da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f` and bundle
+`91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b`. Exact authenticated
+inputs, performance smoke, Run A, and Run B all passed. Run B was first observed `COMPLETE` at
+`2026-08-23T12:32:15Z`; Run A was first observed `COMPLETE` at `2026-08-23T13:22:30Z`.
+Comparison v1 was pushed once, reached `COMPLETE`, and its release-safe deterministic summary
+otherwise validated, but the exact workflow validator failed closed with
+`kernel_metadata_invalid`: the sealed source order is Run A then Run B, while Kaggle stored the
+same exact two-source set as Run B then Run A. A bounded source-only diagnostic authenticated the
+comparison code hash, output inventory, sanitized result, version, privacy settings, source set,
+and before/after stability when supplied the observed order, proving this ordering mismatch is the
+sole failure. Under D-044 the ordered graph mismatch is terminal; no v2, retry, review-plan, UI,
+review session, finalizer, submission, merge, publication, or Chunk 6 action occurred. The r16
+registry is terminal `failed`; Run A/B remain `passed`, comparison is
+`failed_kernel_metadata_invalid`, and review-plan/human review remain `not_started`. R15's
+registry payload hash remains unchanged.
 
 ### r16 fresh successor authorization 2026-08-23 (D-044)
 
@@ -15,7 +33,8 @@ guard, tracked secret scan, pre-commit hooks, pip-audit --strict clean, contract
 review preparation passes while foreign-core identity fails closed as
 `private_cohort_plan_invalid` (tests/test_dicom_qa_successor_lineage.py). Remote stages have
 not started; next gated steps are final red team -> freeze commit -> bundle ->
-identity-absence proof -> registry row -> dataset v1.
+identity-absence proof -> registry row -> dataset v1. This preparation record is historical; the
+D-045 terminal result above controls.
 
 ## Current r15 terminal checkpoint and certified-core policy
 

@@ -1206,3 +1206,31 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Verification: every stage must pass its exact authenticated validator before its dependent stage launches; registry rows append-only with r10-r15 byte-preserved; any source change after freeze invalidates the candidate and requires a new iteration.
 - Consequence: r15/r14 and all earlier chains stay terminal and immutable; the r16 row is appended in planned state before remote writes.
 - Reversal condition: any P0/P1 red-team finding, validator FAIL, or terminal kernel ERROR stops the chain for classification; no retry of a failed identity.
+
+## D-045 - R16 terminal comparison failure from remote kernel-source ordering
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Why did the fresh same-identity r16 comparison fail exact authentication after inputs,
+  smoke, Run A, and Run B passed, and may review-plan proceed?
+- Evidence: freeze `da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f` and bundle
+  `91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b` passed exact inputs,
+  performance-smoke, Run A, and Run B validators. Comparison v1 reached `COMPLETE`, but the exact
+  workflow validator returned `kernel_metadata_invalid`. The sealed comparison metadata orders
+  kernel sources as Run A then Run B; authenticated Kaggle source metadata stores the same exact
+  two refs as Run B then Run A. The preserved r15 comparator stores Run A then Run B. A bounded
+  source-only diagnostic using the observed r16 order authenticated the exact comparator hash,
+  private/offline/version-1 state, output inventory, sanitized deterministic PASS summary, and
+  stable before/after source metadata, isolating the ordered-list mismatch as the sole defect.
+- Decision: classify r16 terminal `failed` at comparison authentication. Do not treat set equality
+  or the diagnostic PASS as workflow acceptance, do not weaken the frozen validator, do not push
+  version 2, and do not launch review-plan or any later stage. Preserve the remote identity and
+  append-only registry evidence. Any new successor or source-order contract change requires a new
+  explicit human decision and complete gating.
+- Verification: the guarded registry transition records Run A/B `passed`, comparison
+  `failed_kernel_metadata_invalid`, review-plan/human review `not_started`, and terminal reason
+  `comparison_kernel_source_order_mismatch`; integrity and foreign keys pass and the r15 registry
+  payload hash is unchanged. The live r16 inventory contains only dataset, smoke, Run A, Run B,
+  and comparison identities.
+- Consequence: Chunk 5 remains technically incomplete. Human review never started. Final status is
+  `BLOCKED WITH PROVEN ROOT CAUSE`.
