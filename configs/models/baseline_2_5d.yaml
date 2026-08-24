@@ -1,0 +1,4 @@
+# Synthetic-only baseline reference. Replace with real encoder after data gate.
+model: baseline_2_5d
+n_targets: 12
+seed: 42
