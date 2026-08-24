@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rsna-knee.local/schemas/annotation_database.schema.json",
+  "title": "Annotation Database",
+  "type": "object",
+  "required": ["ontology_version", "partitions", "annotations"],
+  "additionalProperties": false,
+  "properties": {
+    "ontology_version": { "type": "string", "enum": ["provisional-v0"] },
+    "created_utc": { "type": "string", "format": "date-time" },
+    "partitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["study_key", "partition"],
+        "additionalProperties": false,
+        "properties": {
+          "study_key": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "partition": { "type": "string", "enum": ["dev", "holdout", "gold"] }
+        }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "annotation_record.schema.json" }
+    }
+  }
+}

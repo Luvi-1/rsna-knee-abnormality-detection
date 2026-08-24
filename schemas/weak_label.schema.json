@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rsna-knee.local/schemas/weak_label.schema.json",
+  "title": "Weak Label Record",
+  "type": "object",
+  "required": ["study_key", "target_column", "label_state", "ontology_version", "label_engine_version"],
+  "additionalProperties": false,
+  "properties": {
+    "study_key": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "target_column": {
+      "type": "string",
+      "enum": ["ACL", "MCL", "Medial Meniscus", "Lateral Meniscus", "Medial OA", "Lateral OA", "PF OA", "Effusion", "Synovitis", "Baker's", "Contusion", "Fracture"]
+    },
+    "soft_probability": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "label_state": { "type": "string", "enum": ["positive", "negative", "uncertain", "not_mentioned"] },
+    "mask_status": { "type": "boolean" },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "agreeing_sources": { "type": "array", "items": { "type": "string" } },
+    "conflicting_sources": { "type": "array", "items": { "type": "string" } },
+    "evidence_provenance": { "type": "array", "items": { "type": "string" } },
+    "language": { "type": ["string", "null"] },
+    "ontology_version": { "type": "string" },
+    "label_engine_version": { "type": "string" }
+  }
+}

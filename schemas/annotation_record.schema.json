@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rsna-knee.local/schemas/annotation_record.schema.json",
+  "title": "Annotation Record",
+  "type": "object",
+  "required": [
+    "record_id",
+    "study_key",
+    "target_column",
+    "ontology_version",
+    "label_state",
+    "source_type",
+    "reviewer_id",
+    "created_utc"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "record_id": {
+      "type": "string",
+      "pattern": "^ann_[0-9a-f]{32}$"
+    },
+    "study_key": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "series_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_column": {
+      "type": "string",
+      "enum": [
+        "ACL",
+        "MCL",
+        "Medial Meniscus",
+        "Lateral Meniscus",
+        "Medial OA",
+        "Lateral OA",
+        "PF OA",
+        "Effusion",
+        "Synovitis",
+        "Baker's",
+        "Contusion",
+        "Fracture"
+      ]
+    },
+    "ontology_version": {
+      "type": "string",
+      "enum": [
+        "provisional-v0"
+      ]
+    },
+    "label_version": {
+      "type": "string",
+      "enum": [
+        "official-labels-v1",
+        "weak-labels-v0"
+      ]
+    },
+    "label_state": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "negative",
+        "uncertain",
+        "not_mentioned"
+      ]
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_spans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "section"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "section": {
+            "type": "string",
+            "enum": [
+              "findings",
+              "impression",
+              "indication",
+              "technique",
+              "clinical_history",
+              "comparison",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "human_report_review",
+        "human_direct_mri_review",
+        "rule_labeler",
+        "classifier",
+        "template_propagation",
+        "pseudo_label",
+        "organizer_label"
+      ]
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "postoperative_context": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "current_vs_historical": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "current",
+        "historical",
+        null
+      ]
+    },
+    "adjudication_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "pending",
+        "in_progress",
+        "resolved",
+        "not_needed",
+        null
+      ]
+    },
+    "audit_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action",
+          "timestamp_utc"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "timestamp_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "protected_untouched_set": {
+      "type": "boolean",
+      "default": false
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

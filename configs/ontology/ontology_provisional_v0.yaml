@@ -1,0 +1,401 @@
+# PROVISIONAL ONTOLOGY v0 — NOT EXPERT-APPROVED.
+# Research-only; every rule requires qualified medical review before clinical or submission use.
+schema_version: 1
+ontology_version: "provisional-v0"
+created_utc: "2026-08-22"
+status: provisional_not_expert_approved
+
+# Shared four-state semantics apply to every target unless overridden below.
+# not_mentioned is NEVER equivalent to negative.
+shared_states:
+  positive: "Finding explicitly described as present in the current clinical context."
+  negative: "Finding explicitly stated absent, ruled out, normal, or unremarkable in current context."
+  uncertain: "Finding suspected, possible, cannot be excluded, equivocal, or hedged without commitment."
+  not_mentioned: "No relevant terminology appears anywhere in the report; status remains unknown."
+
+shared_policies:
+  four_state_only: true
+  not_mentioned_is_negative: false
+  missing_label_semantics: unknown_not_negative
+  impression_priority_over_findings: true
+  evidence_span_required_for_positive_and_uncertain: true
+  severity_recorded_but_does_not_flip_state: true
+  laterality_must_match_target_scope: true
+
+# Ambiguity resolutions requested by mission brief §9.
+ambiguity_resolutions:
+  meniscal_degeneration_vs_tear:
+    decision: degeneration_is_NOT_a_tear
+    rationale: "Degeneration/mucoid signal without morphologic disruption is chronic, not acute tear. Tear requires morphology change (slope, flap, complex, radial, bucket-handle, horizontal cleavage)."
+    review_flag: true
+  postoperative_meniscal_morphology:
+    decision: post_surgical_signal_without_new_tear_is_NOT_positive_unless_new_tear_stated
+    rationale: "Prior partial meniscectomy or repair changes signal; only new/displaced/complex tear counts."
+    review_flag: true
+  mucoid_acl_vs_injury:
+    decision: mucoid_degeneration_alone_is_NOT_ACL_injury
+    rationale: "Mucoid/cystic ACL degeneration is chronic; injury requires fiber disruption, edema, or discontinuity."
+    review_flag: true
+  acl_graft_vs_native_tear:
+    decision: graft_status_reported_separately_from_native_ACL
+    rationale: "Reconstructed graft is postoperative context. Graft intact does NOT mean native ACL normal. Graft tear IS positive for ACL target."
+    review_flag: true
+  healed_chronic_mcl_change:
+    decision: healed_or_chronic_thickening_alone_is_NOT_active_MCL_injury
+    rationale: "Old MCL sprain with residual thickening/calcification is historical. Active injury requires edema, disruption, or new description."
+    review_flag: true
+  trace_physiologic_fluid_vs_effusion:
+    decision: trace_physiologic_fluid_is_NEGATIVE_for_effusion
+    rationale: "'Trace fluid' or 'physiologic amount' implies no pathologic effusion."
+    review_flag: false
+  effusion_vs_synovitis:
+    decision: separate_targets_with_overlap_note
+    rationale: "Effusion = joint fluid volume. Synovitis = synovial thickening/enhancement/inflammation. They may coexist but neither implies the other."
+    review_flag: false
+  bakers_cyst_vs_popliteal_abnormality:
+    decision: Baker_cyst_requires_communication_with_gastrocnemius_semi_membranosus_bursa_OR_classic_description
+    rationale: "Generic popliteal mass/cyst does NOT count as Baker cyst without characteristic location/communication."
+    review_flag: true
+  traumatic_bone_contusion_vs_degenerative_edema:
+    decision: contusion_requires_trauma_context_OR_pattern_consistent_with_acute_bone_marrow_edema
+    rationale: "Subchondral cysts, geodes, or marrow changes attributed to OA are NOT contusions."
+    review_flag: true
+  acute_vs_healed_fracture:
+    decision: acute fracture = positive; healed/old fracture without acute component = NOT positive
+    rationale: "Historical healed fracture lines, old callus, remote surgical hardware are not active findings."
+    review_flag: false
+  insufficiency_stress_fracture:
+    decision: insufficiency_or_stress_fracture_COUNTS_as_positive_fracture
+    rationale: "These are fracture diagnoses even without trauma; they are clinically significant."
+    review_flag: false
+  cartilage_damage_vs_compartment_OA:
+    decision: focal_cartilage_defect_is_NOT_OA; compartment-level_joint_space_narrowing_plus_osteophyte_or_subchondral_change_IS_OA
+    rationale: "OA is compartment-level degenerative disease, not isolated chondral fissure/focal defect."
+    review_flag: true
+
+targets:
+  - column: "ACL"
+    clinical_concept: "Anterior cruciate ligament injury or tear"
+    anatomical_scope: "Native ACL or reconstructed ACL graft within intercondylar notch"
+    positive_terms:
+      - "ACL tear"
+      - "ACL rupture"
+      - "anterior cruciate ligament tear"
+      - "ACL injury"
+      - "ACL disruption"
+      - "full-thickness ACL tear"
+      - "partial-thickness ACL tear"
+      - "interstitial ACL tear"
+      - "graft tear"
+      - "graft rupture"
+    negative_terms:
+      - "ACL intact"
+      - "ACL is intact"
+      - "normal ACL"
+      - "unremarkable ACL"
+      - "no ACL tear"
+      - "ACL is normal"
+    uncertain_terms:
+      - "possible ACL tear"
+      - "cannot exclude ACL injury"
+      - "questionable ACL"
+      - "equivocal ACL"
+    related_do_not_count:
+      - "mucoid degeneration of ACL"
+      - "ACL ganglion cyst"
+      - "intercondylar notch cyst"
+      - "synovial proliferation near ACL"
+    ambiguity_notes: "Mucoid degeneration alone is NOT positive. Graft intact ≠ native normal."
+    acute_vs_chronic: both_count
+    historical_handling: old_healed_ACL_scar_without_active_injury_is_negative_if_described_as_remote
+    postoperative_handling: graft_status_tracked_under_same_column; native_and_graft_are_distinct_concepts
+    laterality: knee_level_no_side_qualifier_required
+
+  - column: "MCL"
+    clinical_concept: "Medial collateral ligament injury"
+    anatomical_scope: "Medial collateral ligament complex (superficial + deep fibers)"
+    positive_terms:
+      - "MCL tear"
+      - "MCL sprain"
+      - "MCL injury"
+      - "medial collateral ligament tear"
+      - "MCL disruption"
+      - "MCL edema"
+      - "MCL thickening with edema"
+    negative_terms:
+      - "MCL intact"
+      - "normal MCL"
+      - "no MCL injury"
+      - "MCL unremarkable"
+    uncertain_terms:
+      - "possible MCL sprain"
+      - "questionable MCL injury"
+    related_do_not_count:
+      - "chronic MCL thickening"
+      - "Pellegrini-Stieda lesion" # calcification at femoral attachment from OLD injury
+      - "pes anserine tendinopathy"
+      - "medial retinacular strain"
+    ambiguity_notes: "Chronic/healed thickening without edema is NOT active injury."
+    acute_vs_chronic: both_count_but_historical_healed_change_is_NOT_active
+    laterality: medial_side_of_indexed_knee
+
+  - column: "Medial Meniscus"
+    clinical_concept: "Medial meniscal tear or displacement"
+    anatomical_scope: "Medial meniscus body, posterior horn, anterior horn, root"
+    positive_terms:
+      - "medial meniscus tear"
+      - "MM tear"
+      - "medial meniscal tear"
+      - "horizontal cleavage tear medial meniscus"
+      - "complex tear medial meniscus"
+      - "bucket-handle medial meniscus"
+      - "flap tear medial meniscus"
+      - "radial tear medial meniscus"
+      - "meniscal extrusion medial"
+      - "root tear medial meniscus"
+    negative_terms:
+      - "medial meniscus intact"
+      - "normal medial meniscus"
+      - "no medial meniscal tear"
+    uncertain_terms:
+      - "possible medial meniscal tear"
+      - "questionable medial meniscus"
+    related_do_not_count:
+      - "meniscal degeneration medial"
+      - "mucoid signal medial meniscus"
+      - "intrameniscal signal grade 1 or 2"
+      - "post-surgical changes medial meniscus without new tear"
+      - "parameniscal cyst without associated tear description"
+    ambiguity_notes: "Grade 1/2 intrasubstance signal is NOT a tear. Post-op signal alone is NOT positive."
+    laterality: medial_meniscus_of_indexed_knee
+
+  - column: "Lateral Meniscus"
+    clinical_concept: "Lateral meniscal tear or displacement"
+    anatomical_scope: "Lateral meniscus body, posterior horn, anterior horn, root"
+    positive_terms:
+      - "lateral meniscus tear"
+      - "LM tear"
+      - "lateral meniscal tear"
+      - "horizontal cleavage lateral meniscus"
+      - "complex tear lateral meniscus"
+      - "discoid lateral meniscus with tear"
+      - "root tear lateral meniscus"
+      - "meniscal extrusion lateral"
+    negative_terms:
+      - "lateral meniscus intact"
+      - "normal lateral meniscus"
+      - "no lateral meniscal tear"
+    uncertain_terms:
+      - "possible lateral meniscal tear"
+      - "questionable lateral meniscus"
+    related_do_not_count:
+      - "meniscal degeneration lateral"
+      - "discoid lateral meniscus WITHOUT tear"
+      - "popliteus tendinopathy"
+      - "post-surgical changes lateral meniscus without new tear"
+    ambiguity_notes: "Discoid meniscus without tear is NOT positive."
+    laterality: lateral_meniscus_of_indexed_knee
+
+  - column: "Medial OA"
+    clinical_concept: "Medial compartment osteoarthritis"
+    anatomical_scope: "Medial femorotibial compartment (medial tibiofemoral joint space)"
+    positive_terms:
+      - "medial compartment osteoarthritis"
+      - "medial OA"
+      - "severe tricompartmental OA"
+      - "moderate medial compartment narrowing with osteophytes"
+      - "grade 3 or 4 medial chondromalacia with subchondral change"
+      - "bone-on-bone medial compartment"
+    negative_terms:
+      - "no medial compartment osteoarthritis"
+      - "normal medial compartment"
+      - "minimal medial compartment degenerative change" # conservative: mild may be negative
+    uncertain_terms:
+      - "early medial osteoarthritis"
+      - "mild medial compartment narrowing"
+      - "possible early OA"
+    related_do_not_count:
+      - "isolated medial meniscal chondral fissure"
+      - "focal cartilage defect medial condyle"
+      - "patellofemoral OA"
+      - "lateral compartment OA"
+    ambiguity_notes: "Focal chondral defect is NOT compartment OA. Mild narrowing without other signs is UNCERTAIN."
+    laterality: medial_femorotibial_compartment
+
+  - column: "Lateral OA"
+    clinical_concept: "Lateral compartment osteoarthritis"
+    anatomical_scope: "Lateral femorotibial compartment"
+    positive_terms:
+      - "lateral compartment osteoarthritis"
+      - "lateral OA"
+      - "severe tricompartmental OA"
+      - "moderate-to-severe lateral compartment narrowing with osteophytes"
+      - "bone-on-bone lateral compartment"
+    negative_terms:
+      - "no lateral compartment OA"
+      - "normal lateral compartment"
+      - "minimal lateral compartment degenerative change"
+    uncertain_terms:
+      - "early lateral OA"
+      - "mild lateral compartment narrowing"
+    related_do_not_count:
+      - "focal cartilage defect lateral condyle"
+      - "isolated lateral meniscal chondral fissure"
+      - "patellofemoral OA"
+      - "medial compartment OA"
+    ambiguity_notes: "Same as Medial OA rules applied to lateral side."
+    laterality: lateral_femorotibial_compartment
+
+  - column: "PF OA"
+    clinical_concept: "Patellofemoral osteoarthritis"
+    anatomical_scope: "Patellofemoral joint (patella trochlea articulation)"
+    positive_terms:
+      - "patellofemoral osteoarthritis"
+      - "PF OA"
+      - "patellofemoral joint space narrowing with osteophytes"
+      - "severe patellofemoral chondromalacia with subchondral change"
+      - "tricompartmental OA"
+    negative_terms:
+      - "no PF OA"
+      - "normal patellofemoral joint"
+    uncertain_terms:
+      - "early PF OA"
+      - "mild patellofemoral chondromalacia"
+    related_do_not_count:
+      - "isolated trochlear cartilage fissure"
+      - "chondromalacia patellae grade 1 or 2 without joint space change"
+      - "plica"
+      - "medial or lateral compartment OA"
+    ambiguity_notes: "Grade 1-2 chondromalacia without joint space narrowing is NOT PF OA."
+    laterality: patellofemoral_joint
+
+  - column: "Effusion"
+    clinical_concept: "Pathologic joint effusion"
+    anatomical_scope: "Knee joint space including suprapatellar recess"
+    positive_terms:
+      - "joint effusion"
+      - "knee effusion"
+      - "large effusion"
+      - "moderate effusion"
+      - "small effusion"
+      - "suprapatellar effusion"
+      - "hemarthrosis"
+      - "pyarthrosis"
+    negative_terms:
+      - "no effusion"
+      - "trace fluid"
+      - "physiologic fluid"
+      - "no joint effusion"
+      - "minimal fluid within physiologic range"
+    uncertain_terms:
+      - "tiny effusion"
+      - "questionable small effusion"
+    related_do_not_count:
+      - "Baker's cyst volume alone without joint-space effusion"
+      - "subcutaneous edema"
+      - "prepatellar bursitis"
+      - "infrapatellar bursitis"
+    ambiguity_notes: "Trace/physiologic fluid = NEGATIVE. Bursal fluid is NOT joint effusion."
+    laterality: indexed_knee_joint
+
+  - column: "Synovitis"
+    clinical_concept: "Synovial inflammation/thickening"
+    anatomical_scope: "Synovium throughout knee joint"
+    positive_terms:
+      - "synovitis"
+      - "synovial thickening"
+      - "synovial enhancement"
+      - "rheumatoid arthritis with synovitis"
+      - "pigmented villonodular synovitis"
+      - "inflammatory arthropathy with synovial proliferation"
+    negative_terms:
+      - "no synovitis"
+      - "normal synovium"
+      - "no synovial thickening"
+    uncertain_terms:
+      - "mild synovial enhancement"
+      - "possible synovitis"
+    related_do_not_count:
+      - "effusion alone"
+      - "hemosiderin staining without active synovial proliferation"
+      - "postsurgical fibrosis/scarring"
+    ambiguity_notes: "Effusion ≠ synovitis. Postsurgical fibrosis is NOT active synovitis."
+    laterality: indexed_knee
+
+  - column: "Baker's"
+    clinical_concept: "Popliteal (Baker) cyst"
+    anatomical_scope: "Posteromedial popliteal fossa between semimembranosus and medial gastrocnemius"
+    positive_terms:
+      - "Baker cyst"
+      - "Bakers cyst"
+      - "popliteal cyst"
+      - "semimembranosus-gastrocnemius bursa"
+    negative_terms:
+      - "no Baker cyst"
+      - "no popliteal cyst"
+    uncertain_terms:
+      - "small popliteal fluid collection"
+      - "possible Baker cyst"
+    related_do_not_count:
+      - "popliteal artery aneurysm"
+      - "ganglion cyst elsewhere"
+      - "soft-tissue mass NOS in popliteal fossa"
+      - "deep vein thrombosis"
+    ambiguity_notes: "Requires classic location or communication; generic popliteal abnormality insufficient."
+    laterality: indexed_knee_posterior_medial
+
+  - column: "Contusion"
+    clinical_concept: "Bone marrow contusion / bone bruise"
+    anatomical_scope: "Any bone in or around knee"
+    positive_terms:
+      - "bone contusion"
+      - "bone bruise"
+      - "marrow edema pattern consistent with contusion"
+      - "acute subchondral marrow edema"
+      - "trabecular microfracture"
+    negative_terms:
+      - "no bone contusion"
+      - "no marrow edema"
+    uncertain_terms:
+      - "possible bone contusion"
+      - "nonspecific marrow edema"
+    related_do_not_count:
+      - "degenerative subchondral cyst"
+      - "geode"
+      - "avascular necrosis"
+      - "bone infarct"
+      - "red marrow"
+      - "enchondroma"
+    ambiguity_notes: "Requires trauma-consistent pattern; degenerative marrow change is NOT contusion."
+    acute_vs_chronic: acute_primarily; chronic_marrow_edema_requires_review
+    laterality: any_knee_bone
+
+  - column: "Fracture"
+    clinical_concept: "Acute fracture of any knee bone"
+    anatomical_scope: "Distal femur, proximal tibia, proximal fibula, patella"
+    positive_terms:
+      - "fracture"
+      - "acute fracture"
+      - "displaced fracture"
+      - "nondisplaced fracture"
+      - "compression fracture"
+      - "avulsion fracture"
+      - "stress fracture"
+      - "insufficiency fracture"
+      - "Salter-Harris fracture"
+    negative_terms:
+      - "no fracture"
+      - "no acute fracture"
+      - "fracture is healed"
+      - "old healed fracture"
+    uncertain_terms:
+      - "possible nondisplaced fracture"
+      - "questionable fracture line"
+    related_do_not_count:
+      - "old healed fracture without acute component"
+      - "surgical hardware artifact"
+      - "osteochondritis dissecans"
+      - "physeal scar"
+    ambiguity_notes: "Insufficiency/stress fracture COUNTS as positive. Old healed fracture alone does NOT."
+    acute_vs_chronic: acute_or_active_required
+    laterality: indexed_knee_any_visible_bone
