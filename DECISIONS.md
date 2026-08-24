@@ -1347,3 +1347,37 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: only renewed explicit human approval after a complete fresh gate may authorize
   another launch identity; any private-content exposure or post-`START` automation terminates the
   route permanently.
+
+## D-049 - Root cause of 4ab1b24 input_missing classified as C IDENTITY_MARKER_NOT_AT_EXPECTED_DEPTH
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: After the explicitly approved private mount-layout diagnostic v1, which single root-cause
+  category explains the terminal `ON_DEMAND_REVIEW_FAILED=input_missing` result of the corrected
+  on-demand 4ab1b24 launch?
+- Evidence: The operator issued `APPROVE 4AB1B24 PRIVATE V1`. Clean commit `a83e9f9` carried forward
+  the complete gate from `71d87ee` through docs-only governance commits. The diagnostic package was
+  rebuilt with the exact failed three-input graph (bundle dataset, source kernel, competition),
+  passed compile, Ruff check/format, six synthetic-fixture self-checks covering all mount forms,
+  duplicate detection, missing detection, and identity-incomplete detection. Authenticated absence
+  proof returned not-found; exactly one version-1 push succeeded as
+  `lavicheema/rsna-knee-mount-diag-da5b9c8-4ab1b24c`; bounded polling reached COMPLETE in under
+  30 seconds; log retrieval privacy scan returned zero UID patterns, canary tokens, DICM markers,
+  or report-content markers.
+- Decision: classify as category **C IDENTITY_MARKER_NOT_AT_EXPECTED_DEPTH**. All three inputs were
+  mounted at their expected type-prefixed depth-3 forms. Bundle and competition both resolved
+  FOUND_UNIQUE with all identity markers present. The source kernel directory exists at
+  `notebooks/lavicheema/rsna-knee-manifest-audit-2a1f56e-64a7ae040887` with 6 entries and no
+  symlink, but its entry set is incomplete: it does not contain all six required source entries
+  (`audit_key.bin`, `private_artifact_inventory.json`, `private_duplicate_groups.csv`,
+  `private_manifest.sqlite3`, `private_preliminary_group_keys.csv`, `private_qa_samples.csv`).
+  Kaggle mounts derived-kernel outputs as metadata-only wrappers rather than exposing the full
+  private output payload. This structural limitation means the on-demand QA design cannot access
+  required source artifacts through kernel-source attachment for this graph. No resolver correction
+  can fix this without changing what Kaggle exposes.
+- Consequence: no resolver change can resolve category C alone. Any further QA attempt requires a
+  redesigned input path (for example, packaging required artifacts into a separate dataset) and a
+  fresh approval. Human review remains NOT_STARTED; Chunk 5 remains technically incomplete;
+  submission, merge, publication, and Chunk 6 remain blocked.
+- Reversal condition: only renewed explicit human approval after complete fresh gates may authorize
+  another launch identity; any private-content exposure terminates the route permanently.

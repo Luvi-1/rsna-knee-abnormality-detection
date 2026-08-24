@@ -359,3 +359,16 @@ preparation, and fresh successor smoke remain pending, and Run A is not authoriz
    root/content/source/listing/race and fixed-output gate. Do not splice historical evidence.
 4. Authenticate and validate each successor stage before its dependent stage. Stop at the human-only
    pixel QA boundary. Do not start ontology, folds, labels, model work, submission, or Chunk 6.
+
+## D-049 mount-layout diagnostic result (2026-08-23)
+
+- Approved private diagnostic `lavicheema/rsna-knee-mount-diag-da5b9c8-4ab1b24c` v1 reached
+  COMPLETE. Privacy scan passed with zero sensitive patterns.
+- Root cause classified as **C IDENTITY_MARKER_NOT_AT_EXPECTED_DEPTH**: the source kernel mounts at
+  the expected `notebooks/<owner>/<slug>` form but exposes only a metadata wrapper (6 entries), not
+  the six required private source artifacts. Bundle and competition resolve correctly.
+- No resolver change can fix this; Kaggle does not expose derived-kernel private output files as
+  input files to downstream kernels. Any further on-demand attempt requires a redesigned input path
+  and renewed explicit human approval.
+- Human review remains NOT_STARTED; Chunk 5 remains technically incomplete; submission, merge,
+  publication, and Chunk 6 remain blocked.

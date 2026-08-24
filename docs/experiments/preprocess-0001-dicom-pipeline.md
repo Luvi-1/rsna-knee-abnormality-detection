@@ -433,3 +433,15 @@ the r14 review-plan recovery described above: fully restage its 13-file candidat
 complete D-015 gate and final red-team with no later byte change, then create a clean immutable
 successor and authenticate every stage in order. Do not reuse remote artifacts or start ontology,
 folds, labels, training, inference, submission, or Chunk 6.
+
+## D-049 mount-layout diagnostic (2026-08-23)
+
+The approved private diagnostic kernel `lavicheema/rsna-knee-mount-diag-da5b9c8-4ab1b24c` v1
+completed on clean commit `a83e9f9`. Its sanitized output classified the 4ab1b24 input-missing root
+cause as category **C IDENTITY_MARKER_NOT_AT_EXPECTED_DEPTH**: bundle and competition inputs resolve
+correctly at their expected type-prefixed forms with all identity markers present; the source kernel
+directory exists at `notebooks/<owner>/<slug>` but exposes only six wrapper entries rather than the
+six required private source artifacts. Kaggle mounts derived-kernel outputs as metadata wrappers,
+not as readable private payload files. No resolver correction alone can fix this; any further
+attempt requires an alternative input path (for example, a separate dataset carrying the required
+artifacts) and renewed explicit human approval. Human review and Chunk 5 remain incomplete.
