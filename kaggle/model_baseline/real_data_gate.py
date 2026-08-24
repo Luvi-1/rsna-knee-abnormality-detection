@@ -1111,12 +1111,21 @@ def run_e01_fold_zero_training():
         )
 
         # Phase 1: preprocess every study; store tensors keyed by opaque index.
+        # Round-robin across folds so the time-budget cut still yields train+val.
+        fold_buckets = {f: [] for f in range(N_SPLITS)}
+        for index, key in enumerate(keys):
+            fold_buckets[assignments[key]].append(index)
+        ordered_indices = []
+        for round_index in range(max(len(b) for b in fold_buckets.values())):
+            for fold in range(N_SPLITS):
+                if round_index < len(fold_buckets[fold]):
+                    ordered_indices.append(fold_buckets[fold][round_index])
         tensors = {}
         tensor_labels = {}
         tensor_assignments = {}
         skip_reasons = Counter()
         series_processed = 0
-        for index, key in enumerate(keys):
+        for index in ordered_indices:
             if time.monotonic() - started > BUDGET_SECONDS * 0.55:
                 break  # Reserve time for training and evaluation.
             fold = assignments[key]
