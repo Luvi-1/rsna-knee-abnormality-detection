@@ -120,6 +120,24 @@ class TestE00cModelConfig:
         assert gate.SEED == 42
 
 
+class TestE01ModelConfig:
+    """The Fold 0 training gate must use mini-batch AdamW without regularization."""
+
+    def test_constants_declared(self) -> None:
+        assert gate.E01_EPOCHS == 30
+        assert gate.E01_LEARNING_RATE == 1e-3
+        assert gate.E01_BATCH_SIZE == 8
+
+    def test_packager_enables_gpu(self, tmp_path: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        output_root = tmp_path / "pkg-e01"
+        packager.package(repo_root, output_root, commit="d" * 40, gate="e01")
+        metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
+        assert metadata["enable_gpu"] is True
+        notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
+        assert "run_e01_fold_zero_training" in str(notebook["cells"])
+
+
 class TestFoldFeasibility:
     def test_reports_support_and_degeneracy(self) -> None:
         keys = [f"k{i:02d}" for i in range(30)]

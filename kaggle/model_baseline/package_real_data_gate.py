@@ -21,12 +21,14 @@ GATE_ENTRY_POINTS: Final = {
     "e00_skip_audit": "run_skip_audit",
     "e00b": "run_e00b_memorization_gate",
     "e00c": "run_e00c_cnn_memorization_gate",
+    "e01": "run_e01_fold_zero_training",
     "default": "run_real_data_gate",
 }
 GATE_SLUG_SUFFIX: Final = {
     "e00_skip_audit": "-sa",
     "e00b": "",
     "e00c": "-cn",
+    "e01": "-e1",
     "default": "",
 }
 
@@ -121,7 +123,7 @@ def package(repo_root, output_root, commit=None, gate=None):
     if commit is not None and HEX_40.fullmatch(commit) is None:
         raise PackagingError("argument_invalid")
     entry_point = GATE_ENTRY_POINTS[gate or "default"]
-    enable_gpu = gate == "e00c"
+    enable_gpu = gate in ("e00c", "e01")
     if output_root.exists():
         raise PackagingError("output_root_exists")
     output_root.mkdir(parents=False)
@@ -156,7 +158,9 @@ def package(repo_root, output_root, commit=None, gate=None):
         "keywords": [],
         "language": "python",
         "model_sources": [],
-        "title": f"Rsna Knee Model Gate {commit[:7]} {source_sha256[:12]}{gate_suffix.replace('-', ' ')}",
+        "title": (
+            f"Rsna Knee Model Gate {commit[:7]} {source_sha256[:12]}{gate_suffix.replace('-', ' ')}"
+        ),
     }
     (output_root / "kernel-metadata.json").write_bytes(_canonical_json_bytes(metadata))
     return {"kernel_ref": ref, "kernel_slug": slug, "source_sha256": source_sha256}

@@ -50,10 +50,64 @@ PROCESSED_TARGET: Final = 16
 MIN_PROCESSED: Final = 8
 E00B_COHORT: Final = 12
 E00C_COHORT: Final = 12
+E01_EPOCHS: Final = 30
+E01_LEARNING_RATE: Final = 1e-3
+E01_BATCH_SIZE: Final = 8
+E00B_EPOCHS: Final = 2000
 E00C_EPOCHS: Final = 3000
 E00C_LEARNING_RATE: Final = 1e-3
 E00C_HIDDEN: Final = 64
-E00B_EPOCHS: Final = 2000
+
+
+def _build_tiny_cnn(hidden: int, n_targets: int):
+    """Shared slice encoder, study mean-pool, linear head (used by E00c/E01)."""
+    from torch import nn
+
+    return nn.Sequential(
+        nn.Conv2d(3, 16, kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        nn.Conv2d(16, 32, kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        nn.Conv2d(32, hidden, kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.AdaptiveAvgPool2d(1),
+    ), nn.Linear(hidden, n_targets)
+
+
+class TinyCNNShared:
+    """Study-level CNN: encode every sampled slice, mean-pool to one vector."""
+
+    def __init__(self, hidden=E00C_HIDDEN, n_targets=None):
+        if n_targets is None:
+            n_targets = len(TARGETS)
+        features, classifier = _build_tiny_cnn(hidden, n_targets)
+        self.features = features
+        self.classifier = classifier
+
+    def parameters(self):
+        return list(self.features.parameters()) + list(self.classifier.parameters())
+
+    def train(self):
+        self.features.train()
+        self.classifier.train()
+
+    def eval(self):
+        self.features.eval()
+        self.classifier.eval()
+
+    def forward(self, x):
+        batch_shape = x.shape  # [B, S, C, H, W] or [B, n_series, S, C, H, W]
+        flat = x.reshape(-1, *batch_shape[-3:])
+        encoded = self.features(flat).flatten(1)
+        pooled = encoded.mean(dim=0, keepdim=True)  # single-study mode
+        return self.classifier(pooled).reshape(batch_shape[:1] + (-1,))
+
+    def __call__(self, x):
+        return self.forward(x)
+
+
 MAX_SERIES_PER_STUDY: Final = 4
 MAX_FILES_PER_SERIES: Final = 128
 SAMPLE_COUNT: Final = 8
@@ -1011,6 +1065,197 @@ def run_e00c_cnn_memorization_gate():
         temporary.write_bytes(payload)
         os.replace(temporary, output_root / SUMMARY_BASENAME)
         print(f"event=e00c_complete studies={len(tensors)} series={series_processed}")
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+def run_e01_fold_zero_training():
+    """Train the tiny CNN on Fold 0's complement and validate on Fold 0.
+
+    Full-data preprocessing inside Kaggle, then GPU mini-batch training.
+    Reports sanitized aggregates only (no UIDs, reports, or pixels).
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, labels = read_study_labels(competition_root / "train.csv")
+        assignments, _ = assign_grouped_folds(keys, labels)
+
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+
+        # Phase 1: preprocess every study; store tensors keyed by opaque index.
+        tensors = {}
+        tensor_labels = {}
+        tensor_assignments = {}
+        skip_reasons = Counter()
+        series_processed = 0
+        for index, key in enumerate(keys):
+            if time.monotonic() - started > BUDGET_SECONDS * 0.55:
+                break  # Reserve time for training and evaluation.
+            fold = assignments[key]
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[index] = np.stack(study_tensors, axis=0).astype(np.float32)
+            tensor_labels[index] = labels[index]
+            tensor_assignments[index] = fold
+
+        train_indices = sorted(i for i in tensors if tensor_assignments[i] != 0)
+        val_indices = sorted(i for i in tensors if tensor_assignments[i] == 0)
+        if not train_indices or not val_indices:
+            raise GateError("split_empty")
+
+        # Phase 2: build model and train on folds 1-4, validate on fold 0.
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch.manual_seed(SEED)
+        model = TinyCNNShared()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=E01_LEARNING_RATE, weight_decay=0.0)
+
+        label_matrix = np.vstack([tensor_labels[i] for i in train_indices])
+        observed_train = np.isfinite(label_matrix)
+        targets_train = np.where(observed_train, label_matrix, 0.0).astype(np.float32)
+        val_label_matrix = np.vstack([tensor_labels[i] for i in val_indices])
+        observed_val = np.isfinite(val_label_matrix)
+
+        first_loss = float("nan")
+        last_loss = float("nan")
+        best_loss = float("inf")
+        rng = np.random.default_rng(SEED)
+        order = np.arange(len(train_indices))
+        for epoch in range(E01_EPOCHS):
+            rng.shuffle(order)
+            epoch_losses = []
+            for batch_start in range(0, len(order), E01_BATCH_SIZE):
+                batch_ids = order[batch_start : batch_start + E01_BATCH_SIZE]
+                optimizer.zero_grad()
+                batch_loss_tensor = torch.zeros((), device=device)
+                for local_index in batch_ids:
+                    global_index = train_indices[local_index]
+                    x_np = tensors[global_index][np.newaxis]  # [1, S, C, H, W]
+                    x = torch.from_numpy(x_np).to(device)
+                    logits = model(x)[0]
+                    obs_row = torch.from_numpy(observed_train[local_index].astype(np.float32)).to(
+                        device
+                    )
+                    tgt_row = torch.from_numpy(targets_train[local_index]).to(device)
+                    denom = max(int(obs_row.sum().item()), 1)
+                    raw_loss = nn.functional.binary_cross_entropy_with_logits(
+                        logits, tgt_row, reduction="none"
+                    )
+                    masked = (raw_loss * obs_row).sum() / denom
+                    batch_loss_tensor = batch_loss_tensor + masked
+                batch_loss_tensor.backward()
+                optimizer.step()
+                epoch_losses.append(float(batch_loss_tensor.item()) / len(batch_ids))
+            mean_epoch_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
+            if epoch == 0:
+                first_loss = mean_epoch_loss
+            last_loss = mean_epoch_loss
+            best_loss = min(best_loss, mean_epoch_loss)
+            if time.monotonic() - started > BUDGET_SECONDS - 600:
+                break
+
+        # Validation scoring.
+        model.eval()
+        val_scores = np.zeros((len(val_indices), len(TARGETS)), dtype=np.float64)
+        with torch.no_grad():
+            for row_local, global_index in enumerate(val_indices):
+                x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                val_scores[row_local] = torch.sigmoid(model(x)[0]).cpu().numpy()
+        per_target_auc = {}
+        per_target_pos = {}
+        per_target_neg = {}
+        computed_aucs = []
+        for col, target in enumerate(TARGETS):
+            auc_value = rank_auc(val_label_matrix[:, col], val_scores[:, col])
+            per_target_auc[target] = auc_value
+            obs_col = observed_val[:, col]
+            per_target_pos[target] = int((val_label_matrix[obs_col, col] == 1).sum())
+            per_target_neg[target] = int((val_label_matrix[obs_col, col] == 0).sum())
+            if auc_value is not None:
+                computed_aucs.append(auc_value)
+        macro_auc = float(np.mean(computed_aucs)) if computed_aucs else None
+
+        peak_memory_mb = 0
+        if device.type == "cuda":
+            peak_memory_mb = round(torch.cuda.max_memory_allocated() / (1024 * 1024))
+
+        summary = {
+            "schema_version": 1,
+            "gate": "e01_fold_zero_v0",
+            "r16_code_commit": R16_COMMIT,
+            "source_manifest_version": SOURCE_MANIFEST_VERSION,
+            "preprocessing_qa_status": "PROVISIONAL_HUMAN_QA_PENDING",
+            "model_config": {
+                "architecture": "tiny_cnn_3conv_16-32-64_adaptive_pool_linear12",
+                "epochs": E01_EPOCHS,
+                "learning_rate": E01_LEARNING_RATE,
+                "weight_decay": 0.0,
+                "dropout": False,
+                "augmentation": "none",
+                "optimizer": "adamw",
+                "seed": SEED,
+                "batch_size": E01_BATCH_SIZE,
+                "device": device.type,
+            },
+            "studies_preprocessed": len(tensors),
+            "studies_train": len(train_indices),
+            "studies_val": len(val_indices),
+            "series_processed": series_processed,
+            "skip_reason_counts": dict(skip_reasons),
+            "train_bce_first_epoch": rounded_float(first_loss),
+            "train_bce_last_epoch": rounded_float(last_loss),
+            "train_bce_best_epoch": rounded_float(best_loss),
+            "val_per_label_auc": per_target_auc,
+            "val_per_label_positive_support": per_target_pos,
+            "val_per_label_negative_support": per_target_neg,
+            "val_macro_auc_over_computable": (
+                rounded_float(macro_auc) if macro_auc is not None else None
+            ),
+            "n_computable_labels": len(computed_aucs),
+            "peak_gpu_memory_mb": peak_memory_mb,
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES * 4:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / f".{SUMMARY_BASENAME}.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / SUMMARY_BASENAME)
+        print(f"event=e01_complete train={len(train_indices)} val={len(val_indices)}")
         return 0
     finally:
         if str(runtime_root) in sys.path:
