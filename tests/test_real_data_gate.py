@@ -60,6 +60,59 @@ class TestRankAuc:
         scores = np.array([0.3, 0.6])
         assert gate.rank_auc(truth, scores) is None
 
+    def test_reversed_ranking_gives_zero(self) -> None:
+        truth = np.array([0.0, 0.0, 1.0, 1.0])
+        scores = np.array([0.9, 0.8, 0.2, 0.1])
+        assert gate.rank_auc(truth, scores) == 0.0
+
+    def test_partial_ties(self) -> None:
+        truth = np.array([1.0, 0.0, 0.0, 1.0])
+        # Two cross-class ties and two separated pairs -> exactly 0.5.
+        scores = np.array([0.5, 0.5, 0.9, 0.9])
+        assert gate.rank_auc(truth, scores) == 0.5
+
+    def test_cross_boundary_ties(self) -> None:
+        truth = np.array([0.0, 1.0, 0.0, 1.0])
+        scores = np.array([0.5, 0.5, 0.5, 0.5])
+        assert gate.rank_auc(truth, scores) == 0.5
+
+    def test_low_support_one_pos_one_neg(self) -> None:
+        truth = np.array([0.0, 1.0])
+        scores = np.array([0.2, 0.8])
+        assert gate.rank_auc(truth, scores) == 1.0
+
+
+class TestMaskedLossInvariance:
+    """Masked BCE must ignore unknown cells and scale with supervised cells."""
+
+    @staticmethod
+    def _masked_bce_numpy(logits, targets, mask):
+        """Numpy mirror of binary_cross_entropy_with_logits + masked mean."""
+        stable = np.logaddexp(0.0, logits) - logits * targets
+        denom = mask.sum()
+        if denom == 0:
+            return 0.0
+        return float((stable * mask).sum() / denom)
+
+    def test_unknown_cells_do_not_affect_loss(self) -> None:
+        rng = np.random.default_rng(42)
+        logits = rng.normal(size=(4, 12))
+        targets = rng.integers(0, 2, size=(4, 12)).astype(float)
+        mask = np.ones_like(targets)
+        partial_mask = mask.copy()
+        partial_mask[:, :6] = 0
+        loss_original = self._masked_bce_numpy(logits, targets, partial_mask)
+        corrupted = targets.copy()
+        corrupted[:, :6] = 1 - corrupted[:, :6]
+        loss_corrupted = self._masked_bce_numpy(logits, corrupted, partial_mask)
+        assert abs(loss_original - loss_corrupted) < 1e-12
+
+    def test_zero_supervision_batch_returns_zero(self) -> None:
+        logits = np.zeros((4, 12))
+        targets = np.zeros((4, 12))
+        mask = np.zeros_like(targets)
+        assert self._masked_bce_numpy(logits, targets, mask) == 0.0
+
 
 class TestLinearProbe:
     def test_loss_decreases_on_separable_features(self) -> None:

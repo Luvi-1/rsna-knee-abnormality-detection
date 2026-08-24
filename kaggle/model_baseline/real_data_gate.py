@@ -1117,9 +1117,7 @@ def run_e01_fold_zero_training():
             fold_buckets[assignments[key]].append(index)
         # Within each fold, put studies with more known labels first.
         for fold in fold_buckets:
-            fold_buckets[fold].sort(
-                key=lambda i: (-int(np.isfinite(labels[i]).sum()), i)
-            )
+            fold_buckets[fold].sort(key=lambda i: (-int(np.isfinite(labels[i]).sum()), i))
         ordered_indices = []
         for round_index in range(max(len(b) for b in fold_buckets.values())):
             for fold in range(N_SPLITS):
@@ -1218,9 +1216,7 @@ def run_e01_fold_zero_training():
                 logits = model(x)[0]
                 val_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
                 obs_row = torch.from_numpy(observed_val[row_local].astype(np.float32)).to(device)
-                tgt_row_np = np.nan_to_num(
-                    val_label_matrix[row_local], nan=0.0
-                ).astype(np.float32)
+                tgt_row_np = np.nan_to_num(val_label_matrix[row_local], nan=0.0).astype(np.float32)
                 tgt_row = torch.from_numpy(tgt_row_np).to(device)
                 denom = max(int(obs_row.sum().item()), 1)
                 raw_bce = nn.functional.binary_cross_entropy_with_logits(
