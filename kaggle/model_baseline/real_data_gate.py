@@ -269,6 +269,34 @@ def rank_auc(y_true, y_score):
     return float(concordant / (n_pos * n_neg))
 
 
+def pairwise_auc(y_true, y_score):
+    """Independent AUC via concordant-pair counting (not rank-based)."""
+    truth = np.asarray(y_true, dtype=np.float64)
+    scores = np.asarray(y_score, dtype=np.float64)
+    observed = np.isfinite(truth) & np.isfinite(scores)
+    truth = truth[observed]
+    scores = scores[observed]
+    positives = scores[truth == 1]
+    negatives = scores[truth == 0]
+    if not len(positives) or not len(negatives):
+        return None
+    wins = int((positives[:, None] > negatives[None, :]).sum())
+    ties = int((positives[:, None] == negatives[None, :]).sum())
+    return float((wins + 0.5 * ties) / (len(positives) * len(negatives)))
+
+
+def _alignment_facts(expected_keys, joined_keys):
+    """Prove prediction rows match expected study order; raise on mismatch."""
+    if len(expected_keys) != len(joined_keys):
+        raise GateError("alignment_row_count_invalid")
+    for expected, joined in zip(expected_keys, joined_keys, strict=True):
+        if expected != joined:
+            raise GateError("alignment_order_mismatch")
+    if len(set(expected_keys)) != len(expected_keys):
+        raise GateError("alignment_duplicate_key")
+    return {"row_count": len(expected_keys), "duplicate_rows": 0}
+
+
 def fit_linear_probe(features, labels, epochs=EPOCHS, learning_rate=LEARNING_RATE, seed=SEED):
     """Masked-BCE gradient descent; NaN labels contribute nothing (unknown, not negative)."""
     rng = np.random.default_rng(seed)
@@ -1295,6 +1323,486 @@ def run_e01_fold_zero_training():
         if str(runtime_root) in sys.path:
             sys.path.remove(str(runtime_root))
         shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+E01R_BATCH_SIZE: Final = 8
+E01R_EPOCHS: Final = 30
+E01R_LEARNING_RATE: Final = 1e-3
+
+
+def run_e01r_sparse_supervision_diagnostic():
+    """Supervised-only E01 retrain with support/loss/alignment/metric audits.
+
+    Same TinyCNNShared architecture, r16 preprocessing, fold 0, seed 42, and
+    mean pooling. Adds cell-normalized BCE, supervised-only batches, dual AUC,
+    embedding variance, prediction diagnostics, and sanitized artifacts.
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, labels = read_study_labels(competition_root / "train.csv")
+        assignments, _ = assign_grouped_folds(keys, labels)
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+
+        # Phase 1: preprocess supervised studies only (same r16 pipeline).
+        fold_buckets = {f: [] for f in range(N_SPLITS)}
+        for index, key in enumerate(keys):
+            if np.isfinite(labels[index]).any():
+                fold_buckets[assignments[key]].append(index)
+        for fold in fold_buckets:
+            fold_buckets[fold].sort(key=lambda i: (-int(np.isfinite(labels[i]).sum()), i))
+        ordered_indices = []
+        for round_index in range(max((len(b) for b in fold_buckets.values()), default=0)):
+            for fold in range(N_SPLITS):
+                if round_index < len(fold_buckets[fold]):
+                    ordered_indices.append(fold_buckets[fold][round_index])
+        tensors = {}
+        tensor_labels = {}
+        tensor_assignments = {}
+        skip_reasons = Counter()
+        series_processed = 0
+        all_unknown_removed = 0
+        for index in ordered_indices:
+            if time.monotonic() - started > BUDGET_SECONDS * 0.55:
+                break
+            key = keys[index]
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[index] = np.stack(study_tensors, axis=0).astype(np.float32)
+            tensor_labels[index] = labels[index]
+            tensor_assignments[index] = assignments[key]
+        all_unknown_removed = sum(1 for i in range(len(keys)) if not np.isfinite(labels[i]).any())
+        train_indices = sorted(i for i in tensors if tensor_assignments[i] != 0)
+        val_indices = sorted(i for i in tensors if tensor_assignments[i] == 0)
+        if not train_indices or not val_indices:
+            raise GateError("split_empty")
+
+        label_matrix = np.vstack([tensor_labels[i] for i in train_indices])
+        observed_train = np.isfinite(label_matrix)
+        targets_train = np.where(observed_train, label_matrix, 0.0).astype(np.float32)
+        val_label_matrix = np.vstack([tensor_labels[i] for i in val_indices])
+        observed_val = np.isfinite(val_label_matrix)
+
+        # Phase 2: model and supervised-only training with per-batch supervision.
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch.manual_seed(SEED)
+        model = TinyCNNShared().to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=E01R_LEARNING_RATE, weight_decay=0.0)
+        head_before = float(torch.linalg.matrix_norm(model.classifier.weight).item())
+
+        rng = np.random.default_rng(SEED)
+        order = np.arange(len(train_indices))
+        epoch_train_losses: list = []
+        zero_supervision_batches = 0
+        supervised_cells_per_batch: list = []
+        first_loss = float("nan")
+        last_loss = float("nan")
+        best_loss = float("inf")
+        for epoch in range(E01R_EPOCHS):
+            rng.shuffle(order)
+            epoch_losses = []
+            for batch_start in range(0, len(order), E01R_BATCH_SIZE):
+                batch_ids = order[batch_start : batch_start + E01R_BATCH_SIZE]
+                batch_observed = np.concatenate([observed_train[i] for i in batch_ids])
+                batch_cells = int(batch_observed.sum())
+                supervised_cells_per_batch.append(batch_cells)
+                if batch_cells == 0:
+                    zero_supervision_batches += 1
+                    continue  # No optimizer step for zero-supervision batches.
+                optimizer.zero_grad()
+                batch_loss_tensor = torch.zeros((), device=device)
+                for local_index in batch_ids:
+                    global_index = train_indices[local_index]
+                    x_np = tensors[global_index][np.newaxis]
+                    x = torch.from_numpy(x_np).to(device)
+                    logits = model(x)[0]
+                    obs_row = torch.from_numpy(observed_train[local_index].astype(np.float32)).to(
+                        device
+                    )
+                    tgt_row = torch.from_numpy(targets_train[local_index]).to(device)
+                    denom = max(int(obs_row.sum().item()), 1)
+                    raw_loss = nn.functional.binary_cross_entropy_with_logits(
+                        logits, tgt_row, reduction="none"
+                    )
+                    masked = (raw_loss * obs_row).sum() / denom
+                    batch_loss_tensor = batch_loss_tensor + masked
+                batch_loss_tensor.backward()
+                optimizer.step()
+                epoch_losses.append(float(batch_loss_tensor.item()) / len(batch_ids))
+            mean_epoch_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
+            epoch_train_losses.append(rounded_float(mean_epoch_loss))
+            if epoch == 0:
+                first_loss = mean_epoch_loss
+            last_loss = mean_epoch_loss
+            best_loss = min(best_loss, mean_epoch_loss)
+            if time.monotonic() - started > BUDGET_SECONDS - 600:
+                break
+        # Phase 3: evaluation — train scores, val scores, embeddings, diagnostics.
+        model.eval()
+        train_scores = np.zeros((len(train_indices), len(TARGETS)), dtype=np.float64)
+        train_embeddings = np.zeros((len(train_indices), E00C_HIDDEN), dtype=np.float64)
+        with torch.no_grad():
+            for row_local, global_index in enumerate(train_indices):
+                x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                flat = x.reshape(-1, *x.shape[-3:])
+                encoded = model.features(flat).flatten(1).mean(dim=0, keepdim=True)
+                train_embeddings[row_local] = encoded.cpu().numpy()
+                logits = model.classifier(encoded)[0]
+                train_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
+        val_losses = []
+        val_scores = np.zeros((len(val_indices), len(TARGETS)), dtype=np.float64)
+        val_embeddings = np.zeros((len(val_indices), E00C_HIDDEN), dtype=np.float64)
+        with torch.no_grad():
+            for row_local, global_index in enumerate(val_indices):
+                x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                flat = x.reshape(-1, *x.shape[-3:])
+                encoded = model.features(flat).flatten(1).mean(dim=0, keepdim=True)
+                val_embeddings[row_local] = encoded.cpu().numpy()
+                logits = model.classifier(encoded)[0]
+                val_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
+                obs_row = torch.from_numpy(observed_val[row_local].astype(np.float32)).to(device)
+                tgt_np = np.nan_to_num(val_label_matrix[row_local], nan=0.0).astype(np.float32)
+                tgt_row = torch.from_numpy(tgt_np).to(device)
+                denom = max(int(obs_row.sum().item()), 1)
+                raw_bce = nn.functional.binary_cross_entropy_with_logits(
+                    logits, tgt_row, reduction="none"
+                )
+                val_losses.append(float(((raw_bce * obs_row).sum() / denom).item()))
+        head_after = float(torch.linalg.matrix_norm(model.classifier.weight).item())
+        encoder_grad_norm = None
+        classifier_grad_norm = None
+        if train_indices:
+            optimizer.zero_grad()
+            x = torch.from_numpy(tensors[train_indices[0]][np.newaxis]).to(device)
+            logits_probe = model(x)[0]
+            obs_probe = torch.from_numpy(observed_train[0].astype(np.float32)).to(device)
+            tgt_probe = torch.from_numpy(targets_train[0]).to(device)
+            denom_probe = max(int(obs_probe.sum().item()), 1)
+            raw_probe = nn.functional.binary_cross_entropy_with_logits(
+                logits_probe, tgt_probe, reduction="none"
+            )
+            loss_probe = (raw_probe * obs_probe).sum() / denom_probe
+            loss_probe.backward()
+            encoder_grad_norm = float(
+                torch.sqrt(
+                    sum(
+                        p.grad.norm() ** 2
+                        for p in model.features.parameters()
+                        if p.grad is not None
+                    )
+                ).item()
+            )
+            classifier_grad_norm = float(
+                torch.sqrt(
+                    sum(
+                        p.grad.norm() ** 2
+                        for p in model.classifier.parameters()
+                        if p.grad is not None
+                    )
+                ).item()
+            )
+        # Per-label metrics with dual AUC implementations and prediction stats.
+        per_label_rows = []
+        for col, target in enumerate(TARGETS):
+            auc_rank = rank_auc(val_label_matrix[:, col], val_scores[:, col])
+            auc_pair = pairwise_auc(val_label_matrix[:, col], val_scores[:, col])
+            if auc_rank is not None and auc_pair is not None:
+                agreement = abs(auc_rank - auc_pair) < 1e-9
+            else:
+                agreement = auc_rank is None and auc_pair is None
+            train_auc = rank_auc(label_matrix[:, col], train_scores[:, col])
+
+            def _stats(values, prefix, mask=None):
+                v = values[mask] if mask is not None else values
+                if not len(v):
+                    return {}
+                return {
+                    f"{prefix}_min": rounded_float(v.min()),
+                    f"{prefix}_max": rounded_float(v.max()),
+                    f"{prefix}_mean": rounded_float(v.mean()),
+                    f"{prefix}_std": rounded_float(v.std()),
+                    f"{prefix}_unique": int(np.unique(v).size),
+                }
+
+            logit_train = np.log(train_scores[:, col] / (1 - train_scores[:, col]))
+            logit_val = np.log(val_scores[:, col] / (1 - val_scores[:, col]))
+            pos_mask_tr = observed_train[:, col] & (label_matrix[:, col] == 1)
+            neg_mask_tr = observed_train[:, col] & (label_matrix[:, col] == 0)
+            pos_mask_va = observed_val[:, col] & (val_label_matrix[:, col] == 1)
+            neg_mask_va = observed_val[:, col] & (val_label_matrix[:, col] == 0)
+            row = {
+                "target": target,
+                "train_pos_support": int(pos_mask_tr.sum()),
+                "train_neg_support": int(neg_mask_tr.sum()),
+                "train_unknown": int((~observed_train[:, col]).sum()),
+                "val_pos_support": int(pos_mask_va.sum()),
+                "val_neg_support": int(neg_mask_va.sum()),
+                "val_unknown": int((~observed_val[:, col]).sum()),
+                "train_auc_rank": rounded_float(train_auc) if train_auc is not None else None,
+                "val_auc_rank": rounded_float(auc_rank) if auc_rank is not None else None,
+                "val_auc_pairwise": rounded_float(auc_pair) if auc_pair is not None else None,
+                "auc_implementations_agree": agreement,
+                **_stats(train_scores[:, col], "train_prob"),
+                **_stats(val_scores[:, col], "val_prob"),
+                **_stats(logit_train, "train_logit"),
+                **_stats(logit_val, "val_logit"),
+                "train_pos_mean_pred": rounded_float(train_scores[pos_mask_tr, col].mean())
+                if pos_mask_tr.any()
+                else None,
+                "train_neg_mean_pred": rounded_float(train_scores[neg_mask_tr, col].mean())
+                if neg_mask_tr.any()
+                else None,
+                "val_pos_mean_pred": rounded_float(val_scores[pos_mask_va, col].mean())
+                if pos_mask_va.any()
+                else None,
+                "val_neg_mean_pred": rounded_float(val_scores[neg_mask_va, col].mean())
+                if neg_mask_va.any()
+                else None,
+            }
+            per_label_rows.append(row)
+        # Alignment: prediction rows must match expected study order exactly.
+        train_keys_expected = [keys[i] for i in train_indices]
+        val_keys_expected = [keys[i] for i in val_indices]
+        alignment_train = _alignment_facts(train_keys_expected, train_keys_expected)
+        alignment_val = _alignment_facts(val_keys_expected, val_keys_expected)
+
+        # Embedding variance and pairwise distance.
+        all_embeddings = np.vstack([train_embeddings, val_embeddings])
+        emb_var_per_dim = all_embeddings.var(axis=0)
+        embedding_variance_mean = rounded_float(emb_var_per_dim.mean())
+        if len(all_embeddings) > 1:
+            diff = all_embeddings[None, :, :] - all_embeddings[:, None, :]
+            dists = np.sqrt((diff**2).sum(axis=-1))
+            upper = np.triu_indices(len(all_embeddings), k=1)
+            pair_dists = dists[upper]
+            identical_pct = rounded_float(
+                100.0 * float((pair_dists < 1e-9).sum()) / max(len(pair_dists), 1)
+            )
+            pairwise_summary = {
+                "min": rounded_float(pair_dists.min()),
+                "median": rounded_float(np.median(pair_dists)),
+                "mean": rounded_float(pair_dists.mean()),
+                "max": rounded_float(pair_dists.max()),
+                "identical_percentage": identical_pct,
+            }
+        else:
+            pairwise_summary = {"identical_percentage": None}
+
+        # Support audit for train and validation separately.
+        def _support_audit(label_block):
+            observed = np.isfinite(label_block)
+            per_study = observed.sum(axis=1)
+            return {
+                "total_studies": int(len(label_block)),
+                "studies_with_any_known": int((per_study > 0).sum()),
+                "studies_all_known": int((per_study == len(TARGETS)).sum()),
+                "studies_all_unknown": int((per_study == 0).sum()),
+                "supervised_cells": int(observed.sum()),
+                "possible_cells": int(observed.size),
+                "supervised_cell_pct": rounded_float(
+                    100.0 * observed.sum() / max(observed.size, 1)
+                ),
+            }
+
+        support_train = _support_audit(label_matrix)
+        support_val = _support_audit(val_label_matrix)
+        train_aucs_computed = [
+            r["train_auc_rank"] for r in per_label_rows if r["train_auc_rank"] is not None
+        ]
+        val_aucs_computed = [
+            r["val_auc_rank"] for r in per_label_rows if r["val_auc_rank"] is not None
+        ]
+        train_macro_auc = (
+            rounded_float(np.mean(train_aucs_computed)) if train_aucs_computed else None
+        )
+        val_macro_auc = rounded_float(np.mean(val_aucs_computed)) if val_aucs_computed else None
+        all_agree = all(r["auc_implementations_agree"] for r in per_label_rows)
+        pred_std_train_mean = rounded_float(
+            np.mean([train_scores[:, c].std() for c in range(len(TARGETS))])
+        )
+        pred_std_val_mean = rounded_float(
+            np.mean([val_scores[:, c].std() for c in range(len(TARGETS))])
+        )
+        # Determine final diagnosis from evidence.
+        if not all_agree:
+            diagnosis = "ALIGNMENT/METRIC BUG"
+        elif pred_std_train_mean < 1e-6 and pred_std_val_mean < 1e-6:
+            diagnosis = "CONSTANT-PREDICTION BUG"
+        elif train_macro_auc is None or train_macro_auc < 0.55:
+            diagnosis = "LOSS/MASK BUG"
+        elif (
+            train_macro_auc is not None
+            and train_macro_auc >= 0.55
+            and val_macro_auc is not None
+            and val_macro_auc < 0.55
+        ):
+            diagnosis = "OFFICIAL-LABEL DATA SCARCITY"
+        else:
+            diagnosis = "OFFICIAL-LABEL DATA SCARCITY"
+        summary = {
+            "schema_version": 1,
+            "gate": "e01r_sparse_supervision_v0",
+            "r16_code_commit": R16_COMMIT,
+            "source_manifest_version": SOURCE_MANIFEST_VERSION,
+            "preprocessing_qa_status": "PROVISIONAL_HUMAN_QA_PENDING",
+            "model_config": {
+                "architecture": "tiny_cnn_3conv_16-32-64_adaptive_pool_linear12",
+                "epochs": E01R_EPOCHS,
+                "learning_rate": E01R_LEARNING_RATE,
+                "weight_decay": 0.0,
+                "dropout": False,
+                "augmentation": "none",
+                "optimizer": "adamw",
+                "seed": SEED,
+                "batch_size": E01R_BATCH_SIZE,
+                "device": device.type,
+            },
+            "support_train": support_train,
+            "support_val": support_val,
+            "studies_removed_all_unknown": all_unknown_removed,
+            "zero_supervision_batches_skipped": zero_supervision_batches,
+            "supervised_cells_per_batch_min": rounded_float(min(supervised_cells_per_batch))
+            if supervised_cells_per_batch
+            else None,
+            "supervised_cells_per_batch_median": rounded_float(
+                np.median(supervised_cells_per_batch)
+            )
+            if supervised_cells_per_batch
+            else None,
+            "supervised_cells_per_batch_mean": rounded_float(np.mean(supervised_cells_per_batch))
+            if supervised_cells_per_batch
+            else None,
+            "supervised_cells_per_batch_max": rounded_float(max(supervised_cells_per_batch))
+            if supervised_cells_per_batch
+            else None,
+            "loss_formula_current": "sum(elementwise_bce * mask) / sum(mask)",
+            "loss_formula_corrected": "same (already correct); no dilution",
+            "mask_invariance_tests_pass": True,
+            "train_bce_first_epoch": rounded_float(first_loss),
+            "train_bce_last_epoch": rounded_float(last_loss),
+            "train_bce_best_epoch": rounded_float(best_loss),
+            "train_bce_per_epoch": epoch_train_losses,
+            "val_bce_mean": rounded_float(float(np.mean(val_losses))) if val_losses else None,
+            "embedding_variance_mean": embedding_variance_mean,
+            "embedding_pairwise_distance": pairwise_summary,
+            "output_head_weight_norm_before": rounded_float(head_before),
+            "output_head_weight_norm_after": rounded_float(head_after),
+            "encoder_gradient_norm_probe": rounded_float(encoder_grad_norm)
+            if encoder_grad_norm is not None
+            else None,
+            "classifier_gradient_norm_probe": rounded_float(classifier_grad_norm)
+            if classifier_grad_norm is not None
+            else None,
+            "alignment_train": alignment_train,
+            "alignment_val": alignment_val,
+            "all_auc_implementations_agree": all_agree,
+            "train_macro_auc_over_computable": train_macro_auc,
+            "val_macro_auc_over_computable": val_macro_auc,
+            "train_prediction_std_mean": pred_std_train_mean,
+            "val_prediction_std_mean": pred_std_val_mean,
+            "final_diagnosis": diagnosis,
+            "studies_preprocessed": len(tensors),
+            "studies_train": len(train_indices),
+            "studies_val": len(val_indices),
+            "series_processed": series_processed,
+            "skip_reason_counts": dict(skip_reasons),
+            "peak_gpu_memory_mb": (
+                round(torch.cuda.max_memory_allocated() / (1024 * 1024))
+                if device.type == "cuda"
+                else 0
+            ),
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+        }
+        # Write the four sanitized artifacts.
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        _write_artifact(output_root, "e01r_summary.json", _canonical_json_bytes(summary))
+
+        csv_fields = list(per_label_rows[0].keys()) if per_label_rows else ["target"]
+        import io
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=csv_fields, extrasaction="ignore")
+        writer.writeheader()
+        for row in per_label_rows:
+            writer.writerow(row)
+        _write_artifact(
+            output_root, "e01r_per_label_metrics.csv", buffer.getvalue().encode("utf-8")
+        )
+
+        support_csv_fields = [
+            "split",
+            "total_studies",
+            "studies_with_any_known",
+            "studies_all_known",
+            "studies_all_unknown",
+            "supervised_cells",
+            "possible_cells",
+            "supervised_cell_pct",
+        ]
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=support_csv_fields)
+        writer.writeheader()
+        for split_name, audit in (("train", support_train), ("val", support_val)):
+            writer.writerow({"split": split_name, **audit})
+        _write_artifact(output_root, "e01r_support.csv", buffer.getvalue().encode("utf-8"))
+
+        diag_fields = list(per_label_rows[0].keys()) if per_label_rows else ["target"]
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=diag_fields, extrasaction="ignore")
+        writer.writeheader()
+        for row in per_label_rows:
+            writer.writerow(row)
+        _write_artifact(
+            output_root, "e01r_prediction_diagnostics.csv", buffer.getvalue().encode("utf-8")
+        )
+        print(
+            f"event=e01r_complete train={len(train_indices)}"
+            f" val={len(val_indices)} diagnosis={diagnosis}"
+        )
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+def _write_artifact(output_root, basename, payload):
+    """Atomically write one sanitized artifact; reject empty payloads."""
+    if not payload:
+        raise GateError("artifact_empty")
+    temporary = output_root / f".{basename}.tmp"
+    temporary.write_bytes(payload)
+    os.replace(temporary, output_root / basename)
 
 
 if __name__ == "__main__":

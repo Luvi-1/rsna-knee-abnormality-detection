@@ -22,6 +22,7 @@ GATE_ENTRY_POINTS: Final = {
     "e00b": "run_e00b_memorization_gate",
     "e00c": "run_e00c_cnn_memorization_gate",
     "e01": "run_e01_fold_zero_training",
+    "e01r": "run_e01r_sparse_supervision_diagnostic",
     "default": "run_real_data_gate",
 }
 GATE_SLUG_SUFFIX: Final = {
@@ -29,6 +30,7 @@ GATE_SLUG_SUFFIX: Final = {
     "e00b": "",
     "e00c": "-cn",
     "e01": "-e1",
+    "e01r": "-r1",
     "default": "",
 }
 
@@ -123,7 +125,7 @@ def package(repo_root, output_root, commit=None, gate=None):
     if commit is not None and HEX_40.fullmatch(commit) is None:
         raise PackagingError("argument_invalid")
     entry_point = GATE_ENTRY_POINTS[gate or "default"]
-    enable_gpu = gate in ("e00c", "e01")
+    enable_gpu = gate in ("e00c", "e01", "e01r")
     if output_root.exists():
         raise PackagingError("output_root_exists")
     output_root.mkdir(parents=False)

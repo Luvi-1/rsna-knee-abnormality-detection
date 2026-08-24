@@ -191,6 +191,39 @@ class TestE01ModelConfig:
         assert "run_e01_fold_zero_training" in str(notebook["cells"])
 
 
+class TestE01RDiagnostic:
+    def test_constants_declared(self) -> None:
+        assert gate.E01R_EPOCHS == 30
+        assert gate.E01R_LEARNING_RATE == 1e-3
+        assert gate.E01R_BATCH_SIZE == 8
+
+    def test_pairwise_auc_agrees_with_rank_auc(self) -> None:
+        truth = np.array([0.0, 0.0, 1.0, 1.0])
+        scores = np.array([0.1, 0.2, 0.8, 0.9])
+        assert gate.rank_auc(truth, scores) == gate.pairwise_auc(truth, scores) == 1.0
+        truth_rev = np.array([1.0, 1.0, 0.0, 0.0])
+        scores_rev = np.array([0.1, 0.2, 0.8, 0.9])
+        assert (
+            gate.rank_auc(truth_rev, scores_rev) == gate.pairwise_auc(truth_rev, scores_rev) == 0.0
+        )
+
+    def test_pairwise_auc_single_class_returns_none(self) -> None:
+        truth = np.array([1.0, 1.0])
+        scores = np.array([0.3, 0.6])
+        assert gate.rank_auc(truth, scores) is None
+        assert gate.pairwise_auc(truth, scores) is None
+
+    def test_packager_includes_e01r_entry_point(self, tmp_path: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        output_root = tmp_path / "pkg-e01r"
+        result = packager.package(repo_root, output_root, commit="e" * 40, gate="e01r")
+        metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
+        notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
+        assert metadata["enable_gpu"] is True
+        assert result["kernel_slug"].endswith("-r1")
+        assert "run_e01r_sparse_supervision_diagnostic" in str(notebook["cells"])
+
+
 class TestFoldFeasibility:
     def test_reports_support_and_degeneracy(self) -> None:
         keys = [f"k{i:02d}" for i in range(30)]
