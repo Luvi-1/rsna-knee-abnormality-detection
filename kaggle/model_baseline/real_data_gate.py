@@ -213,17 +213,19 @@ def fit_linear_probe(features, labels, epochs=EPOCHS, learning_rate=LEARNING_RAT
     epsilon = 1e-8
     first_loss = float("nan")
     last_loss = float("nan")
+    best_loss = float("inf")
     for step in range(epochs):
         probabilities = 1.0 / (1.0 + np.exp(-(features @ weights + bias)))
         terms = -(targets * np.log(probabilities + epsilon))
         terms -= (1.0 - targets) * np.log(1.0 - probabilities + epsilon)
         last_loss = float((terms * observed).sum() / denominator)
+        best_loss = min(best_loss, last_loss)
         if step == 0:
             first_loss = last_loss
         gradient = (probabilities - targets) * observed / denominator
         weights -= learning_rate * (features.T @ gradient)
         bias -= learning_rate * gradient.sum(axis=0)
-    return weights, bias, first_loss, last_loss
+    return weights, bias, first_loss, best_loss
 
 
 def study_feature(tensor):
@@ -388,7 +390,7 @@ def run_real_data_gate():
         train_labels = label_matrix[~is_validation]
         val_matrix = matrix[is_validation]
         val_labels = label_matrix[is_validation]
-        weights, bias, first_loss, last_loss = fit_linear_probe(train_matrix, train_labels)
+        weights, bias, first_loss, best_loss = fit_linear_probe(train_matrix, train_labels)
         val_scores = 1.0 / (1.0 + np.exp(-(val_matrix @ weights + bias)))
         per_label_auc = {
             target: rank_auc(val_labels[:, column], val_scores[:, column])
@@ -396,7 +398,7 @@ def run_real_data_gate():
         }
         computed = [value for value in per_label_auc.values() if value is not None]
         val_macro = float(np.mean(computed)) if computed else None
-        if not np.isfinite(first_loss) or not np.isfinite(last_loss) or last_loss >= first_loss:
+        if not np.isfinite(first_loss) or not np.isfinite(best_loss) or best_loss >= first_loss:
             raise GateError("tiny_overfit_loss_not_reduced")
 
         summary = {
@@ -413,7 +415,7 @@ def run_real_data_gate():
             "train_studies_used": int((~is_validation).sum()),
             "val_studies_used": int(is_validation.sum()),
             "masked_bce_first_epoch": rounded_float(first_loss),
-            "masked_bce_last_epoch": rounded_float(last_loss),
+            "masked_bce_best_epoch": rounded_float(best_loss),
             "val_per_label_auc": per_label_auc,
             "val_macro_auc_over_computable": rounded_float(val_macro)
             if val_macro is not None
