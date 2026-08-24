@@ -146,8 +146,12 @@ def assign_grouped_folds(keys, labels):
     order = sorted(range(len(keys)), key=lambda i: (-int(mass[i]), keys[i]))
     fold_mass = [0] * N_SPLITS
     assignments = {}
-    for index in order:
-        fold = min(range(N_SPLITS), key=lambda f: (fold_mass[f], f))
+    for sequence, index in enumerate(order):
+        if int(mass[index]) == 0:
+            # Round-robin zero-mass studies to avoid single-fold collapse.
+            fold = sequence % N_SPLITS
+        else:
+            fold = min(range(N_SPLITS), key=lambda f: (fold_mass[f], f))
         assignments[keys[index]] = fold
         fold_mass[fold] += int(mass[index])
     return assignments, fold_mass

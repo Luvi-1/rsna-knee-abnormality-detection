@@ -33,6 +33,16 @@ class TestGroupedFolds:
         with pytest.raises(gate.GateError, match="fold_shape_invalid"):
             gate.assign_grouped_folds(["a"], np.zeros((2, 12)))
 
+    def test_zero_mass_round_robin(self) -> None:
+        """Zero-mass studies spread across folds instead of collapsing into fold 0."""
+        keys = [f"study-{i:02d}" for i in range(10)]
+        labels = np.zeros((10, 12), dtype=np.float64)
+        assignments, _ = gate.assign_grouped_folds(keys, labels)
+        sizes: dict[int, int] = {}
+        for fold in assignments.values():
+            sizes[fold] = sizes.get(fold, 0) + 1
+        assert all(sizes.get(fold, 0) >= 1 for fold in range(gate.N_SPLITS))
+
 
 class TestRankAuc:
     def test_perfect_separation(self) -> None:
