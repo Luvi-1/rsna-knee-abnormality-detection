@@ -23,6 +23,12 @@ GATE_ENTRY_POINTS: Final = {
     "e00c": "run_e00c_cnn_memorization_gate",
     "default": "run_real_data_gate",
 }
+GATE_SLUG_SUFFIX: Final = {
+    "e00_skip_audit": "-skipaudit",
+    "e00b": "",
+    "e00c": "-cnn",
+    "default": "",
+}
 
 
 class PackagingError(RuntimeError):
@@ -128,7 +134,8 @@ def package(repo_root, output_root, commit=None, gate=None):
     except (OSError, UnicodeError, SyntaxError) as error:
         raise PackagingError("gate_source_invalid") from error
     source_sha256 = hashlib.sha256(source.encode()).hexdigest()
-    gate_suffix = "" if gate is None else f"-{gate.replace('_', '-')}"
+    gate_key = gate or "default"
+    gate_suffix = GATE_SLUG_SUFFIX[gate_key]
     slug = f"rsna-knee-model-gate-{commit[:7]}-{source_sha256[:12]}{gate_suffix}"
     ref = f"lavicheema/{slug}"
     if REF.fullmatch(ref) is None:
