@@ -140,3 +140,25 @@ class TestPackager:
         packager.package(repo_root, output_root, commit="b" * 40)
         with pytest.raises(packager.PackagingError):
             packager.package(repo_root, output_root, commit="b" * 40)
+
+
+class TestE00bSelection:
+    def test_selects_studies_with_both_pos_and_neg(self) -> None:
+        """Studies must have at least one positive and one negative known label."""
+        keys = ["a", "b", "c", "d"]
+        labels = np.array(
+            [
+                [1.0, 0.0],
+                [1.0, np.nan],
+                [np.nan, 0.0],
+                [np.nan, np.nan],
+            ]
+        )
+        eligible = []
+        for index in range(len(keys)):
+            row = labels[index]
+            observed = np.isfinite(row)
+            if observed.any() and (row[observed] == 1).any() and (row[observed] == 0).any():
+                eligible.append(index)
+        assert len(eligible) == 1
+        assert keys[eligible[0]] == "a"

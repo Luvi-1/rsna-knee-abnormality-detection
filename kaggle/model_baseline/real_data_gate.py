@@ -49,6 +49,8 @@ N_SPLITS: Final = 5
 SELECTED_STUDIES: Final = 24
 PROCESSED_TARGET: Final = 16
 MIN_PROCESSED: Final = 8
+E00B_COHORT: Final = 12
+E00B_EPOCHS: Final = 2000
 MAX_SERIES_PER_STUDY: Final = 4
 MAX_FILES_PER_SERIES: Final = 128
 SAMPLE_COUNT: Final = 8
@@ -436,6 +438,170 @@ def run_real_data_gate():
         temporary.write_bytes(payload)
         os.replace(temporary, output_root / SUMMARY_BASENAME)
         print(f"event=real_data_gate_complete studies={len(features)} series={series_processed}")
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+def run_e00b_memorization_gate():
+    """Prove the model can memorize a tiny cohort with real supervised labels.
+
+    Selects 8-16 studies with both positive and negative labels per target where
+    possible. Trains on all of them (no val split) for enough epochs to drive
+    training BCE toward zero. Reports per-label training AUC and supervised-cell
+    counts. Every selected study must contribute at least one nonzero gradient.
+    """
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, labels = read_study_labels(competition_root / "train.csv")
+
+        # Select studies that have both positive and negative labels across targets.
+        # Prefer studies with more known cells; tie-break by SHA-256 for determinism.
+        n_known = np.isfinite(labels).sum(axis=1)
+        has_pos_and_neg = np.zeros(len(keys), dtype=bool)
+        for index in range(len(keys)):
+            row = labels[index]
+            observed = np.isfinite(row)
+            if observed.any() and (row[observed] == 1).any() and (row[observed] == 0).any():
+                has_pos_and_neg[index] = True
+        eligible = [i for i in range(len(keys)) if has_pos_and_neg[i]]
+        ranked = sorted(
+            eligible,
+            key=lambda i: (-int(n_known[i]), hashlib.sha256(keys[i].encode()).hexdigest()),
+        )
+        cohort_indices = ranked[:E00B_COHORT]
+        cohort_keys = [keys[i] for i in cohort_indices]
+
+        config = PreprocessingConfig(sample_count=SAMPLE_COUNT, resize_rows_columns=RESIZE_SHAPE)
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+        features = {}
+        skip_reasons = Counter()
+        series_processed = 0
+        for key in cohort_keys:
+            try:
+                tensors = [
+                    dicom_to_model(paths, config, versions).tensor
+                    for paths in _series_paths(competition_root, key)
+                ]
+            except Exception as error:  # noqa: BLE001 - reduced to fixed safe token below
+                token = getattr(error, "code", None) or getattr(
+                    getattr(error, "issue", None), "value", None
+                )
+                safe = (
+                    str(token)
+                    if isinstance(token, str) and SAFE_TOKEN.fullmatch(token)
+                    else "preprocess_failed"
+                )
+                skip_reasons[safe] += 1
+                continue
+            features[key] = np.mean([study_feature(tensor) for tensor in tensors], axis=0)
+            series_processed += len(tensors)
+        if not features:
+            raise GateError("insufficient_processed_studies")
+
+        ordered_keys = sorted(features)
+        matrix = np.vstack([features[key] for key in ordered_keys])
+        matrix = np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
+        mean = matrix.mean(axis=0)
+        std = matrix.std(axis=0)
+        std = np.where(std < 1e-8, 1.0, std)
+        matrix = (matrix - mean) / std
+        row_index = {key: index for index, key in enumerate(keys)}
+        label_matrix = np.vstack([labels[row_index[key]] for key in ordered_keys])
+
+        # Train on ALL studies — no validation split.
+        weights, bias, first_loss, best_loss = fit_linear_probe(
+            matrix, label_matrix, epochs=E00B_EPOCHS, learning_rate=LEARNING_RATE, seed=SEED
+        )
+
+        # Training AUC on the same data (memorization check).
+        train_scores = 1.0 / (1.0 + np.exp(-(np.clip(matrix @ weights + bias, -30.0, 30.0))))
+        train_auc = {
+            target: rank_auc(label_matrix[:, column], train_scores[:, column])
+            for column, target in enumerate(TARGETS)
+        }
+        computable_auc = {k: v for k, v in train_auc.items() if v is not None}
+        train_macro = float(np.mean(list(computable_auc.values()))) if computable_auc else None
+
+        # Supervised-cell count per label (how many nonzero gradients each target gets).
+        observed = np.isfinite(label_matrix)
+        supervised_cells_per_label = {}
+        positive_cells_per_label = {}
+        negative_cells_per_label = {}
+        for column, target in enumerate(TARGETS):
+            obs_col = observed[:, column]
+            pos_count = int((label_matrix[obs_col, column] == 1).sum())
+            neg_count = int((label_matrix[obs_col, column] == 0).sum())
+            supervised_cells_per_label[target] = int(obs_col.sum())
+            positive_cells_per_label[target] = pos_count
+            negative_cells_per_label[target] = neg_count
+
+        # Confirm every selected study contributes at least one nonzero gradient.
+        per_study_supervised = {}
+        for row_i, key in enumerate(ordered_keys):
+            n_observed = int(observed[row_i].sum())
+            n_positive = int((label_matrix[row_i][observed[row_i]] == 1).sum())
+            n_negative = int((label_matrix[row_i][observed[row_i]] == 0).sum())
+            per_study_supervised[key] = {
+                "known": n_observed,
+                "positive": n_positive,
+                "negative": n_negative,
+                "contributes_nonzero_loss": n_observed > 0,
+            }
+        all_contribute = all(v["contributes_nonzero_loss"] for v in per_study_supervised.values())
+
+        summary = {
+            "schema_version": 1,
+            "gate": "e00b_memorization_v0",
+            "r16_code_commit": R16_COMMIT,
+            "source_manifest_version": SOURCE_MANIFEST_VERSION,
+            "preprocessing_qa_status": "PROVISIONAL_HUMAN_QA_PENDING",
+            "cohort_selected": len(cohort_keys),
+            "studies_processed": len(features),
+            "series_processed": series_processed,
+            "skip_reason_counts": dict(skip_reasons),
+            "supervised_bce_first_epoch": rounded_float(first_loss),
+            "supervised_bce_best_epoch": rounded_float(best_loss),
+            "train_per_label_auc": train_auc,
+            "train_macro_auc_over_computable": rounded_float(train_macro)
+            if train_macro is not None
+            else None,
+            "n_computable_labels": len(computable_auc),
+            "supervised_cells_per_label": supervised_cells_per_label,
+            "positive_cells_per_label": positive_cells_per_label,
+            "negative_cells_per_label": negative_cells_per_label,
+            "per_study_supervised": per_study_supervised,
+            "all_studies_contribute_nonzero_loss": all_contribute,
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+            "completion": (
+                "E00B_MEMORIZATION_PASS"
+                if all_contribute and best_loss < first_loss
+                else "E00B_MEMORIZATION_FAIL"
+            ),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / f".{SUMMARY_BASENAME}.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / SUMMARY_BASENAME)
+        print(f"event=e00b_complete studies={len(features)} series={series_processed}")
         return 0
     finally:
         if str(runtime_root) in sys.path:

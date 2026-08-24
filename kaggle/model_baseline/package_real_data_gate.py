@@ -67,7 +67,7 @@ def _notebook_payload(source, source_sha256):
             "sys.modules[runtime_module.__name__] = runtime_module",
             "exec(compile(MODULE_SOURCE, runtime_module.__file__, 'exec'),"
             " runtime_module.__dict__)",
-            "exit_code = runtime_module.run_real_data_gate()",
+            "exit_code = runtime_module.run_e00b_memorization_gate()",
             "if exit_code != 0:",
             "    raise RuntimeError('real_data_gate_failed')",
         )
