@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import pathlib
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -43,40 +45,96 @@ def _touch_entries(root: Path, entries: set[str], directories: set[str] | None =
             path.write_bytes(b"x")
 
 
+def _source_dataset(root: Path, *, commit: str | None = None) -> dict[str, Any]:
+    root.mkdir(parents=True)
+    artifacts: list[dict[str, Any]] = []
+    for name in sorted(review.SOURCE_REQUIRED_ENTRIES):
+        payload = b"x"
+        if name.endswith(".bin"):
+            payload = b"k" * 32
+        (root / name).write_bytes(payload)
+        artifacts.append(
+            {
+                "bytes": len(payload),
+                "contains_credentials": False,
+                "contains_patient_identifiers_raw": False,
+                "contains_pixels": False,
+                "contains_reports_text": False,
+                "name": name,
+                "privacy_class": "private_control_artifact",
+                "producer_stage": "manifest-audit-v2-2a1f56e",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
+    manifest: dict[str, Any] = {
+        "artifacts": artifacts,
+        "created_at_utc": "2026-08-24T00:46:26Z",
+        "creation_tool_version": review.EXPECTED_SOURCE_TOOL_VERSION,
+        "dataset_purpose": review.EXPECTED_SOURCE_PURPOSE,
+        "manifest_sha256": "",
+        "schema_version": 1,
+        "source_producer_identity": {
+            "audit_id": "audit-0003-wheel-sanitization",
+            "group_version": "protected-groups-v2",
+            "kernel_ref": "lavicheema/rsna-knee-manifest-audit-2a1f56e-64a7ae040887",
+            "kernel_status": "COMPLETE",
+            "kernel_version": 1,
+            "manifest_version": "manifest-v2",
+        },
+        "source_r16_identity": {
+            "bundle_sha256": "a" * 64,
+            "code_commit": commit or review.EXPECTED_SOURCE_R16_COMMIT,
+            "runner_sha256": "b" * 64,
+        },
+    }
+    manifest["manifest_sha256"] = hashlib.sha256(
+        json.dumps(
+            {k: v for k, v in manifest.items() if k != "manifest_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    path = root / review.SOURCE_MANIFEST_FILENAME
+    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    return manifest
+
+
+def _identity(source_ref: str) -> review.SourceDatasetIdentity:
+    scratch = pathlib.Path(tempfile.mkdtemp())
+    manifest = _source_dataset(scratch / "source")
+    return review.SourceDatasetIdentity(
+        dataset_ref=source_ref,
+        manifest_sha256=manifest["manifest_sha256"],
+        code_commit=review.EXPECTED_SOURCE_R16_COMMIT,
+        bundle_sha256="a" * 64,
+        runner_sha256="b" * 64,
+    )
+
+
 def _mounts(tmp_path: Path, layout: str = "direct") -> tuple[Path, Any]:
     input_root = tmp_path / "input"
     input_root.mkdir()
     bundle_ref = "owner/frozen-bundle"
-    source_ref = "owner/source-kernel"
-    source_entries = tuple(sorted(review.SOURCE_REQUIRED_ENTRIES))
+    source_ref = review.EXPECTED_SOURCE_DATASET_REF
     if layout == "direct":
         bundle = input_root / "frozen-bundle"
-        source = input_root / "source-kernel"
         competition = input_root / review.COMPETITION_SLUG
-    elif layout == "owner":
-        bundle = input_root / "owner/frozen-bundle"
-        source = input_root / "owner/source-kernel"
-        competition = input_root / review.COMPETITION_SLUG
-    elif layout == "typed":
-        bundle = input_root / "datasets/owner/frozen-bundle"
-        source = input_root / "notebooks/owner/source-kernel"
-        competition = input_root / "competitions" / review.COMPETITION_SLUG
     else:
-        bundle = input_root / "datasets/owner/frozen-bundle"
-        source = input_root / "datasets/owner/source-kernel"
-        competition = input_root / "competitions" / review.COMPETITION_SLUG
+        bundle = input_root / "owner/frozen-bundle"
+        competition = input_root / review.COMPETITION_SLUG
+    source = input_root / "datasets" / source_ref.replace("/", "/")
     _touch_entries(bundle, {"bundle-manifest.json"})
-    _touch_entries(source, set(source_entries))
+    _source_dataset(source)
     _touch_entries(
         competition,
         set(review.COMPETITION_ENTRIES),
         {"train_series", "test_series"},
     )
-    refs = review.InputRefs(bundle_ref, source_ref, source_entries)
+    refs = review.InputRefs(bundle_ref, source_ref, _identity(source_ref))
     return input_root, refs
 
 
-@pytest.mark.parametrize("layout", ["direct", "owner", "typed", "typed-dataset-source"])
+@pytest.mark.parametrize("layout", ["direct", "owner"])
 def test_input_discovery_accepts_only_explicit_bounded_layouts(tmp_path: Path, layout: str) -> None:
     input_root, refs = _mounts(tmp_path, layout)
     train_root = next(input_root.rglob("train_series"))
@@ -86,15 +144,15 @@ def test_input_discovery_accepts_only_explicit_bounded_layouts(tmp_path: Path, l
     roots = review.discover_inputs(input_root, refs)
 
     assert roots.bundle.name == "frozen-bundle"
-    assert roots.source.name == "source-kernel"
+    assert roots.source.name == review.EXPECTED_SOURCE_DATASET_REF.partition("/")[2]
     assert roots.competition.name == review.COMPETITION_SLUG
 
 
 def test_input_discovery_accepts_competition_mount_metadata_but_checks_entry_types(
     tmp_path: Path,
 ) -> None:
-    input_root, refs = _mounts(tmp_path, "typed")
-    competition = input_root / "competitions" / review.COMPETITION_SLUG
+    input_root, refs = _mounts(tmp_path)
+    competition = next(input_root.rglob(review.COMPETITION_SLUG))
     (competition / "dataset-metadata.json").write_bytes(b"{}")
 
     assert review.discover_inputs(input_root, refs).competition == competition
@@ -105,18 +163,20 @@ def test_input_discovery_accepts_competition_mount_metadata_but_checks_entry_typ
         review.discover_inputs(input_root, refs)
 
 
-def test_input_discovery_accepts_source_mount_metadata_but_checks_entry_types(
+def test_input_discovery_rejects_extra_source_files_and_old_kernel_wrapper(
     tmp_path: Path,
 ) -> None:
     input_root, refs = _mounts(tmp_path)
-    source = input_root / "source-kernel"
-    (source / "kernel-metadata.json").write_bytes(b"{}")
+    wrapper = input_root / "notebooks" / "owner" / "source-kernel"
+    _touch_entries(wrapper, set(review.SOURCE_REQUIRED_ENTRIES))
 
-    assert review.discover_inputs(input_root, refs).source == source
+    roots = review.discover_inputs(input_root, refs)
+    assert roots.source.name == review.EXPECTED_SOURCE_DATASET_REF.partition("/")[2]
 
-    (source / "audit_key.bin").unlink()
-    (source / "audit_key.bin").mkdir()
-    with pytest.raises(review.OnDemandReviewError, match="input_root_invalid"):
+    import shutil as _shutil
+
+    _shutil.rmtree(roots.source)
+    with pytest.raises(review.OnDemandReviewError, match="input_missing"):
         review.discover_inputs(input_root, refs)
 
 
@@ -130,9 +190,10 @@ def test_input_discovery_rejects_duplicate_and_symlink_roots(
         review.discover_inputs(input_root, refs)
 
     duplicate.rename(input_root / "owner/old-bundle")
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
     real = tmp_path / "real-source"
-    (input_root / "source-kernel").rename(real)
-    (input_root / "source-kernel").symlink_to(real, target_is_directory=True)
+    source.rename(real)
+    source.symlink_to(real, target_is_directory=True)
     with pytest.raises(review.OnDemandReviewError, match="input_symlink_rejected"):
         review.discover_inputs(input_root, refs)
 
@@ -191,7 +252,7 @@ def test_frozen_runner_hash_is_checked_before_import(tmp_path: Path) -> None:
         ],
     }
     (tmp_path / "bundle-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    roots = review.InputRoots(tmp_path, tmp_path, tmp_path)
+    roots = review.InputRoots(tmp_path, tmp_path, tmp_path, {})
 
     with pytest.raises(review.OnDemandReviewError, match="runner_source_hash_mismatch"):
         review._frozen_runtime(roots, "b" * 64, expected)
@@ -540,7 +601,7 @@ def test_batch_stdin_unavailable_stops_before_start(
     assert review._pre_start_input("START: ") is None
 
 
-def test_packaged_notebook_attests_embedded_source_hash() -> None:
+def test_packaged_notebook_binds_dataset_sources_without_kernel_fallback() -> None:
     source = (
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
@@ -555,7 +616,7 @@ def test_packaged_notebook_attests_embedded_source_hash() -> None:
         source=source,
         source_sha256=source_hash,
         bundle_ref="owner/frozen-bundle",
-        source_ref="owner/source-kernel",
+        source_dataset_ref=packager.EXPECTED_SOURCE_DATASET_REF,
         bundle_sha256="a" * 64,
         runner_sha256="b" * 64,
     )
@@ -564,8 +625,116 @@ def test_packaged_notebook_attests_embedded_source_hash() -> None:
 
     assert notebook["nbformat"] == 4
     assert source_hash in code
+    assert "source_dataset_ref=" in code
+    assert packager.EXPECTED_SOURCE_DATASET_REF in code
+    assert "kernel_sources" not in json.dumps(notebook["metadata"])
     assert "expected_runner_sha256" in code
     assert "run_on_demand_review" in code
     assert all(isinstance(cell["source"], str) for cell in notebook["cells"])
     assert payload == packager._canonical_json_bytes(notebook)
     exec(compile(code, "packaged-on-demand-test.ipynb", "exec"), {})
+
+
+def _rewrite_source_manifest(root: Path, transform: Any) -> str:
+    path = root / review.SOURCE_MANIFEST_FILENAME
+    manifest = json.loads(path.read_bytes())
+    transform(manifest)
+    manifest.pop("manifest_sha256")
+    digest = hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    manifest["manifest_sha256"] = digest
+    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    return digest
+
+
+def test_source_dataset_exact_inventory_and_dataset_only_graph_pass(tmp_path: Path) -> None:
+    input_root, refs = _mounts(tmp_path)
+    assert not (input_root / "notebooks").exists()
+
+    roots = review.discover_inputs(input_root, refs)
+
+    assert roots.source_manifest["dataset_purpose"] == review.EXPECTED_SOURCE_PURPOSE
+
+
+def test_source_dataset_missing_or_extra_artifact_is_rejected(tmp_path: Path) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
+    (source / "unexpected.txt").write_bytes(b"x")
+    with pytest.raises(review.OnDemandReviewError, match="input_missing"):
+        review.discover_inputs(input_root, refs)
+
+    (source / "unexpected.txt").unlink()
+    (source / "audit_key.bin").unlink()
+    with pytest.raises(review.OnDemandReviewError, match="input_missing"):
+        review.discover_inputs(input_root, refs)
+
+
+def test_source_dataset_wrong_hash_or_size_is_rejected(tmp_path: Path) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
+    data = source / "private_qa_samples.csv"
+    original = data.read_bytes()
+    data.write_bytes(original + b"tail")
+    with pytest.raises(review.OnDemandReviewError, match="artifact_mismatch"):
+        review.discover_inputs(input_root, refs)
+
+    data.write_bytes(b"z")
+    with pytest.raises(review.OnDemandReviewError, match="artifact_mismatch"):
+        review.discover_inputs(input_root, refs)
+
+
+def test_source_dataset_wrong_lineage_or_identity_digest_is_rejected(
+    tmp_path: Path,
+) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
+    _rewrite_source_manifest(
+        source,
+        lambda m: m["source_r16_identity"].update({"code_commit": "0" * 40}),
+    )
+    with pytest.raises(review.OnDemandReviewError, match="source_dataset_lineage_rejected"):
+        review.discover_inputs(input_root, refs)
+
+    wrong_refs = review.InputRefs(
+        refs.bundle_dataset,
+        refs.source_dataset,
+        review.SourceDatasetIdentity(
+            dataset_ref=refs.source_dataset,
+            manifest_sha256="c" * 64,
+            code_commit=review.EXPECTED_SOURCE_R16_COMMIT,
+            bundle_sha256="a" * 64,
+            runner_sha256="b" * 64,
+        ),
+    )
+    with pytest.raises(review.OnDemandReviewError, match="source_dataset_lineage_rejected"):
+        review.discover_inputs(input_root, wrong_refs)
+
+
+def test_old_kernel_wrapper_without_dataset_has_no_fallback(tmp_path: Path) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
+    import shutil as _shutil
+
+    _shutil.rmtree(source)
+    wrapper = input_root / "notebooks" / "owner" / "source-kernel"
+    _touch_entries(wrapper, set(review.SOURCE_REQUIRED_ENTRIES))
+
+    with pytest.raises(review.OnDemandReviewError, match="input_missing"):
+        review.discover_inputs(input_root, refs)
+
+
+def test_prohibited_privacy_classification_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_root, refs = _mounts(tmp_path)
+    source = input_root / "datasets" / review.EXPECTED_SOURCE_DATASET_REF
+    digest = _rewrite_source_manifest(
+        source,
+        lambda m: m["artifacts"][0].update({"contains_pixels": True}),
+    )
+    monkeypatch.setattr(review, "EXPECTED_SOURCE_MANIFEST_SHA256", digest)
+
+    with pytest.raises(review.OnDemandReviewError, match="privacy_rejected"):
+        review.discover_inputs(input_root, refs)

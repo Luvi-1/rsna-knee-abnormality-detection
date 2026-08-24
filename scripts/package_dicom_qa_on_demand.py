@@ -17,19 +17,7 @@ REF = re.compile(r"[a-z0-9][a-z0-9_-]{0,49}/[a-z0-9][a-z0-9_-]{0,99}\Z")
 HEX_40 = re.compile(r"[0-9a-f]{40}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 COMPETITION_SLUG: Final = "rsna-knee-abnormality-detection"
-SOURCE_ENTRIES: Final = (
-    "audit_key.bin",
-    "data_audit.md",
-    "domain_shift_audit.md",
-    "leakage_audit.md",
-    "private_artifact_inventory.json",
-    "private_duplicate_groups.csv",
-    "private_manifest.sqlite3",
-    "private_preliminary_group_keys.csv",
-    "private_qa_samples.csv",
-    "sanitized_artifact_inventory.json",
-    "sanitized_summary.json",
-)
+EXPECTED_SOURCE_DATASET_REF: Final = "lavicheema/rsna-knee-qa-source-artifacts-da5b9c8-r2"
 NOTEBOOK_FILE: Final = "on_demand_review.ipynb"
 
 
@@ -104,7 +92,7 @@ def _notebook_payload(
     source: str,
     source_sha256: str,
     bundle_ref: str,
-    source_ref: str,
+    source_dataset_ref: str,
     bundle_sha256: str,
     runner_sha256: str,
 ) -> bytes:
@@ -125,8 +113,7 @@ def _notebook_payload(
             "runtime_module.__dict__)",
             "exit_code = runtime_module.run_on_demand_review(",
             f"    bundle_dataset_ref={bundle_ref!r},",
-            f"    source_kernel_ref={source_ref!r},",
-            f"    source_entries={SOURCE_ENTRIES!r},",
+            f"    source_dataset_ref={source_dataset_ref!r},",
             f"    expected_bundle_sha256={bundle_sha256!r},",
             f"    expected_runner_sha256={runner_sha256!r},",
             "    notebook_source_sha256=EXPECTED_SOURCE_SHA256,",
@@ -199,9 +186,9 @@ def package(
     if _sha256_file(runner_path) != runner_record["sha256"]:
         raise PackagingError("runner_source_hash_mismatch")
     run_config = _json(bundle_root / cast(str, run_record["path"]))
-    source_ref = run_config.get("input_identity", {}).get("source_manifest", {}).get("kernel_ref")
+    producer_ref = run_config.get("input_identity", {}).get("source_manifest", {}).get("kernel_ref")
     owner = run_config.get("deployment", {}).get("owner")
-    if REF.fullmatch(str(source_ref)) is None or not isinstance(owner, str):
+    if REF.fullmatch(str(producer_ref)) is None or not isinstance(owner, str):
         raise PackagingError("source_identity_invalid")
     try:
         source = module_path.read_text(encoding="utf-8")
@@ -221,7 +208,7 @@ def package(
         source=source,
         source_sha256=source_sha256,
         bundle_ref=bundle_ref,
-        source_ref=cast(str, source_ref),
+        source_dataset_ref=EXPECTED_SOURCE_DATASET_REF,
         bundle_sha256=cast(str, bundle_sha256),
         runner_sha256=cast(str, runner_record["sha256"]),
     )
@@ -236,8 +223,7 @@ def package(
         "enable_tpu": False,
         "enable_internet": False,
         "keywords": [],
-        "dataset_sources": [bundle_ref],
-        "kernel_sources": [source_ref],
+        "dataset_sources": [bundle_ref, EXPECTED_SOURCE_DATASET_REF],
         "competition_sources": [COMPETITION_SLUG],
         "model_sources": [],
     }
@@ -253,7 +239,8 @@ def package(
         "bundle_sha256": cast(str, bundle_sha256),
         "runner_sha256": cast(str, runner_record["sha256"]),
         "bundle_dataset_ref": bundle_ref,
-        "source_kernel_ref": cast(str, source_ref),
+        "source_dataset_ref": EXPECTED_SOURCE_DATASET_REF,
+        "source_producer_kernel_ref": cast(str, producer_ref),
         "git_commit": commit,
     }
 

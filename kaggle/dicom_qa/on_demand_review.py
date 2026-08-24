@@ -49,6 +49,17 @@ SOURCE_REQUIRED_ENTRIES: Final = frozenset(
         "private_qa_samples.csv",
     }
 )
+SOURCE_MANIFEST_FILENAME: Final = "source-artifact-manifest.json"
+SOURCE_DATASET_ENTRIES: Final = SOURCE_REQUIRED_ENTRIES | {SOURCE_MANIFEST_FILENAME}
+EXPECTED_SOURCE_DATASET_REF: Final = "lavicheema/rsna-knee-qa-source-artifacts-da5b9c8-r2"
+# pragma: allowlist secret - published content digest identity, not a credential
+EXPECTED_SOURCE_MANIFEST_SHA256: Final = (
+    "b44f6895c6853320ef289aef50dfc6bd47f640d5f7ef2560a1f8f020b3d4b14b"
+)
+# pragma: allowlist secret - frozen r16 git commit identifier, not a credential
+EXPECTED_SOURCE_R16_COMMIT: Final = "da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f"
+EXPECTED_SOURCE_TOOL_VERSION: Final = "chunk5-final-remediation-v1"
+EXPECTED_SOURCE_PURPOSE: Final = "chunk5-on-demand-qa-source-artifacts"
 COMPETITION_FILES: Final = frozenset(
     {
         "sample_submission.csv",
@@ -71,10 +82,19 @@ class OnDemandReviewError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class SourceDatasetIdentity:
+    dataset_ref: str
+    manifest_sha256: str
+    code_commit: str
+    bundle_sha256: str
+    runner_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class InputRefs:
     bundle_dataset: str
-    source_kernel: str
-    source_entries: tuple[str, ...]
+    source_dataset: str
+    source_identity: SourceDatasetIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +102,7 @@ class InputRoots:
     bundle: Path
     source: Path
     competition: Path
+    source_manifest: Mapping[str, object]
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -189,10 +210,10 @@ def _one_root(
 ) -> Path:
     matches: dict[Path, Path] = {}
     for candidate in candidates:
-        if not candidate.exists():
-            continue
         if _has_symlink_ancestor(input_root, candidate):
             raise OnDemandReviewError("input_symlink_rejected")
+        if not candidate.is_dir():
+            continue
         entries = _bounded_entries(candidate)
         if marker(entries):
             try:
@@ -204,17 +225,136 @@ def _one_root(
     return next(iter(matches.values()))
 
 
+def _canonical_source_manifest(payload: bytes) -> dict[str, Any]:
+    try:
+        value = json.loads(payload)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise OnDemandReviewError("source_dataset_manifest_invalid") from error
+    if not isinstance(value, dict) or payload != _canonical_json_bytes(value):
+        raise OnDemandReviewError("source_dataset_manifest_invalid")
+    return cast(dict[str, Any], value)
+
+
+def _source_manifest_digest(value: Mapping[str, object]) -> str:
+    content = {key: item for key, item in value.items() if key != "manifest_sha256"}
+    payload = json.dumps(
+        content,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _authenticate_source_manifest(
+    source_root: Path, identity: SourceDatasetIdentity
+) -> dict[str, Any]:
+    manifest_path = source_root / SOURCE_MANIFEST_FILENAME
+    try:
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise OnDemandReviewError("source_dataset_manifest_missing")
+        size = manifest_path.stat().st_size
+        if not 0 < size <= 65536:
+            raise OnDemandReviewError("source_dataset_manifest_invalid")
+        payload = manifest_path.read_bytes()
+    except OSError as error:
+        raise OnDemandReviewError("source_dataset_manifest_invalid") from error
+    value = _canonical_source_manifest(payload)
+    expected_keys = {
+        "artifacts",
+        "created_at_utc",
+        "creation_tool_version",
+        "dataset_purpose",
+        "manifest_sha256",
+        "schema_version",
+        "source_producer_identity",
+        "source_r16_identity",
+    }
+    artifacts = value.get("artifacts")
+    producer = value.get("source_producer_identity")
+    r16 = value.get("source_r16_identity")
+    producer_keys = {
+        "audit_id",
+        "group_version",
+        "kernel_ref",
+        "kernel_status",
+        "kernel_version",
+        "manifest_version",
+    }
+    r16_keys = {"bundle_sha256", "code_commit", "runner_sha256"}
+    if (
+        set(value) != expected_keys
+        or value.get("schema_version") != 1
+        or value.get("dataset_purpose") != EXPECTED_SOURCE_PURPOSE
+        or value.get("creation_tool_version") != EXPECTED_SOURCE_TOOL_VERSION
+        or _source_manifest_digest(value) != cast(str, value.get("manifest_sha256"))
+        or not isinstance(artifacts, list)
+        or len(artifacts) != len(SOURCE_REQUIRED_ENTRIES)
+        or not isinstance(producer, dict)
+        or set(producer) != producer_keys
+        or not isinstance(r16, dict)
+        or set(r16) != r16_keys
+    ):
+        raise OnDemandReviewError("source_dataset_manifest_invalid")
+    records: dict[str, tuple[int, str]] = {}
+    for raw in artifacts:
+        record = raw if isinstance(raw, dict) else {}
+        name = record.get("name")
+        record_size = int(record["bytes"]) if "bytes" in record else None
+        digest = record.get("sha256")
+        prohibited = any(
+            bool(record.get(key))
+            for key in (
+                "contains_pixels",
+                "contains_reports_text",
+                "contains_patient_identifiers_raw",
+                "contains_credentials",
+            )
+        )
+        if (
+            not isinstance(name, str)
+            or name not in SOURCE_DATASET_ENTRIES
+            or name in records
+            or isinstance(record_size, bool)
+            or not isinstance(record_size, int)
+            or record_size <= 0
+            or not isinstance(digest, str)
+            or HEX_64.fullmatch(digest) is None
+            or prohibited
+            or record.get("privacy_class") != "private_control_artifact"
+        ):
+            raise OnDemandReviewError("source_dataset_privacy_rejected")
+        path = source_root / name
+        try:
+            actual_size = path.stat().st_size if path.is_file() else -1
+        except OSError:
+            actual_size = -1
+        if actual_size != record_size or _sha256_file(path) != digest:
+            raise OnDemandReviewError("source_dataset_artifact_mismatch")
+        records[name] = (record_size, digest)
+    if set(records) != SOURCE_REQUIRED_ENTRIES:
+        raise OnDemandReviewError("source_dataset_inventory_mismatch")
+    if (
+        producer["audit_id"] != "audit-0003-wheel-sanitization"
+        or producer["group_version"] != "protected-groups-v2"
+        or producer["manifest_version"] != "manifest-v2"
+        or producer["kernel_status"] != "COMPLETE"
+        or producer["kernel_version"] != 1
+        or producer["kernel_ref"] != "lavicheema/rsna-knee-manifest-audit-2a1f56e-64a7ae040887"
+        or r16["code_commit"] != EXPECTED_SOURCE_R16_COMMIT
+        or r16["bundle_sha256"] != identity.bundle_sha256
+        or r16["runner_sha256"] != identity.runner_sha256
+        or identity.dataset_ref == ""
+    ):
+        raise OnDemandReviewError("source_dataset_lineage_rejected")
+    return value
+
+
 def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
     """Resolve only direct, owner-qualified, or type-prefixed declared mount roots."""
 
-    if (
-        REF.fullmatch(refs.bundle_dataset) is None
-        or REF.fullmatch(refs.source_kernel) is None
-        or not refs.source_entries
-        or len(set(refs.source_entries)) != len(refs.source_entries)
-        or SOURCE_REQUIRED_ENTRIES - set(refs.source_entries)
-        or any(Path(name).name != name for name in refs.source_entries)
-    ):
+    if REF.fullmatch(refs.bundle_dataset) is None or REF.fullmatch(refs.source_dataset) is None:
         raise OnDemandReviewError("input_identity_invalid")
     _bounded_entries(input_root)
     bundle = _one_root(
@@ -222,18 +362,17 @@ def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
         _candidate_paths(input_root, refs.bundle_dataset, "datasets"),
         lambda entries: "bundle-manifest.json" in entries,
     )
-    expected_source = frozenset(refs.source_entries)
-    source_owner, _, source_slug = refs.source_kernel.partition("/")
+    expected_source = SOURCE_DATASET_ENTRIES
+    source_owner, _, source_slug = refs.source_dataset.partition("/")
+    source_candidates = (input_root / "datasets" / source_owner / source_slug,)
     source = _one_root(
         input_root,
-        (
-            *_candidate_paths(input_root, refs.source_kernel, "notebooks"),
-            input_root / "datasets" / source_owner / source_slug,
-        ),
-        lambda entries: entries >= expected_source,
+        source_candidates,
+        lambda entries: entries == expected_source,
     )
-    if any(not (source / name).is_file() for name in expected_source):
-        raise OnDemandReviewError("input_root_invalid")
+    if not source.exists():
+        raise OnDemandReviewError("input_missing")
+    source_manifest = _authenticate_source_manifest(source, refs.source_identity)
     competition = _one_root(
         input_root,
         (input_root / COMPETITION_SLUG, input_root / "competitions" / COMPETITION_SLUG),
@@ -246,7 +385,7 @@ def discover_inputs(input_root: Path, refs: InputRefs) -> InputRoots:
     resolved = {path.resolve(strict=True) for path in (bundle, source, competition)}
     if len(resolved) != 3:
         raise OnDemandReviewError("input_duplicate")
-    return InputRoots(bundle, source, competition)
+    return InputRoots(bundle, source, competition, source_manifest)
 
 
 def _load_module(name: str, path: Path) -> ModuleType:
@@ -1512,8 +1651,7 @@ def _interactive_review(
 def run_on_demand_review(
     *,
     bundle_dataset_ref: str,
-    source_kernel_ref: str,
-    source_entries: Sequence[str],
+    source_dataset_ref: str,
     expected_bundle_sha256: str,
     expected_runner_sha256: str,
     notebook_source_sha256: str,
@@ -1534,14 +1672,27 @@ def run_on_demand_review(
     runtime_root: Path | None = None
     reconciliation: Any | None = None
     try:
-        refs = InputRefs(bundle_dataset_ref, source_kernel_ref, tuple(source_entries))
+        refs = InputRefs(
+            bundle_dataset_ref,
+            source_dataset_ref,
+            SourceDatasetIdentity(
+                dataset_ref=source_dataset_ref,
+                manifest_sha256=EXPECTED_SOURCE_MANIFEST_SHA256,
+                code_commit=EXPECTED_SOURCE_R16_COMMIT,
+                bundle_sha256=expected_bundle_sha256,
+                runner_sha256=expected_runner_sha256,
+            ),
+        )
         roots = discover_inputs(input_root, refs)
         runner, run_config, paths, dependencies = _frozen_runtime(
             roots, expected_bundle_sha256, expected_runner_sha256
         )
         source_config = run_config["input_identity"]["source_manifest"]
+        producer_ref = roots.source_manifest["source_producer_identity"]
+        source_r16 = roots.source_manifest["source_r16_identity"]
         if (
-            source_config["kernel_ref"] != source_kernel_ref
+            source_config["kernel_ref"] != cast(Mapping[str, Any], producer_ref)["kernel_ref"]
+            or cast(Mapping[str, Any], source_r16)["code_commit"] != run_config["code_commit"]
             or run_config["bundle_sha256"] != expected_bundle_sha256
         ):
             raise OnDemandReviewError("input_identity_invalid")

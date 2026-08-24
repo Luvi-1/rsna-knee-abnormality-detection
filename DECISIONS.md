@@ -1381,3 +1381,11 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
   submission, merge, publication, and Chunk 6 remain blocked.
 - Reversal condition: only renewed explicit human approval after complete fresh gates may authorize
   another launch identity; any private-content exposure terminates the route permanently.
+
+## D-050 - Reclassification of D-049 as DERIVED_KERNEL_PAYLOAD_NOT_MATERIALIZED
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Should the 4ab1b24 root cause be reclassified from path-depth to a structural transport failure?
+- Evidence: The diagnostic kernel proved all three inputs mount at their expected forms. The source kernel directory exists at notebooks/<owner>/<slug> with 6 entries, but its entry set does not contain all six required private output artifacts. The Kaggle derived-kernel mount is a metadata wrapper that does not materialize the full payload. No resolver heuristic can fix a missing file.
+- Decision: reclassify the root cause as DERIVED_KERNEL_PAYLOAD_NOT_MATERIALIZED. This supersedes the depth-focused framing of D-049 while preserving its diagnostic evidence unchanged. The fix requires replacing the derived-kernel attachment with an explicit private dataset carrying exactly the six required artifacts.
