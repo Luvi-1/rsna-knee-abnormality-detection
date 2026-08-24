@@ -1128,7 +1128,7 @@ def run_e01_fold_zero_training():
         for index in ordered_indices:
             if time.monotonic() - started > BUDGET_SECONDS * 0.55:
                 break  # Reserve time for training and evaluation.
-            fold = assignments[key]
+            fold = assignments[keys[index]]
             study_tensors = []
             try:
                 for paths in _series_paths(competition_root, key):
