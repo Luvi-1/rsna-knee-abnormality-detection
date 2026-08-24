@@ -95,7 +95,7 @@ def _source_dataset(root: Path, *, commit: str | None = None) -> dict[str, Any]:
         ).encode()
     ).hexdigest()
     path = root / review.SOURCE_MANIFEST_FILENAME
-    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
     return manifest
 
 
@@ -644,7 +644,7 @@ def _rewrite_source_manifest(root: Path, transform: Any) -> str:
         json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     manifest["manifest_sha256"] = digest
-    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
     return digest
 
 

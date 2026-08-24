@@ -1389,3 +1389,11 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Question: Should the 4ab1b24 root cause be reclassified from path-depth to a structural transport failure?
 - Evidence: The diagnostic kernel proved all three inputs mount at their expected forms. The source kernel directory exists at notebooks/<owner>/<slug> with 6 entries, but its entry set does not contain all six required private output artifacts. The Kaggle derived-kernel mount is a metadata wrapper that does not materialize the full payload. No resolver heuristic can fix a missing file.
 - Decision: reclassify the root cause as DERIVED_KERNEL_PAYLOAD_NOT_MATERIALIZED. This supersedes the depth-focused framing of D-049 while preserving its diagnostic evidence unchanged. The fix requires replacing the derived-kernel attachment with an explicit private dataset carrying exactly the six required artifacts.
+
+## D-051 - Canonical JSON form for the QA source-artifact graph
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: Why did the ee01aa3 replacement on-demand notebook fail at source_dataset_manifest_invalid despite the authenticated r2 dataset being byte-correct on download?
+- Evidence: Kernel lavicheema/rsna-knee-dqa-ondemand-ee01aa3-e9db26e8a4c8 v1 failed in 10 seconds with ON_DEMAND_REVIEW_FAILED=source_dataset_manifest_invalid. Fresh authenticated download of the r2 dataset reproduced the exact 2821-byte canonical manifest with SHA-256 b44f6895c6853320ef289aef50dfc6bd47f640d5f7ef2560a1f8f020b3d4b14b and no trailing newline. The resolver helper _canonical_json_bytes appended a trailing newline, so its byte-exact comparison could never match the newline-free uploaded artifact. Local tests passed only because fixture writers used the same newline-appending helper.
+- Decision: fix the root cause by making _canonical_json_bytes emit newline-free canonical bytes, update fixtures to the same canonical form, rerun the complete local gate, rebuild one fresh freeze/bundle/notebook identity, and relaunch exactly once under the standing final-remediation authorization. The r2 dataset remains immutable; no dataset mutation is required.
