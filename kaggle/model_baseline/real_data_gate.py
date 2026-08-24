@@ -1170,6 +1170,7 @@ def run_e01_fold_zero_training():
         first_loss = float("nan")
         last_loss = float("nan")
         best_loss = float("inf")
+        epoch_train_losses = []
         rng = np.random.default_rng(SEED)
         order = np.arange(len(train_indices))
         for epoch in range(E01_EPOCHS):
@@ -1198,6 +1199,7 @@ def run_e01_fold_zero_training():
                 optimizer.step()
                 epoch_losses.append(float(batch_loss_tensor.item()) / len(batch_ids))
             mean_epoch_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
+            epoch_train_losses.append(rounded_float(mean_epoch_loss))
             if epoch == 0:
                 first_loss = mean_epoch_loss
             last_loss = mean_epoch_loss
@@ -1207,11 +1209,24 @@ def run_e01_fold_zero_training():
 
         # Validation scoring.
         model.eval()
+        val_losses = []
         val_scores = np.zeros((len(val_indices), len(TARGETS)), dtype=np.float64)
         with torch.no_grad():
             for row_local, global_index in enumerate(val_indices):
                 x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
-                val_scores[row_local] = torch.sigmoid(model(x)[0]).cpu().numpy()
+                logits = model(x)[0]
+                probs = torch.sigmoid(logits)
+                val_scores[row_local] = probs.cpu().numpy()
+                obs_row = torch.from_numpy(observed_val[row_local].astype(np.float32)).to(device)
+                tgt_row = torch.where(
+                    torch.isfinite(torch.from_numpy(val_label_matrix[row_local])),
+                    torch.from_numpy(val_label_matrix[row_local]),
+                    torch.zeros(len(TARGETS)),
+                ).to(device).float()
+                denom = max(int(obs_row.sum().item()), 1)
+                raw_bce = nn.functional.binary_cross_entropy(logits, tgt_row, reduction="none")
+                val_masked = (raw_bce * obs_row).sum() / denom
+                val_losses.append(float(val_masked.item()))
         per_target_auc = {}
         per_target_pos = {}
         per_target_neg = {}
@@ -1256,6 +1271,9 @@ def run_e01_fold_zero_training():
             "train_bce_first_epoch": rounded_float(first_loss),
             "train_bce_last_epoch": rounded_float(last_loss),
             "train_bce_best_epoch": rounded_float(best_loss),
+            "train_bce_per_epoch": epoch_train_losses,
+            "val_bce_mean": rounded_float(float(np.mean(val_losses))) if val_losses else None,
+            "learning_rate_schedule": "constant",
             "val_per_label_auc": per_target_auc,
             "val_per_label_positive_support": per_target_pos,
             "val_per_label_negative_support": per_target_neg,
