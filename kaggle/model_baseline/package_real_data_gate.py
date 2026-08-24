@@ -156,7 +156,7 @@ def package(repo_root, output_root, commit=None, gate=None):
         "keywords": [],
         "language": "python",
         "model_sources": [],
-        "title": slug,
+        "title": f"Rsna Knee Model Gate {commit[:7]} {source_sha256[:12]}{gate_suffix.replace('-', ' ')}",
     }
     (output_root / "kernel-metadata.json").write_bytes(_canonical_json_bytes(metadata))
     return {"kernel_ref": ref, "kernel_slug": slug, "source_sha256": source_sha256}
