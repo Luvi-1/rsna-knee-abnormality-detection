@@ -1144,7 +1144,7 @@ def run_e01_fold_zero_training():
         # Phase 2: build model and train on folds 1-4, validate on fold 0.
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         torch.manual_seed(SEED)
-        model = TinyCNNShared()
+        model = TinyCNNShared().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=E01_LEARNING_RATE, weight_decay=0.0)
 
         label_matrix = np.vstack([tensor_labels[i] for i in train_indices])
