@@ -1115,6 +1115,11 @@ def run_e01_fold_zero_training():
         fold_buckets = {f: [] for f in range(N_SPLITS)}
         for index, key in enumerate(keys):
             fold_buckets[assignments[key]].append(index)
+        # Within each fold, put studies with more known labels first.
+        for fold in fold_buckets:
+            fold_buckets[fold].sort(
+                key=lambda i: (-int(np.isfinite(labels[i]).sum()), i)
+            )
         ordered_indices = []
         for round_index in range(max(len(b) for b in fold_buckets.values())):
             for fold in range(N_SPLITS):
