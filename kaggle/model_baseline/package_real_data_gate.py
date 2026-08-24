@@ -24,9 +24,9 @@ GATE_ENTRY_POINTS: Final = {
     "default": "run_real_data_gate",
 }
 GATE_SLUG_SUFFIX: Final = {
-    "e00_skip_audit": "-skipaudit",
+    "e00_skip_audit": "-sa",
     "e00b": "",
-    "e00c": "-cnn",
+    "e00c": "-cn",
     "default": "",
 }
 
