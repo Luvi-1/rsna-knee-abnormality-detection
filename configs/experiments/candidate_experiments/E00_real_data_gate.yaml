@@ -1,0 +1,28 @@
+experiment_id: E00_real_data_gate
+hypothesis: >-
+  The frozen r16 preprocessing produces model tensors from real competition data and a
+  grouped fold split is feasible on the official 12-label schema; a tiny linear probe can
+  reduce training loss on a small real cohort (plumbing gate, not generalization evidence).
+primary_change: First real-data execution of the frozen preprocessing against grouped folds.
+frozen_controls:
+  - Frozen r16 preprocessing wheel (dicom-model-v1, commit da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f).
+  - Official train.csv labels only; missing cells remain unknown, never negative.
+  - Greedy positive-mass grouped folds identical to grouped-5fold-v0 policy.
+data_version: manifest-v3
+label_version: official-labels-v1
+fold_version: grouped-5fold-v0
+preprocessing_version: dicom-model-v1
+model: linear_probe_on_pooled_2_5d_features
+loss: masked_bce_mean
+augmentation: none
+seed: 42
+compute_estimate_minutes_kaggle: 30
+expected_information_gain: >-
+  Per-label support and fold-degeneracy facts for the full train split, plus proof that
+  frozen tensors flow end-to-end into training math on a small real cohort.
+promotion_criterion: >-
+  Gate PASS requires at least 8 processed real studies, finite decreasing masked BCE loss,
+  and a computed per-label AUC vector with degenerate columns explicitly flagged.
+kill_criterion: Any privacy failure, unreadable bundle identity, or zero-processable studies.
+preprocessing_qa_status: PROVISIONAL_HUMAN_QA_PENDING
+
