@@ -1309,3 +1309,41 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Reversal condition: any failure of required-file, hash, schema, duplicate, symlink, privacy, or
   semantic-notebook tamper checks blocks packaging; any post-`START` evidence or private output leak
   terminates this route.
+
+## D-048 - Terminal classification of the corrected on-demand 4ab1b24 v1 launch
+
+- Date: 2026-08-23
+- Owner: Luvi-1 and Codex
+- Question: After the complete gate and fresh absent-identity proof on clean commit
+  `4ab1b24c8617f1fd7992bb2ad2a101b0a66087a0`, did the explicitly approved private on-demand v1
+  launch pass, and if not how is it terminally classified?
+- Evidence: the operator issued the exact approval token `APPROVE 4AB1B24 PRIVATE V1`. Final
+  preflight matched every recorded identity. The exact kernel reference was authenticated absent
+  immediately before launch. Kaggle accepted exactly one version-1 push of
+  `lavicheema/rsna-knee-dqa-ondemand-4ab1b24-87326f052bef`. The kernel reached terminal
+  `ERROR`; the exact validator returned `kernel_status_invalid` without retrieving outputs; a
+  bounded log retrieval passed the frozen privacy scanner and yielded only the disclosure-safe
+  failure token `ON_DEMAND_REVIEW_FAILED=input_missing` plus generic wrapper exception names. No
+  readiness artifact existed, so no cohort replay, pixel decode, rendering, ledger creation, UI
+  display, human review, or `START` occurred. No retry or version 2 was attempted and no remote
+  state was deleted.
+- Decision: classify the corrected 4ab1b24 on-demand v1 as terminal `failed_input_missing`.
+  Preserve its remote identity and log evidence unchanged with no deletion, no version 2, no retry,
+  and no duplicate successor under this approval. Do not weaken the resolver further or change the
+  frozen r16 runner, selector, bundle, A/B outputs, comparison evidence, or D-046 statuses. Any new
+  correction or launch requires fresh root-cause evidence, the full local gate on a clean commit,
+  authenticated identity absence, and renewed explicit human approval. Human review remains
+  `NOT_STARTED`; Chunk 5 remains technically incomplete; submission, merge, publication, and
+  Chunk 6 remain blocked.
+- Verification: pre-push absence proof returned `on_demand_kernel_absent=PASS`; the single push
+  returned `Kernel version 1 successfully pushed`; bounded status polling observed terminal
+  `ERROR`; the exact validator failed closed with exit code 2; sanitized classification used only
+  fixed safe tokens after a passing privacy scan; the working tree remained clean before the push and
+  contains only this governance record afterward.
+- Consequence: the on-demand QA route is blocked again at the same early input-discovery boundary,
+  now with independent evidence that the D-047 resolver corrections did not resolve the live mount
+  mismatch for this input graph. The next step is a read-only mount-layout diagnosis against this
+  exact three-input graph before any further code proposal.
+- Reversal condition: only renewed explicit human approval after a complete fresh gate may authorize
+  another launch identity; any private-content exposure or post-`START` automation terminates the
+  route permanently.

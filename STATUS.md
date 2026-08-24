@@ -1,6 +1,25 @@
 # Status
 
-Updated: 2026-08-23 (Chunk 5 r16 provisional research release; human QA preparation)
+Updated: 2026-08-23 (Chunk 5 r16 provisional research release; corrected on-demand QA terminal)
+
+### Corrected on-demand QA terminal update 2026-08-24 (D-048)
+
+The operator approved one additional private version-1 launch with the exact token
+`APPROVE 4AB1B24 PRIVATE V1`. On clean commit
+`4ab1b24c8617f1fd7992bb2ad2a101b0a66087a0`, package hashes matched the recorded candidate,
+authenticated absence proof passed, and Kaggle accepted exactly one push of
+`lavicheema/rsna-knee-dqa-ondemand-4ab1b24-87326f052bef` version 1. The kernel reached terminal
+`ERROR`; the exact validator failed closed with `kernel_status_invalid`. A bounded log-only
+retrieval passed the frozen privacy scanner and emitted only the disclosure-safe token
+`ON_DEMAND_REVIEW_FAILED=input_missing`. No cohort replay, pixel access, ledger creation, UI
+display, human review, or `START` occurred, and no output artifacts were produced. No retry,
+version 2, duplicate identity, or remote deletion occurred.
+
+The corrected on-demand candidate is terminal `failed_input_missing` under D-048. Human review
+remains `NOT_STARTED`; Chunk 5 remains technically incomplete; final submission readiness remains
+not approved; clinical use remains prohibited. Next step requires a read-only mount-layout
+diagnosis bound to this exact three-input graph. Any further launch requires a fresh complete gate,
+authenticated identity absence, and renewed explicit human approval.
 
 ### r16 on-demand QA launch terminal update 2026-08-23 (D-047)
 
