@@ -158,8 +158,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--gate", choices=tuple(GATE_ENTRY_POINTS), default=None)
     args = parser.parse_args()
-    result = package(args.repo_root, args.output_root)
+    result = package(args.repo_root, args.output_root, gate=args.gate)
     print(result["kernel_ref"], file=sys.stderr)
     return 0
 
