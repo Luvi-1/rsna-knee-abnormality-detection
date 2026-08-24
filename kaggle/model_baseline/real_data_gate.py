@@ -339,7 +339,10 @@ def run_real_data_gate():
         row_index = {key: index for index, key in enumerate(keys)}
 
         # Deterministic cohort: sort by SHA-256 of the opaque study key, take a prefix.
-        ranked = sorted(keys, key=lambda key: hashlib.sha256(key.encode()).hexdigest())
+        # Only select studies that have at least one known label (0 or 1).
+        has_known = np.isfinite(labels).any(axis=1)
+        eligible = [key for index, key in enumerate(keys) if has_known[index]]
+        ranked = sorted(eligible, key=lambda key: hashlib.sha256(key.encode()).hexdigest())
         cohort = ranked[:SELECTED_STUDIES]
         cohort_labels = np.vstack([labels[row_index[key]] for key in cohort])
         assignments, _ = assign_grouped_folds(cohort, cohort_labels)
