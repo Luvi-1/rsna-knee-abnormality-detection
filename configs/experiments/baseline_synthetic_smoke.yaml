@@ -1,0 +1,14 @@
+experiment_id: baseline_synthetic_smoke_v0
+hypothesis: "Plumbing smoke test only; no generalization claim."
+primary_change: "First end-to-end synthetic forward pass and OOF shape check."
+frozen_controls:
+  - "No real data; all tensors from seeded RNG."
+data_version: synthetic-v0
+label_version: synthetic-v0
+fold_version: none-single-pass
+preprocessing_version: none
+seed: 42
+compute_estimate_seconds: 1
+expected_information_gain: "Confirms pipeline plumbing, not model quality."
+promotion_criterion: "PASS if all shapes match and outputs are bounded."
+kill_criterion: "Any shape mismatch or non-finite loss."

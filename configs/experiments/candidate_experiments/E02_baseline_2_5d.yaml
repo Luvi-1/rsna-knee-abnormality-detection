@@ -1,0 +1,17 @@
+experiment_id: E02_baseline_2_5d
+hypothesis: "A small 2.5D model can establish a macro AUC reference on Kaggle GPU."
+primary_change: "First real-data training run with EfficientNet-B0 backbone."
+frozen_controls:
+  - "Same folds, preprocessing, and loss as E01 successor."
+data_version: manifest-v3
+label_version: official-labels-v1
+fold_version: grouped-5fold-v0
+preprocessing_version: dicom-model-v1
+model: efficientnet_b0_2_5d
+loss: bce_mean
+augmentation: flip_horizontal_rot5
+seed: 42
+compute_estimate_minutes_kaggle: 45
+expected_information_gain: "Baseline macro AUC and per-label AUCs for comparison."
+promotion_criterion: "Macro AUC > 0.70 and all 12 per-label AUCs reported."
+kill_criterion: "Any fold fails or OOF file missing."

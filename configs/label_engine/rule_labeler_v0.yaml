@@ -1,0 +1,26 @@
+label_engine_version: weak-v0
+ontology_version: provisional-v0
+normalization:
+  unicode_form: NFKC
+  strip_zero_width: true
+  collapse_whitespace: true
+  preserve_paragraph_breaks: true
+rule_labeler:
+  negation_scope: sentence_local
+  uncertainty_scope: sentence_local
+  section_priority:
+    impression: 3
+    findings: 2
+    other: 1
+    clinical_history: 0
+    technique: 0
+    comparison: 0
+    indication: 0
+combiner:
+  source_priority:
+    organizer_label: 4
+    human_report_review: 3
+    rule_labeler: 2
+    classifier: 1
+    template_propagation: 0
+  soft_probability_weighting: priority_times_confidence

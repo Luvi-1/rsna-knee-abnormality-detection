@@ -1,0 +1,15 @@
+fold_config_version: grouped-5fold-v0
+n_splits: 5
+strategy: greedy_positive_mass
+seed: 42
+balance_dimensions:
+  - positive_labels
+grouping:
+  hard_groups:
+    - patient_identity
+    - repeated_examination
+    - exact_study_duplicate
+    - exact_series_duplicate
+    - exact_pixel_duplicate
+    - confirmed_duplicate_report
+  soft_similarity_separate: true

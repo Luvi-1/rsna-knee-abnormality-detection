@@ -1,0 +1,16 @@
+experiment_id: E01_label_quality_audit
+hypothesis: "Rule labeler achieves >= 0.9 per-target recall on synthetic corpus."
+primary_change: "First label-quality measurement across all 12 targets."
+frozen_controls:
+  - "Same ontology version provisional-v0 for all targets."
+  - "Same rule engine weak-v0; no tuning during audit."
+data_version: synthetic-corpus-v0
+label_version: hand-built-ground-truth
+fold_version: none-audit-only
+preprocessing_version: text-normalization-v0
+model: rule_labeler
+seed: 42
+compute_estimate_seconds: 5
+expected_information_gain: "Identifies which targets need vocabulary expansion before real data."
+promotion_criterion: "All 12 targets have recall >= 0.9 and precision >= 0.7."
+kill_criterion: "Any target has recall < 0.8, triggering ontology revision before real data."
