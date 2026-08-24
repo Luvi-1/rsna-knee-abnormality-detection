@@ -620,12 +620,16 @@ def _manifest_quality(slots: ModuleType, raw: Sequence[object]) -> Any:
 def _series_manifest_rows(reconciliation: Any) -> dict[str, tuple[object, ...]]:
     try:
         rows = reconciliation.connection.execute(
-            """SELECT series_key,study_key,rows,columns,pixel_spacing_row_mm,
-                pixel_spacing_col_mm,slice_thickness_mm,spacing_between_slices_mm,slice_count,
-                orientation_vectors,physical_coverage_mm,transfer_syntax_class,
-                photometric_interpretation,bits_stored,missing_tag_flags,orientation_state,
-                spacing_state,decode_state,terminal_state
-                FROM series_manifest ORDER BY series_key"""
+            """SELECT s.series_key,s.study_key,"s"."rows","s"."columns",s.pixel_spacing_row_mm,
+                s.pixel_spacing_col_mm,s.slice_thickness_mm,s.spacing_between_slices_mm,
+                s.slice_count,
+                s.orientation_vectors,s.physical_coverage_mm,s.transfer_syntax_class,
+                s.photometric_interpretation,s.bits_stored,s.missing_tag_flags,
+                s.orientation_state,s.spacing_state,s.decode_state,s.terminal_state
+                FROM series_manifest AS s JOIN study_manifest AS d
+                    ON s.study_key=d.study_key
+                    WHERE d.split='train'
+                ORDER BY s.series_key"""
         ).fetchall()
     except sqlite3.Error as error:
         raise OnDemandReviewError("source_manifest_schema_invalid") from error

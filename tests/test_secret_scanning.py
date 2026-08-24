@@ -12,6 +12,7 @@ SCAN = Path(sys.executable).with_name("detect-secrets")
 CONTRACT_PATH = "docs/competition_contract/contract.yaml"
 SUMMARY_PATH = "docs/manifest_summary.json"
 CERTIFICATE_TEST_PATH = "tests/test_core_execution_certificate.py"
+REVIEW_PATH = "kaggle/dicom_qa/on_demand_review.py"
 
 
 def run_hook(checkout: Path, *filenames: str) -> subprocess.CompletedProcess[str]:
@@ -27,6 +28,7 @@ def run_hook(checkout: Path, *filenames: str) -> subprocess.CompletedProcess[str
 def isolated_checkout(tmp_path: Path) -> Path:
     (tmp_path / "docs" / "competition_contract").mkdir(parents=True)
     (tmp_path / "tests").mkdir()
+    (tmp_path / "kaggle" / "dicom_qa").mkdir(parents=True)
     copyfile(ROOT / ".secrets.baseline", tmp_path / ".secrets.baseline")
     copyfile(
         ROOT / "docs/competition_contract/contract.yaml",
@@ -34,6 +36,7 @@ def isolated_checkout(tmp_path: Path) -> Path:
     )
     copyfile(ROOT / SUMMARY_PATH, tmp_path / SUMMARY_PATH)
     copyfile(ROOT / CERTIFICATE_TEST_PATH, tmp_path / CERTIFICATE_TEST_PATH)
+    copyfile(ROOT / REVIEW_PATH, tmp_path / REVIEW_PATH)
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", ".secrets.baseline"], cwd=tmp_path, check=True)
     return tmp_path
@@ -56,6 +59,7 @@ def test_reviewed_provenance_hashes_are_exactly_baselined(tmp_path: Path) -> Non
             CONTRACT_PATH,
             SUMMARY_PATH,
             CERTIFICATE_TEST_PATH,
+            REVIEW_PATH,
         ],
         cwd=checkout,
         check=False,
@@ -65,7 +69,12 @@ def test_reviewed_provenance_hashes_are_exactly_baselined(tmp_path: Path) -> Non
 
     assert scan.returncode == 0, scan.stderr
     observed = json.loads((checkout / ".scan-settings.json").read_text())
-    assert set(baseline["results"]) == {CONTRACT_PATH, SUMMARY_PATH, CERTIFICATE_TEST_PATH}
+    assert set(baseline["results"]) == {
+        CONTRACT_PATH,
+        SUMMARY_PATH,
+        CERTIFICATE_TEST_PATH,
+        REVIEW_PATH,
+    }
     assert len(baseline["results"][CONTRACT_PATH]) == 10
     assert len(baseline["results"][SUMMARY_PATH]) == 5
     assert len(baseline["results"][CERTIFICATE_TEST_PATH]) == 5

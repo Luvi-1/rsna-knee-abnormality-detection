@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -709,6 +710,60 @@ def test_source_dataset_wrong_lineage_or_identity_digest_is_rejected(
     )
     with pytest.raises(review.OnDemandReviewError, match="source_dataset_lineage_rejected"):
         review.discover_inputs(input_root, wrong_refs)
+
+
+def _population_reconciliation(*, expected: int) -> Any:
+    connection = sqlite3.connect(":memory:")
+    connection.executescript(
+        """
+        CREATE TABLE study_manifest(study_key TEXT PRIMARY KEY, split TEXT NOT NULL);
+        CREATE TABLE series_manifest(
+            series_key TEXT PRIMARY KEY,
+            study_key TEXT NOT NULL,
+            "rows" INTEGER,
+            "columns" INTEGER,
+            pixel_spacing_row_mm REAL,
+            pixel_spacing_col_mm REAL,
+            slice_thickness_mm REAL,
+            spacing_between_slices_mm REAL,
+            slice_count INTEGER,
+            orientation_vectors TEXT,
+            physical_coverage_mm REAL,
+            transfer_syntax_class TEXT,
+            photometric_interpretation TEXT,
+            bits_stored INTEGER,
+            missing_tag_flags TEXT,
+            orientation_state TEXT,
+            spacing_state TEXT,
+            decode_state TEXT,
+            terminal_state TEXT
+        );
+        """
+    )
+    connection.execute("INSERT INTO study_manifest VALUES('study_train','train')")
+    connection.execute("INSERT INTO study_manifest VALUES('study_test','test')")
+    connection.execute(
+        'INSERT INTO series_manifest(series_key,study_key,"rows","columns",slice_count)'
+        " VALUES('series_train','study_train',1,1,1)"
+    )
+    connection.execute(
+        'INSERT INTO series_manifest(series_key,study_key,"rows","columns",slice_count)'
+        " VALUES('series_test','study_test',1,1,1)"
+    )
+    return SimpleNamespace(connection=connection, expected_series_count=expected)
+
+
+def test_series_rows_exclude_non_train_split_studies() -> None:
+    reconciliation = _population_reconciliation(expected=1)
+    try:
+        rows = review._series_manifest_rows(reconciliation)
+        assert set(rows) == {"series_train"}
+        total = reconciliation.connection.execute(
+            "SELECT COUNT(*) FROM series_manifest"
+        ).fetchone()[0]
+        assert total == 2
+    finally:
+        reconciliation.connection.close()
 
 
 def test_old_kernel_wrapper_without_dataset_has_no_fallback(tmp_path: Path) -> None:
