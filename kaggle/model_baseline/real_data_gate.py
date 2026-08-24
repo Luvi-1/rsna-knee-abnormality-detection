@@ -1215,16 +1215,16 @@ def run_e01_fold_zero_training():
             for row_local, global_index in enumerate(val_indices):
                 x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
                 logits = model(x)[0]
-                probs = torch.sigmoid(logits)
-                val_scores[row_local] = probs.cpu().numpy()
+                val_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
                 obs_row = torch.from_numpy(observed_val[row_local].astype(np.float32)).to(device)
-                tgt_row = torch.where(
-                    torch.isfinite(torch.from_numpy(val_label_matrix[row_local])),
-                    torch.from_numpy(val_label_matrix[row_local]),
-                    torch.zeros(len(TARGETS)),
-                ).to(device).float()
+                tgt_row_np = np.nan_to_num(
+                    val_label_matrix[row_local], nan=0.0
+                ).astype(np.float32)
+                tgt_row = torch.from_numpy(tgt_row_np).to(device)
                 denom = max(int(obs_row.sum().item()), 1)
-                raw_bce = nn.functional.binary_cross_entropy(logits, tgt_row, reduction="none")
+                raw_bce = nn.functional.binary_cross_entropy_with_logits(
+                    logits, tgt_row, reduction="none"
+                )
                 val_masked = (raw_bce * obs_row).sum() / denom
                 val_losses.append(float(val_masked.item()))
         per_target_auc = {}
