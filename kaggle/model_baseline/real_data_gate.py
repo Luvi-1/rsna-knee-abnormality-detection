@@ -374,6 +374,12 @@ def run_real_data_gate():
 
         ordered_keys = sorted(features)
         matrix = np.vstack([features[key] for key in ordered_keys])
+        # Replace non-finite values and z-score normalize to prevent divergence.
+        matrix = np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
+        mean = matrix.mean(axis=0)
+        std = matrix.std(axis=0)
+        std = np.where(std < 1e-8, 1.0, std)  # Avoid divide-by-zero on constant features.
+        matrix = (matrix - mean) / std
         label_matrix = np.vstack([labels[row_index[key]] for key in ordered_keys])
         is_validation = np.array([assignments[key] == 0 for key in ordered_keys])
         if not is_validation.any() or is_validation.all():
