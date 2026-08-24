@@ -881,7 +881,7 @@ def run_e00c_cnn_memorization_gate():
 
             def forward(self, x):
                 batch_shape = x.shape  # [B, n_series, S, C, H, W] or [B, S, C, H, W]
-                flat = x.reshape(-1, *batch_shape[-4:])  # [B*n*S, C, H, W]
+                flat = x.reshape(-1, *batch_shape[-3:])  # [B*n*S, C, H, W]
                 encoded = self.features(flat).flatten(1)  # [B*n*S, hidden]
                 pooled = encoded.mean(dim=0, keepdim=True)  # single-study mode only
                 return self.classifier(pooled).reshape(batch_shape[:1] + (-1,))
