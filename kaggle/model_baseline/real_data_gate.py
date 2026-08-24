@@ -89,6 +89,11 @@ class TinyCNNShared:
     def parameters(self):
         return list(self.features.parameters()) + list(self.classifier.parameters())
 
+    def to(self, device):
+        self.features = self.features.to(device)
+        self.classifier = self.classifier.to(device)
+        return self
+
     def train(self):
         self.features.train()
         self.classifier.train()
