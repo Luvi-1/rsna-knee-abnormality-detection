@@ -128,7 +128,7 @@ def package(repo_root, output_root, commit=None, gate=None):
     except (OSError, UnicodeError, SyntaxError) as error:
         raise PackagingError("gate_source_invalid") from error
     source_sha256 = hashlib.sha256(source.encode()).hexdigest()
-    gate_suffix = "" if gate is None else f"-{gate}"
+    gate_suffix = "" if gate is None else f"-{gate.replace('_', '-')}"
     slug = f"rsna-knee-model-gate-{commit[:7]}-{source_sha256[:12]}{gate_suffix}"
     ref = f"lavicheema/{slug}"
     if REF.fullmatch(ref) is None:
