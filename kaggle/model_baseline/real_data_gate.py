@@ -215,7 +215,8 @@ def fit_linear_probe(features, labels, epochs=EPOCHS, learning_rate=LEARNING_RAT
     last_loss = float("nan")
     best_loss = float("inf")
     for step in range(epochs):
-        probabilities = 1.0 / (1.0 + np.exp(-(features @ weights + bias)))
+        logits = np.clip(features @ weights + bias, -30.0, 30.0)
+        probabilities = 1.0 / (1.0 + np.exp(-logits))
         terms = -(targets * np.log(probabilities + epsilon))
         terms -= (1.0 - targets) * np.log(1.0 - probabilities + epsilon)
         last_loss = float((terms * observed).sum() / denominator)
