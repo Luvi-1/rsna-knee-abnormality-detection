@@ -2,6 +2,28 @@
 
 Updated: 2026-08-23 (Chunk 5 r16 provisional research release; corrected on-demand QA terminal)
 
+### Final orchestration disposition 2026-08-23 (D-052)
+
+The final authorized on-demand remediation (commit 4645f38) fixed the train-split population
+filter and passed the complete local gate (617/617 pytest, Ruff, mypy, pre-commit, secret scan,
+pip-audit). Kernel lavicheema/rsna-knee-dqa-ondemand-4645f38-e52cfbd26128 v1 was pushed once as
+the exact private/offline/CPU three-input graph (competition + frozen bundle + source-artifact
+dataset). It passed every input-graph barrier: dataset authentication, manifest hash verification,
+artifact inventory, provenance lineage, and series population reconciliation. At 67 seconds it
+reached first DICOM header access for laterality extraction and emitted
+ON_DEMAND_REVIEW_FAILED=header_laterality_invalid before cohort selection, rendering, ledger
+creation, UI display, or START. The log privacy scan returned zero sensitive patterns.
+
+Root cause: the on-demand wrapper treats any pipeline._laterality() exception as fatal, while the
+frozen runner records "unknown" without halting during batch preprocessing. Run A/B independently
+completed all 4,407 train studies with byte-identical comparison, proving no substantive defect.
+This is an orchestration/QA-wrapper strictness mismatch.
+
+Final state: **FORMAL_CHUNK5_ORCHESTRATION = DEFERRED**;
+**PREPROCESSING_RESEARCH_RELEASE = APPROVED** under D-046 terms; **HUMAN_QA = PENDING**.
+No further on-demand notebook iteration is authorized. Modeling may proceed under the documented
+research-release policy. Human visual QA remains required before formal Chunk 5 PASS.
+
 ### Corrected on-demand QA terminal update 2026-08-24 (D-048)
 
 The operator approved one additional private version-1 launch with the exact token
