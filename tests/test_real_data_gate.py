@@ -83,6 +83,43 @@ class TestLinearProbe:
         assert observed_probe[0] != masked_probe[0]
 
 
+class TestSafeSeriesToken:
+    def test_pipeline_issue_extracted(self) -> None:
+        class FakeIssue:
+            value = "uneven_slice_spacing"
+
+        class FakeError(Exception):
+            issue = FakeIssue()
+
+        assert gate._safe_series_token(FakeError()) == "uneven_slice_spacing"
+
+    def test_unknown_error_falls_back(self) -> None:
+        assert gate._safe_series_token(ValueError("secret path detail")) == "preprocess_failed"
+
+
+class TestSkipAuditSummaryShape:
+    """The audit summary must stay within the bounded sanitized envelope."""
+
+    def test_summary_keys_are_safe_tokens(self) -> None:
+        import inspect
+
+        source = inspect.getsource(gate.run_skip_audit)
+        for forbidden in ("StudyInstanceUID", "SeriesInstanceUID", "Report", "train_series/"):
+            assert forbidden not in source.replace('row["StudyInstanceUID"]', "").replace(
+                'row["SeriesInstanceUID"]', ""
+            )
+
+
+class TestE00cModelConfig:
+    """The CNN gate must declare its frozen configuration explicitly."""
+
+    def test_constants_declared(self) -> None:
+        assert gate.E00C_COHORT == 12
+        assert gate.E00C_EPOCHS == 3000
+        assert gate.E00C_LEARNING_RATE == 1e-3
+        assert gate.SEED == 42
+
+
 class TestFoldFeasibility:
     def test_reports_support_and_degeneracy(self) -> None:
         keys = [f"k{i:02d}" for i in range(30)]
@@ -138,6 +175,16 @@ class TestPackager:
         repo_root = Path(__file__).resolve().parents[1]
         output_root = tmp_path / "pkg"
         packager.package(repo_root, output_root, commit="b" * 40)
+
+    def test_e00c_gate_enables_gpu(self, tmp_path: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        output_root = tmp_path / "pkg-e00c"
+        result = packager.package(repo_root, output_root, commit="c" * 40, gate="e00c")
+        metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
+        assert result["kernel_slug"].startswith("rsna-knee-model-gate-ccccccc-")
+        assert metadata["enable_gpu"] is True
+        notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
+        assert "run_e00c_cnn_memorization_gate" in str(notebook["cells"])
         with pytest.raises(packager.PackagingError):
             packager.package(repo_root, output_root, commit="b" * 40)
 

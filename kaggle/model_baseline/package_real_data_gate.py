@@ -10,12 +10,19 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Final
 
 REF = re.compile(r"[a-z0-9][a-z0-9_-]{0,49}/[a-z0-9][a-z0-9_-]{0,99}")
 HEX_40 = re.compile(r"[0-9a-f]{40}")
 COMPETITION_SLUG = "rsna-knee-abnormality-detection"
 BUNDLE_DATASET_REF = "lavicheema/rsna-knee-dicom-qa-bundle-da5b9c8-91ed07921059"
 NOTEBOOK_FILE = "real_data_gate.ipynb"
+GATE_ENTRY_POINTS: Final = {
+    "e00_skip_audit": "run_skip_audit",
+    "e00b": "run_e00b_memorization_gate",
+    "e00c": "run_e00c_cnn_memorization_gate",
+    "default": "run_real_data_gate",
+}
 
 
 class PackagingError(RuntimeError):
@@ -51,7 +58,7 @@ def _git_identity(repo_root):
     return commit
 
 
-def _notebook_payload(source, source_sha256):
+def _notebook_payload(source, source_sha256, entry_point="run_e00b_memorization_gate"):
     invocation = "\n".join(
         (
             "import hashlib",
@@ -67,7 +74,7 @@ def _notebook_payload(source, source_sha256):
             "sys.modules[runtime_module.__name__] = runtime_module",
             "exec(compile(MODULE_SOURCE, runtime_module.__file__, 'exec'),"
             " runtime_module.__dict__)",
-            "exit_code = runtime_module.run_e00b_memorization_gate()",
+            f"exit_code = runtime_module.{entry_point}()",
             "if exit_code != 0:",
             "    raise RuntimeError('real_data_gate_failed')",
         )
@@ -103,10 +110,12 @@ def _notebook_payload(source, source_sha256):
     return _canonical_json_bytes(notebook)
 
 
-def package(repo_root, output_root, commit=None):
+def package(repo_root, output_root, commit=None, gate=None):
     """Package with the live clean-tree commit, or an explicit commit for tests."""
     if commit is not None and HEX_40.fullmatch(commit) is None:
         raise PackagingError("argument_invalid")
+    entry_point = GATE_ENTRY_POINTS[gate or "default"]
+    enable_gpu = gate == "e00c"
     if output_root.exists():
         raise PackagingError("output_root_exists")
     output_root.mkdir(parents=False)
@@ -123,12 +132,14 @@ def package(repo_root, output_root, commit=None):
     ref = f"lavicheema/{slug}"
     if REF.fullmatch(ref) is None:
         raise PackagingError("kernel_ref_invalid")
-    (output_root / NOTEBOOK_FILE).write_bytes(_notebook_payload(source, source_sha256))
+    (output_root / NOTEBOOK_FILE).write_bytes(
+        _notebook_payload(source, source_sha256, entry_point=entry_point)
+    )
     metadata = {
         "code_file": NOTEBOOK_FILE,
         "competition_sources": [COMPETITION_SLUG],
         "dataset_sources": [BUNDLE_DATASET_REF],
-        "enable_gpu": False,
+        "enable_gpu": enable_gpu,
         "enable_internet": False,
         "enable_tpu": False,
         "id": ref,

@@ -23,13 +23,12 @@ from pathlib import Path
 from typing import Final
 
 import numpy as np
+import pydicom
 
 COMPETITION_SLUG: Final = "rsna-knee-abnormality-detection"
 BUNDLE_DATASET_REF: Final = "lavicheema/rsna-knee-dicom-qa-bundle-da5b9c8-91ed07921059"
-# pragma: allowlist secret - published content digest identity, not a credential
-EXPECTED_BUNDLE_SHA256: Final = "91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b"
-# pragma: allowlist secret - frozen r16 git commit identifier, not a credential
-R16_COMMIT: Final = "da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f"
+EXPECTED_BUNDLE_SHA256: Final = "91ed079210592448664f52c1a24ce1a693275ef09fa350167712097ab97de40b"  # noqa: E501  # pragma: allowlist secret
+R16_COMMIT: Final = "da5b9c83b874f02067ecc8f1c0a4a1d50fe01b1f"  # pragma: allowlist secret
 SOURCE_MANIFEST_VERSION: Final = "manifest-v3"
 TARGETS: Final[tuple] = (
     "ACL",
@@ -50,11 +49,18 @@ SELECTED_STUDIES: Final = 24
 PROCESSED_TARGET: Final = 16
 MIN_PROCESSED: Final = 8
 E00B_COHORT: Final = 12
+E00C_COHORT: Final = 12
+E00C_EPOCHS: Final = 3000
+E00C_LEARNING_RATE: Final = 1e-3
+E00C_HIDDEN: Final = 64
 E00B_EPOCHS: Final = 2000
 MAX_SERIES_PER_STUDY: Final = 4
 MAX_FILES_PER_SERIES: Final = 128
 SAMPLE_COUNT: Final = 8
 RESIZE_SHAPE: Final = (64, 64)
+SPACING_ABS_TOL_MM: Final = 0.1
+SPACING_REL_TOL: Final = 0.05
+DUPLICATE_POSITION_TOL_MM: Final = 0.01
 EPOCHS: Final = 300
 LEARNING_RATE: Final = 0.05
 SEED: Final = 42
@@ -229,6 +235,178 @@ def fit_linear_probe(features, labels, epochs=EPOCHS, learning_rate=LEARNING_RAT
         weights -= learning_rate * (features.T @ gradient)
         bias -= learning_rate * gradient.sum(axis=0)
     return weights, bias, first_loss, best_loss
+
+
+def _safe_series_token(error):
+    """Extract one disclosure-safe token from a pipeline or decode error."""
+    token = getattr(error, "code", None) or getattr(getattr(error, "issue", None), "value", None)
+    return (
+        str(token)
+        if isinstance(token, str) and SAFE_TOKEN.fullmatch(token)
+        else "preprocess_failed"
+    )
+
+
+def run_skip_audit():
+    """Aggregate uneven-slice-spacing skips over every train study/series.
+
+    Header-only (no pixel decoding): reproduces the frozen r16 spacing rule
+    exactly — sort by projection on the dominant orientation normal, flag a
+    series when any adjacent gap deviates more than max(0.1 mm, 5% median).
+    """
+    import math
+    from concurrent.futures import ThreadPoolExecutor
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    manifest = json.loads((bundle_root / "bundle-manifest.json").read_bytes())
+    if manifest.get("bundle_sha256") != EXPECTED_BUNDLE_SHA256:
+        raise GateError("bundle_identity_mismatch")
+    _, rows = _read_bounded_csv(competition_root / "train.csv")
+    _, series_rows = _read_bounded_csv(competition_root / "train_series.csv")
+    keys, labels = read_study_labels(competition_root / "train.csv")
+    row_index = {key: index for index, key in enumerate(keys)}
+
+    series_by_study = {}
+    for row in series_rows:
+        study = row["StudyInstanceUID"].strip()
+        series_uid = row["SeriesInstanceUID"].strip()
+        series_by_study.setdefault(study, []).append(series_uid)
+    assignments, fold_mass = assign_grouped_folds(keys, labels)
+
+    # Deterministic per-study work items; each item audits one series header-only.
+    def audit_item(study_key):
+        series_dirs = []
+        study_root = competition_root / "train_series" / study_key
+        try:
+            entries = sorted(entry for entry in study_root.iterdir() if entry.is_dir())
+        except OSError:
+            return study_key, [("series_directory_invalid", 0)]
+        for series_dir in entries[:MAX_SERIES_PER_STUDY]:
+            try:
+                files = sorted(item for item in series_dir.iterdir() if item.is_file())[
+                    :MAX_FILES_PER_SERIES
+                ]
+            except OSError:
+                series_dirs.append(("series_directory_invalid", 0))
+                continue
+            if not files:
+                continue
+            try:
+                metas = []
+                ok = True
+                for path in files:
+                    dataset = pydicom.dcmread(str(path), stop_before_pixels=True)
+                    iop = dataset.get("ImageOrientationPatient")
+                    ipp = dataset.get("ImagePositionPatient")
+                    if iop is None or len(iop) != 6 or ipp is None or len(ipp) != 3:
+                        ok = False
+                        break
+                    values_iop = [float(value) for value in iop]
+                    values_ipp = [float(value) for value in ipp]
+                    row_v = np.array(values_iop[0:3])
+                    col_v = np.array(values_iop[3:6])
+                    normal = np.cross(row_v, col_v)
+                    norm = float(np.linalg.norm(normal))
+                    if not math.isfinite(norm) or norm < 1e-8:
+                        ok = False
+                        break
+                    normal = normal / norm
+                    metas.append((float(np.dot(np.array(values_ipp), normal)), normal))
+                if not ok or len(metas) < 2:
+                    reason = "header_incomplete" if not ok else "too_few_slices"
+                    series_dirs.append((reason, 0))
+                    continue
+                reference_normal = metas[0][1]
+                max_angle = 0.0
+                for _, normal in metas[1:]:
+                    cos_angle = float(abs(np.dot(normal, reference_normal)))
+                    angle = math.degrees(math.acos(min(1.0, cos_angle)))
+                    max_angle = max(max_angle, angle)
+                if max_angle > 0.5:
+                    series_dirs.append(("orientation_inconsistent", 0))
+                    continue
+                projections = sorted(item[0] for item in metas)
+                diffs = np.diff(np.asarray(projections, dtype=np.float64))
+                if bool(np.any(diffs <= DUPLICATE_POSITION_TOL_MM)):
+                    series_dirs.append(("duplicate_position", 0))
+                    continue
+                median_spacing = float(np.median(diffs))
+                tolerance = max(SPACING_ABS_TOL_MM, SPACING_REL_TOL * median_spacing)
+                if bool(np.any(np.abs(diffs - median_spacing) > tolerance)):
+                    series_dirs.append(("uneven_slice_spacing", 1))
+                else:
+                    series_dirs.append(("eligible", 1))
+            except Exception:  # noqa: BLE001 - fixed token below
+                series_dirs.append(("preprocess_failed", 1))
+        return study_key, series_dirs
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for key, dirs in pool.map(audit_item, keys):
+            results[key] = dirs
+
+    n_total_series = sum(len(items) for items in results.values())
+    n_uneven_series = 0
+    studies_with_any_uneven = set()
+    per_fold_skipped_studies = [0] * N_SPLITS
+    per_target_positives_skipped = dict.fromkeys(TARGETS, 0)
+    per_target_negatives_skipped = dict.fromkeys(TARGETS, 0)
+    for key, items in results.items():
+        has_uneven = any(reason == "uneven_slice_spacing" for reason, _flagged in items)
+        if has_uneven:
+            studies_with_any_uneven.add(key)
+            fold = assignments.get(key)
+            if fold is not None:
+                per_fold_skipped_studies[fold] += 1
+            label_row = labels[row_index[key]]
+            observed = np.isfinite(label_row)
+            for column, target in enumerate(TARGETS):
+                if observed[column] and label_row[column] == 1.0:
+                    per_target_positives_skipped[target] += 1
+                elif observed[column] and label_row[column] == 0.0:
+                    per_target_negatives_skipped[target] += 1
+    for items in results.values():
+        for reason, flagged in items:
+            if reason == "uneven_slice_spacing":
+                n_uneven_series += flagged
+    total_positives_per_target = {
+        target: int((labels[:, column] == 1).sum()) for column, target in enumerate(TARGETS)
+    }
+    summary = {
+        "schema_version": 1,
+        "gate": "e00_skip_audit_v0",
+        "r16_code_commit": R16_COMMIT,
+        "n_studies_total": len(keys),
+        "n_series_audited": n_total_series,
+        "studies_with_any_uneven_series": len(studies_with_any_uneven),
+        "series_flagged_uneven": n_uneven_series,
+        "pct_studies_with_uneven": rounded_float(
+            100.0 * len(studies_with_any_uneven) / max(len(keys), 1)
+        ),
+        "pct_series_uneven": rounded_float(100.0 * n_uneven_series / max(n_total_series, 1)),
+        "per_fold_skipped_studies": dict(
+            zip(range(N_SPLITS), per_fold_skipped_studies, strict=True)
+        ),
+        "fold_positive_mass": fold_mass,
+        "per_target_positives_skipped": per_target_positives_skipped,
+        "per_target_negatives_skipped": per_target_negatives_skipped,
+        "total_positives_per_target": total_positives_per_target,
+        "scanner_domain_breakdown": "unavailable_header_only",
+        "elapsed_seconds": rounded_float(time.monotonic() - started),
+        "completion": "E00_SKIP_AUDIT_PASS",
+    }
+    payload = _canonical_json_bytes(summary)
+    if not 0 < len(payload) <= MAX_SUMMARY_BYTES:
+        raise GateError("summary_size_invalid")
+    output_root = Path("/kaggle/working")
+    output_root.mkdir(parents=True, exist_ok=True)
+    temporary = output_root / ".sanitized_real_data_gate.json.tmp"
+    temporary.write_bytes(payload)
+    os.replace(temporary, output_root / SUMMARY_BASENAME)
+    print(f"event=skip_audit_complete studies={len(keys)} uneven_series={n_uneven_series}")
+    return 0
 
 
 def study_feature(tensor):
@@ -602,6 +780,237 @@ def run_e00b_memorization_gate():
         temporary.write_bytes(payload)
         os.replace(temporary, output_root / SUMMARY_BASENAME)
         print(f"event=e00b_complete studies={len(features)} series={series_processed}")
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+def run_e00c_cnn_memorization_gate():
+    """Prove a genuine pixel-level CNN can memorize a tiny real cohort.
+
+    Uses the frozen r16 preprocessing (adjacent-slice channels, deterministic
+    sampling), a small PyTorch CNN encoder with masked BCE, no augmentation,
+    no dropout, zero weight decay, fixed seed. Every selected study must have
+    at least one supervised label and contribute nonzero loss.
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, labels = read_study_labels(competition_root / "train.csv")
+
+        # Same cohort policy as E00b: studies with both pos and neg labels,
+        # ranked by known-cell count then SHA-256 tie-break. Deterministic.
+        n_known = np.isfinite(labels).sum(axis=1)
+        has_pos_and_neg = np.zeros(len(keys), dtype=bool)
+        for index in range(len(keys)):
+            row = labels[index]
+            observed = np.isfinite(row)
+            if observed.any() and (row[observed] == 1).any() and (row[observed] == 0).any():
+                has_pos_and_neg[index] = True
+        eligible = [i for i in range(len(keys)) if has_pos_and_neg[i]]
+        ranked = sorted(
+            eligible,
+            key=lambda i: (-int(n_known[i]), hashlib.sha256(keys[i].encode()).hexdigest()),
+        )
+        cohort_keys = [keys[i] for i in ranked[:E00C_COHORT]]
+
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+        tensors = {}
+        skip_reasons = Counter()
+        series_processed = 0
+        for key in cohort_keys:
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)  # [S=8, C=3, H=64, W=64]
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001 - reduced to fixed safe token below
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[key] = np.stack(study_tensors, axis=0)  # [n_series, S, C, H, W]
+        if len(tensors) < MIN_PROCESSED:
+            raise GateError("insufficient_processed_studies")
+
+        ordered_keys = sorted(tensors)
+        label_matrix = np.vstack([labels[keys.index(key)] for key in ordered_keys])
+        observed = np.isfinite(label_matrix)
+        targets = np.where(observed, label_matrix, 0.0).astype(np.float32)
+
+        # Small CNN: shared encoder over each sampled slice, mean-pool over the
+        # 8 samples and all series, then one linear head over 12 logits.
+        class TinyCNN(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.features = nn.Sequential(
+                    nn.Conv2d(3, 16, kernel_size=3, padding=1),
+                    nn.ReLU(),
+                    nn.MaxPool2d(2),
+                    nn.Conv2d(16, 32, kernel_size=3, padding=1),
+                    nn.ReLU(),
+                    nn.MaxPool2d(2),
+                    nn.Conv2d(32, E00C_HIDDEN, kernel_size=3, padding=1),
+                    nn.ReLU(),
+                    nn.AdaptiveAvgPool2d(1),
+                )
+                self.classifier = nn.Linear(E00C_HIDDEN, len(TARGETS))
+
+            def forward(self, x):
+                batch_shape = x.shape  # [B, n_series, S, C, H, W] or [B, S, C, H, W]
+                flat = x.reshape(-1, *batch_shape[-4:])  # [B*n*S, C, H, W]
+                encoded = self.features(flat).flatten(1)  # [B*n*S, hidden]
+                pooled = encoded.mean(dim=0, keepdim=True)  # single-study mode only
+                return self.classifier(pooled).reshape(batch_shape[:1] + (-1,))
+
+        torch.manual_seed(SEED)
+        model = TinyCNN()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=E00C_LEARNING_RATE, weight_decay=0.0)
+        first_loss = float("nan")
+        best_loss = float("inf")
+        last_loss = float("nan")
+        observed_t = torch.from_numpy(observed.astype(np.float32))
+        targets_t = torch.from_numpy(targets)
+        initial_params = {name: param.detach().clone() for name, param in model.named_parameters()}
+
+        # Full-batch training on every processed study simultaneously; every study's
+        # labels are in the same loss term so each contributes nonzero gradient.
+        per_study_losses = []
+        for step in range(E00C_EPOCHS):
+            optimizer.zero_grad()
+            total_loss = 0.0
+            step_loss_value = 0.0
+            for row_index_local, key in enumerate(ordered_keys):
+                x = torch.from_numpy(tensors[key].astype(np.float32)).unsqueeze(0)
+                logits = model(x)[0]  # [12]
+                obs_row = observed_t[row_index_local]
+                tgt_row = targets_t[row_index_local]
+                denom = max(int(obs_row.sum().item()), 1)
+                loss_row = nn.functional.binary_cross_entropy_with_logits(
+                    logits, tgt_row, reduction="none"
+                )
+                masked = (loss_row * obs_row).sum() / denom
+                total_loss = total_loss + masked
+                step_loss_value += float(masked.item())
+            total_loss_tensor = (
+                total_loss if isinstance(total_loss, torch.Tensor) else torch.tensor(total_loss)
+            )
+            total_loss_tensor.backward()
+            optimizer.step()
+            step_loss_value /= max(len(ordered_keys), 1)
+            if step == 0:
+                first_loss = step_loss_value
+            last_loss = step_loss_value
+            best_loss = min(best_loss, step_loss_value)
+            per_study_losses.append(step_loss_value)
+            if time.monotonic() - started > BUDGET_SECONDS - 120:
+                break
+
+        # Training AUC on the same data using final parameters.
+        with torch.no_grad():
+            train_scores = np.zeros((len(ordered_keys), len(TARGETS)), dtype=np.float64)
+            for row_index_local, key in enumerate(ordered_keys):
+                x = torch.from_numpy(tensors[key].astype(np.float32)).unsqueeze(0)
+                train_scores[row_index_local] = (
+                    torch.sigmoid(model(x)[0]).numpy().astype(np.float64)
+                )
+        train_auc = {
+            target: rank_auc(label_matrix[:, column], train_scores[:, column])
+            for column, target in enumerate(TARGETS)
+        }
+        computable_auc = {k: v for k, v in train_auc.items() if v is not None}
+        train_macro = float(np.mean(list(computable_auc.values()))) if computable_auc else None
+
+        params_changed = any(
+            not torch.equal(initial_params[name], param.detach())
+            for name, param in model.named_parameters()
+        )
+        finite_scores = bool(np.isfinite(train_scores).all())
+        per_study_contribution = {}
+        for row_index_local, key in enumerate(ordered_keys):
+            n_obs = int(observed[row_index_local].sum())
+            row = row_index_local
+            per_study_contribution[key] = {
+                "known": n_obs,
+                "positive": int((label_matrix[row][observed[row]] == 1).sum()),
+                "negative": int((label_matrix[row][observed[row]] == 0).sum()),
+                "contributes_nonzero_loss": n_obs > 0,
+            }
+        all_contribute = all(v["contributes_nonzero_loss"] for v in per_study_contribution.values())
+        memorization_evidence = (
+            all_contribute and params_changed and finite_scores and last_loss < 0.15
+        )
+        summary = {
+            "schema_version": 1,
+            "gate": "e00c_cnn_memorization_v0",
+            "r16_code_commit": R16_COMMIT,
+            "source_manifest_version": SOURCE_MANIFEST_VERSION,
+            "preprocessing_qa_status": "PROVISIONAL_HUMAN_QA_PENDING",
+            "cohort_selected": len(cohort_keys),
+            "studies_processed": len(tensors),
+            "series_processed": series_processed,
+            "skip_reason_counts": dict(skip_reasons),
+            "model_config": {
+                "architecture": "tiny_cnn_3conv_16-32-64_adaptive_pool_linear12",
+                "epochs": E00C_EPOCHS,
+                "learning_rate": E00C_LEARNING_RATE,
+                "weight_decay": 0.0,
+                "dropout": False,
+                "augmentation": "none",
+                "optimizer": "adamw",
+                "seed": SEED,
+            },
+            "supervised_bce_first_epoch": rounded_float(first_loss),
+            "supervised_bce_last_epoch": rounded_float(last_loss),
+            "supervised_bce_best_epoch": rounded_float(best_loss),
+            "train_per_label_auc": train_auc,
+            "train_macro_auc_over_computable": rounded_float(train_macro)
+            if train_macro is not None
+            else None,
+            "n_computable_labels": len(computable_auc),
+            "per_study_supervised": per_study_contribution,
+            "all_studies_contribute_nonzero_loss": all_contribute,
+            "parameters_changed": params_changed,
+            "scores_finite": finite_scores,
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+            "completion": (
+                "E00C_CNN_MEMORIZATION_PASS"
+                if memorization_evidence
+                else "E00C_CNN_MEMORIZATION_FAIL"
+            ),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / f".{SUMMARY_BASENAME}.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / SUMMARY_BASENAME)
+        print(f"event=e00c_complete studies={len(tensors)} series={series_processed}")
         return 0
     finally:
         if str(runtime_root) in sys.path:
