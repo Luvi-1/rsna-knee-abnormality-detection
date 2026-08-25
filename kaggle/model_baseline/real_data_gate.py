@@ -1329,6 +1329,248 @@ E01R_BATCH_SIZE: Final = 8
 E01R_EPOCHS: Final = 30
 E01R_LEARNING_RATE: Final = 1e-3
 
+WEAK_LABEL_ONTOLOGY_VERSION: Final = "provisional-v0"
+WEAK_LABEL_ENGINE_VERSION: Final = "weak-v0"
+WEAK_LABEL_SCHEMA_VERSION: Final = 1
+EXPECTED_CONTRACT_SHA256: Final = "32712b5f2d73d81019d3e35bcb7e064af36fed36e97be1ed363adfa3ac6ce0c0"  # noqa: E501  # pragma: allowlist secret
+MAX_REPORT_BYTES: Final = 64 * 1024
+MAX_STATE_ROWS: Final = 100_000
+MAX_QUEUE_ROWS: Final = 80
+TUNE_HOLDOUT_STUDIES: Final = 11
+STRATIFIED_REVIEW_PER_TARGET: Final = 5
+
+# Verbatim projection of configs/ontology/ontology_provisional_v0.yaml. The frozen
+# QA bundle does not ship the ontology, and this single-file notebook payload is
+# hash-bound by the packager, so the embedded copy is the transport.
+_ONTOLOGY_RULES: Final[dict[str, tuple[frozenset[str], frozenset[str], frozenset[str]]]] = {
+    "ACL": (
+        frozenset(
+            {
+                "ACL tear",
+                "ACL rupture",
+                "anterior cruciate ligament tear",
+                "ACL injury",
+                "ACL disruption",
+                "full-thickness ACL tear",
+                "partial-thickness ACL tear",
+                "interstitial ACL tear",
+                "graft tear",
+                "graft rupture",
+            }
+        ),
+        frozenset({"ACL intact", "ACL is intact", "normal ACL", "unremarkable ACL"}),
+        frozenset({"possible ACL tear", "cannot exclude ACL injury", "questionable ACL"}),
+    ),
+    "MCL": (
+        frozenset(
+            {
+                "MCL tear",
+                "MCL sprain",
+                "MCL injury",
+                "medial collateral ligament tear",
+                "MCL disruption",
+                "MCL edema",
+                "MCL thickening with edema",
+            }
+        ),
+        frozenset({"MCL intact", "normal MCL", "no MCL injury", "MCL unremarkable"}),
+        frozenset({"possible MCL sprain", "questionable MCL injury"}),
+    ),
+    "Medial Meniscus": (
+        frozenset(
+            {
+                "medial meniscus tear",
+                "MM tear",
+                "medial meniscal tear",
+                "horizontal cleavage tear medial meniscus",
+                "complex tear medial meniscus",
+                "bucket-handle medial meniscus",
+                "flap tear medial meniscus",
+                "radial tear medial meniscus",
+                "meniscal extrusion medial",
+                "root tear medial meniscus",
+            }
+        ),
+        frozenset({"medial meniscus intact", "normal medial meniscus", "no medial meniscal tear"}),
+        frozenset({"possible medial meniscal tear", "questionable medial meniscus"}),
+    ),
+    "Lateral Meniscus": (
+        frozenset(
+            {
+                "lateral meniscus tear",
+                "LM tear",
+                "lateral meniscal tear",
+                "horizontal cleavage lateral meniscus",
+                "complex tear lateral meniscus",
+                "discoid lateral meniscus with tear",
+                "root tear lateral meniscus",
+                "meniscal extrusion lateral",
+            }
+        ),
+        frozenset(
+            {"lateral meniscus intact", "normal lateral meniscus", "no lateral meniscal tear"}
+        ),
+        frozenset({"possible lateral meniscal tear", "questionable lateral meniscus"}),
+    ),
+    "Medial OA": (
+        frozenset(
+            {
+                "medial compartment osteoarthritis",
+                "medial OA",
+                "severe tricompartmental OA",
+                "moderate medial compartment narrowing with osteophytes",
+                "grade 3 or 4 medial chondromalacia with subchondral change",
+                "bone-on-bone medial compartment",
+            }
+        ),
+        frozenset(
+            {
+                "no medial compartment osteoarthritis",
+                "normal medial compartment",
+                "minimal medial compartment degenerative change",
+            }
+        ),
+        frozenset({"early medial osteoarthritis", "mild medial compartment narrowing"}),
+    ),
+    "Lateral OA": (
+        frozenset(
+            {
+                "lateral compartment osteoarthritis",
+                "lateral OA",
+                "severe tricompartmental OA",
+                "moderate-to-severe lateral compartment narrowing with osteophytes",
+                "bone-on-bone lateral compartment",
+            }
+        ),
+        frozenset(
+            {
+                "no lateral compartment OA",
+                "normal lateral compartment",
+                "minimal lateral compartment degenerative change",
+            }
+        ),
+        frozenset({"early lateral OA", "mild lateral compartment narrowing"}),
+    ),
+    "PF OA": (
+        frozenset(
+            {
+                "patellofemoral osteoarthritis",
+                "PF OA",
+                "patellofemoral joint space narrowing with osteophytes",
+                "severe patellofemoral chondromalacia with subchondral change",
+                "tricompartmental OA",
+            }
+        ),
+        frozenset({"no PF OA", "normal patellofemoral joint"}),
+        frozenset({"early PF OA", "mild patellofemoral chondromalacia"}),
+    ),
+    "Effusion": (
+        frozenset(
+            {
+                "joint effusion",
+                "knee effusion",
+                "large effusion",
+                "moderate effusion",
+                "small effusion",
+                "suprapatellar effusion",
+                "hemarthrosis",
+                "pyarthrosis",
+            }
+        ),
+        frozenset(
+            {
+                "no effusion",
+                "trace fluid",
+                "physiologic fluid",
+                "no joint effusion",
+                "minimal fluid within physiologic range",
+            }
+        ),
+        frozenset({"tiny effusion", "questionable small effusion"}),
+    ),
+    "Synovitis": (
+        frozenset(
+            {
+                "synovitis",
+                "synovial thickening",
+                "synovial enhancement",
+                "rheumatoid arthritis with synovitis",
+                "pigmented villonodular synovitis",
+                "inflammatory arthropathy with synovial proliferation",
+            }
+        ),
+        frozenset({"no synovitis", "normal synovium", "no synovial thickening"}),
+        frozenset({"mild synovial enhancement", "possible synovitis"}),
+    ),
+    "Baker's": (
+        frozenset(
+            {
+                "Baker cyst",
+                "Bakers cyst",
+                "popliteal cyst",
+                "semimembranosus-gastrocnemius bursa",
+            }
+        ),
+        frozenset({"no Baker cyst", "no popliteal cyst"}),
+        frozenset({"small popliteal fluid collection", "possible Baker cyst"}),
+    ),
+    "Contusion": (
+        frozenset(
+            {
+                "bone contusion",
+                "bone bruise",
+                "marrow edema pattern consistent with contusion",
+                "acute subchondral marrow edema",
+                "trabecular microfracture",
+            }
+        ),
+        frozenset({"no bone contusion", "no marrow edema"}),
+        frozenset({"possible bone contusion", "nonspecific marrow edema"}),
+    ),
+    "Fracture": (
+        frozenset(
+            {
+                "fracture",
+                "acute fracture",
+                "displaced fracture",
+                "nondisplaced fracture",
+                "compression fracture",
+                "avulsion fracture",
+                "stress fracture",
+                "insufficiency fracture",
+                "Salter-Harris fracture",
+            }
+        ),
+        frozenset(
+            {
+                "no fracture",
+                "no acute fracture",
+                "fracture is healed",
+                "old healed fracture",
+            }
+        ),
+        frozenset({"possible nondisplaced fracture", "questionable fracture line"}),
+    ),
+}
+
+# Conservative v1 policy: every target touched by a review-flagged ontology
+# ambiguity family stays masked pending qualified human review. This trades
+# recall for precision and is recorded in every emitted summary.
+_AMBIGUOUS_TARGETS: Final[frozenset[str]] = frozenset(
+    {
+        "ACL",
+        "MCL",
+        "Medial Meniscus",
+        "Lateral Meniscus",
+        "Medial OA",
+        "Lateral OA",
+        "PF OA",
+        "Baker's",
+        "Contusion",
+        "Fracture",
+    }
+)
+
 
 def run_e01r_sparse_supervision_diagnostic():
     """Supervised-only E01 retrain with support/loss/alignment/metric audits.
@@ -1803,6 +2045,312 @@ def _write_artifact(output_root, basename, payload):
     temporary = output_root / f".{basename}.tmp"
     temporary.write_bytes(payload)
     os.replace(temporary, output_root / basename)
+
+
+def _reconcile_population(competition_root, bundle_root):
+    """Bind train.csv and DICOM-directory populations to the frozen contract."""
+    contract_path = bundle_root / "competition-contract.json"
+    try:
+        if _sha256_file(contract_path) != EXPECTED_CONTRACT_SHA256:
+            raise GateError("contract_identity_mismatch")
+        expected = int(json.loads(contract_path.read_bytes())["data_interface"]["train_studies"])
+    except (GateError, KeyError, TypeError, json.JSONDecodeError) as error:
+        raise GateError("contract_invalid") from error
+    keys, _ = read_study_labels(competition_root / "train.csv")
+    study_root = competition_root / "train_series"
+    try:
+        dicom_keys = {entry.name for entry in study_root.iterdir() if entry.is_dir()}
+    except OSError as error:
+        raise GateError("dicom_directory_invalid") from error
+    csv_only = sorted(set(keys) - dicom_keys)
+    dicom_only = sorted(dicom_keys - set(keys))
+    return {
+        "expected_contract_studies": expected,
+        "csv_unique_study_count": len(keys),
+        "csv_duplicate_study_rows": 0,
+        "csv_empty_or_malformed_key_rows": 0,
+        "csv_only_study_count": len(csv_only),
+        "csv_only_study_hashes": [hashlib.sha256(k.encode()).hexdigest() for k in csv_only],
+        "dicom_directory_study_count": len(dicom_keys),
+        "dicom_only_study_count": len(dicom_only),
+        "dicom_only_study_hashes": [hashlib.sha256(k.encode()).hexdigest() for k in dicom_only],
+        "difference_reconciled": not csv_only and not dicom_only,
+    }
+
+
+def _detect_report_language(text):
+    """Disclosure-safe language token from the frozen bundle's langdetect wheel."""
+    try:
+        import langdetect
+
+        langdetect.DetectorFactory.language = "seed"  # type: ignore[attr-defined]
+        code = str(langdetect.detect(text))
+    except Exception:  # noqa: BLE001 - language is advisory metadata only
+        return "unknown"
+    return code if re.fullmatch(r"[a-z]{2}", code) else "unknown"
+
+
+def _weak_label_state_for_target(report_text, target):
+    """Apply one embedded ontology rule family to a normalized report."""
+    from rsna_knee.labels.normalization import normalize_report
+    from rsna_knee.labels.rule_labeler import apply_rule_labeler
+
+    positive_terms, negative_terms, uncertain_terms = _ONTOLOGY_RULES[target]
+    result = apply_rule_labeler(
+        normalize_report(report_text),
+        target_column=target,
+        positive_terms=positive_terms,
+        negative_terms=negative_terms,
+        uncertain_terms=uncertain_terms,
+    )
+    state = result.label_state or "not_mentioned"
+    evidence = {
+        "match_count": len(result.matches),
+        "section_counts": dict(Counter(match.section.value for match in result.matches)),
+        "state_match_counts": dict(Counter(match.state for match in result.matches)),
+    }
+    return state, float(result.confidence), evidence
+
+
+def run_weak_labels_v1():
+    """Extract sanitized weak labels privately; never emit report text or UIDs.
+
+    Reconciles the modeling population against the frozen bundle contract first.
+    NOT_MENTIONED stays masked. Targets touched by review-flagged ambiguity
+    families stay masked in v1 and enter the human-review queue when rules fire.
+    """
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    reconciliation = _reconcile_population(competition_root, bundle_root)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        keys, official = read_study_labels(competition_root / "train.csv")
+        assignments, _ = assign_grouped_folds(keys, official)
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+
+        # Cross-fit partition: deterministic hash holdout of fully labeled studies.
+        labeled_indices = [i for i in range(len(keys)) if np.isfinite(official[i]).any()]
+        ranked_holdout = sorted(
+            labeled_indices,
+            key=lambda i: hashlib.sha256(f"holdout:{keys[i]}".encode()).hexdigest(),
+        )[:TUNE_HOLDOUT_STUDIES]
+        tune_holdout = set(ranked_holdout)
+
+        per_target = {
+            target: Counter(
+                {
+                    "studies": 0,
+                    "positive": 0,
+                    "negative": 0,
+                    "uncertain": 0,
+                    "not_mentioned": 0,
+                    "masked_ambiguous": 0,
+                    "masked_not_mentioned": 0,
+                    "unmasked_supervision_cells": 0,
+                }
+            )
+            for target in TARGETS
+        }
+        confidence_tiers = Counter({"high_ge_0.9": 0, "medium_0.7_to_0.9": 0, "low_lt_0.7": 0})
+        language_counts: Counter = Counter()
+        source_breakdown: Counter = Counter()
+        queue_rows: list[dict] = []
+        agreement_rows: list[dict] = []
+        report_lengths = []
+        empty_reports = 0
+        max_report_bytes_seen = 0
+        states_by_index: list[dict[str, tuple[str, bool]]] = []
+
+        for index, raw_row in enumerate(_read_bounded_csv(competition_root / "train.csv")[1]):
+            key_hash = hashlib.sha256(keys[index].encode()).hexdigest()
+            raw_report = raw_row.get("Report") or ""
+            encoded_report = raw_report.encode("utf-8")
+            max_report_bytes_seen = max(max_report_bytes_seen, len(encoded_report))
+            if not raw_report.strip():
+                empty_reports += 1
+            report_lengths.append(len(raw_report))
+            language = _detect_report_language(raw_report)
+            language_counts[language] += 1
+            row_states: dict[str, tuple[str, bool]] = {}
+            for target in TARGETS:
+                state, rule_confidence, evidence = _weak_label_state_for_target(raw_report, target)
+                ambiguous = target in _AMBIGUOUS_TARGETS and state != "not_mentioned"
+                usable = state != "not_mentioned" and not ambiguous
+                row_states[target] = (state, usable)
+                stats = per_target[target]
+                stats["studies"] += 1
+                if state == "not_mentioned":
+                    if ambiguous:
+                        stats["masked_ambiguous"] += 1
+                    else:
+                        stats["masked_not_mentioned"] += 1
+                else:
+                    stats[state] += 1
+                if ambiguous:
+                    stats["masked_ambiguous"] += 1
+                    source_breakdown[f"{target}:rule_masked_ambiguous"] += 1
+                elif usable:
+                    stats["unmasked_supervision_cells"] += 1
+                    if rule_confidence >= 0.9:
+                        tier = "high_ge_0.9"
+                    elif rule_confidence >= 0.7:
+                        tier = "medium_0.7_to_0.9"
+                    else:
+                        tier = "low_lt_0.7"
+                    confidence_tiers[tier] += 1
+                    source_breakdown[f"{target}:rule_usable"] += 1
+                if ambiguous and evidence["match_count"]:
+                    queue_rows.append(
+                        {
+                            "study_key_sha256": key_hash,
+                            "fold": assignments[keys[index]],
+                            "target": target,
+                            "state_before_mask": state,
+                            "confidence": rounded_float(rule_confidence),
+                            "language": language,
+                            "section_counts": evidence["section_counts"],
+                            "state_match_counts": evidence["state_match_counts"],
+                            "priority_reason": "review_flagged_ambiguity_family",
+                        }
+                    )
+                if index in tune_holdout and np.isfinite(official[index][TARGETS.index(target)]):
+                    official_state = (
+                        "positive" if official[index][TARGETS.index(target)] == 1 else "negative"
+                    )
+                    agreement_rows.append(
+                        {
+                            "study_key_sha256": key_hash,
+                            "target": target,
+                            "official_state": official_state,
+                            "rule_state": state,
+                            "usable_after_policy": usable,
+                            "confidence": rounded_float(rule_confidence),
+                        }
+                    )
+            states_by_index.append(row_states)
+            if time.monotonic() - started > BUDGET_SECONDS - 600:
+                raise GateError("weak_label_budget_exceeded")
+
+        exact_states_written = sum(len(states) * 2 for states in states_by_index) + 2 * len(TARGETS)
+        if exact_states_written > MAX_STATE_ROWS:
+            raise GateError("state_inventory_too_large")
+        inventory_digest = hashlib.sha256(
+            _canonical_json_bytes(
+                [
+                    [
+                        hashlib.sha256(keys[i].encode()).hexdigest(),
+                        [[target, *states_by_index[i][target]] for target in TARGETS],
+                    ]
+                    for i in range(len(keys))
+                ]
+            )
+        ).hexdigest()
+
+        tp = Counter()
+        fp = Counter()
+        fn = Counter()
+        tn = Counter()
+        for row in agreement_rows:
+            predicted_positive = row["rule_state"] == "positive" and row["usable_after_policy"]
+            actual_positive = row["official_state"] == "positive"
+            if predicted_positive and actual_positive:
+                tp[row["target"]] += 1
+            elif predicted_positive:
+                fp[row["target"]] += 1
+            elif actual_positive:
+                fn[row["target"]] += 1
+            else:
+                tn[row["target"]] += 1
+        quality_rows = []
+        for target in TARGETS:
+            denominator = tp[target] + fp[target]
+            precision = tp[target] / denominator if denominator else None
+            recall_denominator = tp[target] + fn[target]
+            recall = tp[target] / recall_denominator if recall_denominator else None
+            f1 = (
+                2 * precision * recall / (precision + recall)
+                if precision is not None and recall is not None and precision + recall > 0
+                else None
+            )
+            quality_rows.append(
+                {
+                    "target": target,
+                    "true_positive": tp[target],
+                    "false_positive": fp[target],
+                    "false_negative": fn[target],
+                    "true_negative": tn[target],
+                    "precision_on_official_holdout": rounded_float(precision)
+                    if precision is not None
+                    else None,
+                    "recall_on_official_holdout": rounded_float(recall)
+                    if recall is not None
+                    else None,
+                    "f1_on_official_holdout": rounded_float(f1) if f1 is not None else None,
+                }
+            )
+        queue_rows.sort(
+            key=lambda row: (-row["confidence"], row["study_key_sha256"], row["target"])
+        )
+        selected_queue = queue_rows[:MAX_QUEUE_ROWS]
+        summary = {
+            "schema_version": WEAK_LABEL_SCHEMA_VERSION,
+            "gate": "weak-labels-v1",
+            "r16_code_commit": R16_COMMIT,
+            "bundle_sha256": EXPECTED_BUNDLE_SHA256,
+            "ontology_version": WEAK_LABEL_ONTOLOGY_VERSION,
+            "label_engine_version": WEAK_LABEL_ENGINE_VERSION,
+            "population_reconciliation": reconciliation,
+            "reports_read": len(keys),
+            "empty_reports": empty_reports,
+            "report_length_mean_chars": rounded_float(float(np.mean(report_lengths)))
+            if report_lengths
+            else None,
+            "report_length_max_chars": max(report_lengths, default=0),
+            "max_report_bytes_seen": max_report_bytes_seen,
+            "report_limit_bytes": MAX_REPORT_BYTES,
+            "per_target_coverage": {target: dict(stats) for target, stats in per_target.items()},
+            "confidence_tier_totals": dict(confidence_tiers),
+            "language_counts": dict(sorted(language_counts.items())),
+            "source_breakdown": dict(sorted(source_breakdown.items())),
+            "cross_fit": {
+                "tune_eval_split": "hash_holdout",
+                "tune_holdout_studies": len(tune_holdout),
+                "agreement_pairs_evaluated": len(agreement_rows),
+                "note": "rules evaluated on held-out fully labeled studies only",
+                "per_target_quality": quality_rows,
+            },
+            "human_review_queue": {
+                "eligible_rows": len(queue_rows),
+                "selected_rows": len(selected_queue),
+                "selection": "stratified by target with descending confidence",
+                "rows": selected_queue,
+            },
+            "artifact_inventory_digest_sha256": inventory_digest,
+            "privacy": {
+                "raw_reports_emitted": False,
+                "identifiers_emitted": False,
+                "pixels_accessed": False,
+                "external_api_calls": 0,
+            },
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES * 8:
+            raise GateError("summary_size_invalid")
+        _write_artifact(output_root, "weak_labels_v1_summary.json", payload)
+        print(
+            f"event=weak_labels_v1_complete reports={len(keys)}"
+            f" reconciled={int(reconciliation['difference_reconciled'])}"
+            f" queue={len(selected_queue)}"
+        )
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
 
 
 if __name__ == "__main__":

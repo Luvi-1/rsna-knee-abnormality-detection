@@ -23,6 +23,7 @@ GATE_ENTRY_POINTS: Final = {
     "e00c": "run_e00c_cnn_memorization_gate",
     "e01": "run_e01_fold_zero_training",
     "e01r": "run_e01r_sparse_supervision_diagnostic",
+    "weak_v1": "run_weak_labels_v1",
     "default": "run_real_data_gate",
 }
 GATE_SLUG_SUFFIX: Final = {
@@ -31,6 +32,7 @@ GATE_SLUG_SUFFIX: Final = {
     "e00c": "-cn",
     "e01": "-e1",
     "e01r": "-r1",
+    "weak_v1": "-wv1",
     "default": "",
 }
 

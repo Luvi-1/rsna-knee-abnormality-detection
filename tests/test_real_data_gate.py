@@ -224,6 +224,36 @@ class TestE01RDiagnostic:
         assert "run_e01r_sparse_supervision_diagnostic" in str(notebook["cells"])
 
 
+class TestWeakLabelsV1Policy:
+    def test_not_mentioned_is_masked_and_ambiguity_targets_fail_closed(self) -> None:
+        assert "not_mentioned" not in gate._AMBIGUOUS_TARGETS
+        assert set(gate.TARGETS) >= gate._AMBIGUOUS_TARGETS
+
+        positive, negative, uncertain = gate._ONTOLOGY_RULES["Effusion"]
+        assert "trace fluid" in negative
+        assert "joint effusion" in positive
+        assert uncertain
+
+    def test_state_for_target_uses_sentence_negation(self) -> None:
+        state, confidence, evidence = gate._weak_label_state_for_target(
+            "FINDINGS:\nNo joint effusion.", "Effusion"
+        )
+        assert state == "negative"
+        assert 0.0 <= confidence <= 1.0
+        assert evidence["match_count"] >= 1
+
+    def test_packager_includes_weak_v1_entry_point_cpu_only(self, tmp_path: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        output_root = tmp_path / "pkg-weak-v1"
+        result = packager.package(repo_root, output_root, commit="f" * 40, gate="weak_v1")
+        metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
+        notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
+        assert metadata["enable_gpu"] is False
+        assert metadata["enable_internet"] is False
+        assert result["kernel_slug"].endswith("-wv1")
+        assert "run_weak_labels_v1" in str(notebook["cells"])
+
+
 class TestFoldFeasibility:
     def test_reports_support_and_degeneracy(self) -> None:
         keys = [f"k{i:02d}" for i in range(30)]
