@@ -1,6 +1,48 @@
 # Status
 
-Updated: 2026-08-23 (Chunk 5 r16 provisional research release; corrected on-demand QA terminal)
+Updated: 2026-08-24 (Chunk 7 weak-labels-v1 extraction and repr-v0 representation-learning proof)
+
+### Chunk 7 weak-labels-v1 and repr-v0 status 2026-08-24
+
+E01R terminal diagnosis: OFFICIAL-LABEL DATA SCARCITY (CASE B). Only 55/4404 studies
+carry any official label. Train macro AUC 0.562, val macro AUC 0.371. Loss formula,
+alignment, and metric implementations proven correct. No further TinyCNN tuning against
+official labels.
+
+Population reconciliation: exact match at 4407 CSV studies = 4407 DICOM directories;
+zero orphans on either side. The prior 4404 count was an E01R loader artifact (studies
+with all targets unknown excluded from supervised batches); the canonical population is
+4407 for unsupervised objectives.
+
+Weak-labels-v1 kernel (bd1928a-f11b0f11556f-wv1) COMPLETE in 57 seconds:
+- All 4407 reports read, zero empty.
+- Population reconciliation PASS (difference_reconciled=true).
+- Privacy: zero UID/UUID/OID patterns in output; no raw reports emitted; no pixels accessed.
+- Only Effusion (1521 cells) and Synovitis (302 cells) produce unmasked supervision under v1 policy.
+- Remaining 10 targets masked as ambiguous per conservative ontology policy.
+- Language distribution: 39.4% English; 60.6% non-English (ontology covers English only).
+- Cross-fit quality (11 holdout studies, 132 agreement pairs):
+  Effusion P=0.500 R=0.250 F1=0.333; Synovitis P=0.500 R=0.143 F1=0.222.
+  Ten ambiguous-masked targets show recall=0.0 but contribute no supervision cells.
+- Human review queue: 80 rows selected (stratified by target, descending confidence).
+- Precision gate: INDETERMINATE (P=0.50 with n<=4 predictions per target; CIs span [0,1]).
+  Provenance gate: PASS (all required fields present).
+- Freeze: NOT GRANTED pending human review calibration of rule precision.
+
+repr-v0 kernel (1c27fcb-8b80127f2dad-rv0) COMPLETE in 1765 seconds:
+- Rotation-prediction pretext task (0/90/180/270) on TinyCNNShared features encoder.
+- 370 studies preprocessed from bounded cohort of 400 (29 uneven_spacing + 1 laterality skip).
+- Train/val split: 333/37 by deterministic hash rank (90/10).
+- 20 epochs completed. First train loss 1.3885 (near ln(4) random baseline).
+- Last train loss 0.9403; best val loss 0.9376. Loss decrease ratio 1.477x.
+- Val loss tracks train loss: generalizes across held-out studies, not memorization.
+- GPU compatibility fix: P100/sm_60 detected and skipped to CPU fallback (commit 1c27fcb).
+- Privacy: zero sensitive patterns; labels_used_in_training=false confirmed in summary.
+
+Next decision requires human review queue completion to calibrate weak-label precision,
+then E02 supervised training using frozen weak-labels-v1 as the supervision source.
+Representation learning provides an independent encoder that can be fine-tuned or
+combined with calibrated labels.
 
 ### Final orchestration disposition 2026-08-23 (D-052)
 
