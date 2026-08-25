@@ -2387,3 +2387,216 @@ def run_weak_labels_v1():
 
 if __name__ == "__main__":
     raise SystemExit(run_real_data_gate())
+
+
+REPR_EPOCHS: Final = 20
+REPR_BATCH_SIZE: Final = 16
+REPR_LEARNING_RATE: Final = 5e-4
+REPR_BUDGET_FRACTION: Final = 0.80
+ROTATION_ANGLES: Final = (90, 180, 270)
+REPR_HIDDEN: Final = E00C_HIDDEN
+
+
+def run_repr_v0():
+    """Image-only rotation-prediction pretraining on all eligible MRI studies.
+
+    Same TinyCNNShared features encoder, r16 preprocessing, seed 42. No labels
+    are read or used. Emits one sanitized aggregate JSON summary with training
+    metrics, fold-0 validation loss, and skip audit.
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, _ = read_study_labels(competition_root / "train.csv")
+
+        # Deterministic hash-order processing: sort by SHA-256 of opaque key.
+        ranked = sorted(
+            range(len(keys)), key=lambda i: hashlib.sha256(keys[i].encode()).hexdigest()
+        )
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+
+        # Phase 1: preprocess all eligible studies within budget fraction.
+        tensors = {}
+        skip_reasons: Counter = Counter()
+        series_processed = 0
+        for index in ranked:
+            if time.monotonic() - started > BUDGET_SECONDS * REPR_BUDGET_FRACTION:
+                break
+            key = keys[index]
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[index] = np.stack(study_tensors, axis=0).astype(np.float32)
+        n_eligible = len(tensors)
+        if n_eligible < REPR_BATCH_SIZE * 2:
+            raise GateError("repr_eligible_studies_insufficient")
+
+        # Deterministic split by hash rank: last 10% as validation.
+        eligible_ranked = [index for index in ranked if index in tensors]
+        val_cutoff = max(1, int(n_eligible * 0.10))
+        val_indices = eligible_ranked[:val_cutoff]
+        train_indices = eligible_ranked[val_cutoff:]
+
+        # Phase 2: rotation-prediction model on TinyCNNShared.features encoder.
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch.manual_seed(SEED)
+        encoder_features, _ = _build_tiny_cnn(REPR_HIDDEN, 12)
+        classifier_head = nn.Linear(REPR_HIDDEN, len(ROTATION_ANGLES) + 1)
+        encoder = nn.Sequential(encoder_features, nn.Flatten(1)).to(device)
+        classifier_head = classifier_head.to(device)
+        optimizer = torch.optim.AdamW(
+            list(encoder.parameters()) + list(classifier_head.parameters()),
+            lr=REPR_LEARNING_RATE,
+            weight_decay=0.0,
+        )
+        criterion = nn.CrossEntropyLoss()
+
+        rng = np.random.default_rng(SEED)
+        order = np.arange(len(train_indices))
+        epoch_losses: list = []
+        epoch_val_losses: list = []
+        first_loss = float("nan")
+        last_loss = float("nan")
+        best_val_loss = float("inf")
+        rotations_applied: Counter = Counter()
+        for epoch in range(REPR_EPOCHS):
+            rng.shuffle(order)
+            epoch_batch_losses = []
+            for batch_start in range(0, len(order), REPR_BATCH_SIZE):
+                batch_ids = order[batch_start : batch_start + REPR_BATCH_SIZE]
+                optimizer.zero_grad()
+                batch_loss_tensor = torch.zeros((), device=device)
+                batch_samples = 0
+                for local_index in batch_ids:
+                    global_index = train_indices[local_index]
+                    study_np = tensors[global_index]
+                    flat_slices = study_np.reshape(-1, *study_np.shape[-3:])
+                    slice_index = int(rng.integers(len(flat_slices)))
+                    x_np = flat_slices[slice_index : slice_index + 1]
+                    rotation_class = int(rng.integers(len(ROTATION_ANGLES) + 1))
+                    angle = ROTATION_ANGLES[rotation_class - 1] if rotation_class > 0 else 0
+                    x_rotated = np.rot90(x_np, k=rotation_class, axes=(-2, -1)).copy()
+                    x = torch.from_numpy(x_rotated).to(device)
+                    logits = classifier_head(encoder(x))
+                    target_tensor = torch.tensor([rotation_class], device=device)
+                    batch_loss_tensor = batch_loss_tensor + criterion(logits, target_tensor)
+                    batch_samples += 1
+                    rotations_applied[angle] += 1
+                if batch_samples == 0:
+                    continue
+                loss = batch_loss_tensor / batch_samples
+                loss.backward()
+                optimizer.step()
+                epoch_batch_losses.append(float(loss.item()))
+            if epoch_batch_losses:
+                mean_epoch_loss = float(np.mean(epoch_batch_losses))
+                epoch_losses.append(mean_epoch_loss)
+                if epoch == 0:
+                    first_loss = mean_epoch_loss
+                last_loss = mean_epoch_loss
+
+            # Validation pass every 5 epochs and at the final epoch.
+            if (epoch + 1) % 5 == 0 or epoch == REPR_EPOCHS - 1:
+                encoder.eval()
+                classifier_head.eval()
+                val_losses = []
+                with torch.no_grad():
+                    for global_index in val_indices:
+                        study_np = tensors[global_index]
+                        flat_slices = study_np.reshape(-1, *study_np.shape[-3:])
+                        for slice_index in range(min(len(flat_slices), 4)):
+                            x_np = flat_slices[slice_index : slice_index + 1]
+                            rotation_class = int(rng.integers(len(ROTATION_ANGLES) + 1))
+                            x_rotated = np.rot90(x_np, k=rotation_class, axes=(-2, -1)).copy()
+                            x = torch.from_numpy(x_rotated).to(device)
+                            logits = classifier_head(encoder(x))
+                            target_tensor = torch.tensor([rotation_class], device=device)
+                            val_losses.append(float(criterion(logits, target_tensor).item()))
+                if val_losses:
+                    mean_val_loss = float(np.mean(val_losses))
+                    epoch_val_losses.append(mean_val_loss)
+                    best_val_loss = min(best_val_loss, mean_val_loss)
+                encoder.train()
+                classifier_head.train()
+
+        elapsed = time.monotonic() - started
+        summary = {
+            "schema_version": 1,
+            "gate": "repr-v0",
+            "r16_code_commit": R16_COMMIT,
+            "bundle_sha256": EXPECTED_BUNDLE_SHA256,
+            "pretext_task": "rotation_prediction",
+            "rotation_angles": list(ROTATION_ANGLES),
+            "n_studies_total": len(keys),
+            "n_studies_preprocessed": n_eligible,
+            "n_series_processed": series_processed,
+            "skip_reason_counts": dict(sorted(skip_reasons.items())),
+            "train_study_count": len(train_indices),
+            "val_study_count": len(val_indices),
+            "epochs_completed": len(epoch_losses),
+            "first_train_loss": rounded_float(first_loss),
+            "last_train_loss": rounded_float(last_loss),
+            "loss_decrease_ratio": rounded_float(first_loss / last_loss) if last_loss > 0 else None,
+            "best_val_loss": rounded_float(best_val_loss),
+            "val_evaluations": len(epoch_val_losses),
+            "rotation_distribution": {str(k): v for k, v in sorted(rotations_applied.items())},
+            "hidden_dim": REPR_HIDDEN,
+            "learning_rate": REPR_LEARNING_RATE,
+            "batch_size": REPR_BATCH_SIZE,
+            "seed": SEED,
+            "privacy": {
+                "raw_reports_read": False,
+                "labels_used_in_training": False,
+                "identifiers_emitted": False,
+                "pixels_accessed": True,
+                "external_api_calls": 0,
+            },
+            "elapsed_seconds": rounded_float(elapsed),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / ".repr_v0_summary.json.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / "repr_v0_summary.json")
+        print(
+            f"event=repr_v0_complete studies={n_eligible}"
+            f" train={len(train_indices)} val={len(val_indices)}"
+            f" epochs={len(epoch_losses)} first_loss={rounded_float(first_loss)}"
+            f" last_loss={rounded_float(last_loss)}"
+        )
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
