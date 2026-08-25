@@ -2139,21 +2139,66 @@ def _weak_label_state_for_target(report_text, target):
     """Apply one embedded ontology rule family to a normalized report."""
     _install_weak_label_modules()
     from rsna_knee.labels.normalization import normalize_report
-    from rsna_knee.labels.rule_labeler import apply_rule_labeler
+    from rsna_knee.labels.rule_labeler import _SENTENCE_SPLIT, apply_rule_labeler
 
     positive_terms, negative_terms, uncertain_terms = _ONTOLOGY_RULES[target]
+    normalized = normalize_report(report_text)
     result = apply_rule_labeler(
-        normalize_report(report_text),
+        normalized,
         target_column=target,
         positive_terms=positive_terms,
         negative_terms=negative_terms,
         uncertain_terms=uncertain_terms,
     )
     state = result.label_state or "not_mentioned"
+
+    # Build evidence sentences with +/-1 sentence context for human review.
+    # Sentences are grouped by section; we locate the match inside its section.
+    evidence_sentences = []
+    for match in result.matches:
+        # Find the containing section.
+        section = None
+        for sec in normalized.sections:
+            if sec.start_offset <= match.span_start < sec.end_offset:
+                section = sec
+                break
+        if section is None:
+            continue
+        # Split section body into sentences with offsets relative to section start.
+        local_start = match.span_start - section.start_offset
+        sents: list[tuple[int, str]] = []
+        pos = 0
+        for part in _SENTENCE_SPLIT.split(section.text):
+            stripped = part.strip()
+            if not stripped:
+                continue
+            off = section.text.find(stripped, pos)
+            sents.append((off, stripped))
+            pos = off + len(stripped)
+        sent_idx = None
+        for si, (off, sent) in enumerate(sents):
+            if off <= local_start < off + len(sent):
+                sent_idx = si
+                break
+        if sent_idx is None:
+            continue
+        lo = max(0, sent_idx - 1)
+        hi = min(len(sents), sent_idx + 2)
+        context = " ".join(s[1] for s in sents[lo:hi])
+        matched_sentence = sents[sent_idx][1]
+        evidence_sentences.append({
+            "matched_sentence": matched_sentence,
+            "context": context,
+            "section": match.section.value,
+            "term": match.term,
+            "state": match.state.value if hasattr(match.state, "value") else str(match.state),
+        })
+
     evidence = {
         "match_count": len(result.matches),
         "section_counts": dict(Counter(match.section.value for match in result.matches)),
         "state_match_counts": dict(Counter(match.state for match in result.matches)),
+        "evidence_sentences": evidence_sentences[:5],
     }
     return state, float(result.confidence), evidence
 
@@ -2259,6 +2304,7 @@ def run_weak_labels_v1():
                             "language": language,
                             "section_counts": evidence["section_counts"],
                             "state_match_counts": evidence["state_match_counts"],
+                            "evidence_sentences": evidence["evidence_sentences"],
                             "priority_reason": "review_flagged_ambiguity_family",
                         }
                     )
