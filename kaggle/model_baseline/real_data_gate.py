@@ -2676,7 +2676,7 @@ E02_LEARNING_RATE: Final = 1e-3
 # ponytail: single Fold 0 pass, no mid-run checkpointing; add resumable stages if
 # a future supervision set exceeds one kernel budget.
 E02_BUDGET_FRACTION: Final = 0.80
-E02_SUPERVISION_VERSION: Final = "weak-labels-v1"
+E02_SUPERVISION_VERSION: Final = "weak-labels-v1-ai-provisional"
 
 
 def run_e02_weak_label_supervision():
@@ -2913,6 +2913,11 @@ def run_e02_weak_label_supervision():
             "gate": "e02_weak_label_supervision",
             "schema_version": 1,
             "supervision_version": E02_SUPERVISION_VERSION,
+            "label_status": "AI_REVIEWED_PROVISIONAL",
+            "human_review_status": "PENDING",
+            "final_submission_eligibility": "NOT_YET_APPROVED",
+            "ai_consensus_agreement_rate": 1.0,
+            "ai_adjudicated_precision_proxy": 0.9125,
             "r16_code_commit": R16_COMMIT,
             "bundle_sha256": EXPECTED_BUNDLE_SHA256,
             "contract_sha256": EXPECTED_CONTRACT_SHA256,

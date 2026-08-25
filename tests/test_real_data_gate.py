@@ -229,7 +229,7 @@ class TestWeakLabelsV1Policy:
         assert gate.E02_EPOCHS == 30
         assert gate.E02_LEARNING_RATE == 1e-3
         assert gate.E02_BATCH_SIZE == 8
-        assert gate.E02_SUPERVISION_VERSION == "weak-labels-v1"
+        assert gate.E02_SUPERVISION_VERSION == "weak-labels-v1-ai-provisional"
 
     def test_packager_includes_e02_entry_point(self, tmp_path: Path) -> None:
         repo_root = Path(__file__).resolve().parents[1]
