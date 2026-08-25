@@ -2053,7 +2053,7 @@ def _reconcile_population(competition_root, bundle_root):
     try:
         if _sha256_file(contract_path) != EXPECTED_CONTRACT_SHA256:
             raise GateError("contract_identity_mismatch")
-        expected = int(json.loads(contract_path.read_bytes())["data_interface"]["train_studies"])
+        expected = int(json.loads(contract_path.read_bytes())["data"]["train_studies"])
     except (GateError, KeyError, TypeError, json.JSONDecodeError) as error:
         raise GateError("contract_invalid") from error
     keys, _ = read_study_labels(competition_root / "train.csv")
