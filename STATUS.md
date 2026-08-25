@@ -1,6 +1,28 @@
 # Status
 
-Updated: 2026-08-24 (Chunk 7 weak-labels-v1 extraction and repr-v0 representation-learning proof)
+Updated: 2026-08-25 (repr-v0 full-population COMPLETE; weak-labels-v1 human review pending)
+
+### repr-v0 full-population terminal result 2026-08-25
+
+Kernel lavicheema/rsna-knee-model-gate-7497f42-2b0f62ee5feb-rv0 v1 COMPLETE in 21,577 s
+(6h 0m of the 8h budget; GPU). Output download privacy scan PASS: zero UID/UUID/
+credential patterns, no DICM markers in summary or log.
+
+- Population: 3,994/4,407 studies preprocessed (16,564 series); skips:
+  uneven_slice_spacing=391, laterality_invalid=19, pixel_data_inconsistent=2,
+  blank_slice=1. Skip pattern diffuse, consistent with the aggregate skip audit.
+- Rotation-prediction pretext: 20 epochs, seed 42, TinyCNNShared hidden_dim=64.
+  Train loss 1.348 -> 0.771 (decrease ratio 1.748x vs 1.477x bounded baseline).
+  Best val loss 0.7241, below even the bounded run train loss: full population
+  materially improves learned representations. Val evaluated at 4 checkpoints
+  over 399 held-out studies.
+- Rotation class distribution near-uniform: {0:18049, 90:17904, 180:18178, 270:17769}.
+- Integrity: r16 commit da5b9c8 and bundle SHA 91ed07921059 match frozen identities;
+  labels_used_in_training=false; external_api_calls=0; identifiers_emitted=false;
+  raw_reports_read=false; pixels_accessed=true inside Kaggle only.
+- Disposition: repr-v0 accepted as the controlled image-only representation-learning
+  track; no architecture redesign. E02 launch gate unchanged: requires completed
+  80-row human review worksheet, recalibrated rule precision, weak-labels-v1 freeze.
 
 ### Chunk 7 weak-labels-v1 and repr-v0 status 2026-08-24
 
