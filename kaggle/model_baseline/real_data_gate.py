@@ -2622,3 +2622,309 @@ def run_repr_v0():
         if str(runtime_root) in sys.path:
             sys.path.remove(str(runtime_root))
         shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+E02_BATCH_SIZE: Final = 8
+E02_EPOCHS: Final = 30
+E02_LEARNING_RATE: Final = 1e-3
+# ponytail: single Fold 0 pass, no mid-run checkpointing; add resumable stages if
+# a future supervision set exceeds one kernel budget.
+E02_BUDGET_FRACTION: Final = 0.80
+E02_SUPERVISION_VERSION: Final = "weak-labels-v1"
+
+
+def run_e02_weak_label_supervision():
+    """Fold 0 training on weak-label supervision with E01R frozen controls.
+
+    Same TinyCNNShared, r16 preprocessing, grouped folds, seed, pooling, optimizer,
+    epochs, batch size. Only the supervision source changes: unmasked weak-label
+    cells replace official labels, weighted by confidence tier. Official labels
+    are used only for held-out evaluation.
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    budget = BUDGET_SECONDS * E02_BUDGET_FRACTION
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    reconciliation = _reconcile_population(competition_root, bundle_root)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        keys, official = read_study_labels(competition_root / "train.csv")
+        assignments, _ = assign_grouped_folds(keys, official)
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+
+        # Weak-label states for every study/target using the frozen v1 engine.
+        weak_states: list[dict[str, tuple[str, float]]] = []
+        per_target = {target: Counter() for target in TARGETS}
+        language_counts: Counter = Counter()
+        tier_names = ("high_ge_0.9", "medium_0.7_to_0.9", "low_lt_0.7")
+        confidence_tiers: Counter = Counter({name: 0 for name in tier_names})
+        for _index, raw_row in enumerate(_read_bounded_csv(competition_root / "train.csv")[1]):
+            raw_report = raw_row.get("Report") or ""
+            language_counts[_detect_report_language(raw_report)] += 1
+            row_states: dict[str, tuple[str, float]] = {}
+            for target in TARGETS:
+                state, rule_confidence, _evidence = _weak_label_state_for_target(raw_report, target)
+                ambiguous = target in _AMBIGUOUS_TARGETS and state != "not_mentioned"
+                usable = state != "not_mentioned" and not ambiguous
+                row_states[target] = (state if usable else "masked", rounded_float(rule_confidence))
+                stats = per_target[target]
+                stats["studies"] += 1
+                if usable:
+                    stats["unmasked_supervision_cells"] += 1
+                    stats[state] += 1
+                    if rule_confidence >= 0.9:
+                        tier = "high_ge_0.9"
+                    elif rule_confidence >= 0.7:
+                        tier = "medium_0.7_to_0.9"
+                    else:
+                        tier = "low_lt_0.7"
+                    stats[tier] += 1
+                    confidence_tiers[tier] += 1
+            weak_states.append(row_states)
+
+        def _has_weak_cell(index):
+            return any(state != "masked" for state, _c in weak_states[index].values())
+
+        fold_buckets = {f: [] for f in range(N_SPLITS)}
+        for index in range(len(keys)):
+            if _has_weak_cell(index):
+                fold_buckets[assignments[keys[index]]].append(index)
+        for fold in fold_buckets:
+            fold_buckets[fold].sort(key=lambda i: (-int(_has_weak_cell(i)), i))
+        ordered_indices = []
+        for round_index in range(max((len(b) for b in fold_buckets.values()), default=0)):
+            for fold in range(N_SPLITS):
+                if round_index < len(fold_buckets[fold]):
+                    ordered_indices.append(fold_buckets[fold][round_index])
+        tensors = {}
+        skip_reasons: Counter = Counter()
+        series_processed = 0
+        for index in ordered_indices:
+            if time.monotonic() - started > budget * 0.55:
+                break
+            key = keys[index]
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[index] = np.stack(study_tensors, axis=0).astype(np.float32)
+
+        train_indices = sorted(i for i in tensors if assignments[keys[i]] != 0)
+        val_indices = sorted(i for i in tensors if assignments[keys[i]] == 0)
+        if not train_indices or not val_indices:
+            raise GateError("split_empty")
+
+        gpu_usable = False
+        if torch.cuda.is_available():
+            try:
+                capability = torch.cuda.get_device_capability(0)
+                gpu_usable = bool(capability[0] >= 7)
+            except Exception:
+                pass
+        device = torch.device("cuda" if gpu_usable else "cpu")
+        torch.manual_seed(SEED)
+        model = TinyCNNShared().to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=E02_LEARNING_RATE, weight_decay=0.0)
+        rng = np.random.default_rng(SEED)
+        order = np.arange(len(train_indices))
+        epoch_train_losses: list = []
+        first_loss = float("nan")
+        last_loss = float("nan")
+        best_loss = float("inf")
+        for epoch in range(E02_EPOCHS):
+            rng.shuffle(order)
+            epoch_losses = []
+            for batch_start in range(0, len(order), E02_BATCH_SIZE):
+                batch_ids = order[batch_start : batch_start + E02_BATCH_SIZE]
+                batch_cells = sum(
+                    1
+                    for i in batch_ids
+                    for state, _c in weak_states[train_indices[i]].values()
+                    if state != "masked"
+                )
+                if batch_cells == 0:
+                    continue
+                optimizer.zero_grad()
+                batch_loss_tensor = torch.zeros((), device=device)
+                for local_index in batch_ids:
+                    global_index = train_indices[local_index]
+                    x_np = tensors[global_index][np.newaxis]
+                    x = torch.from_numpy(x_np).to(device)
+                    logits = model(x)[0]
+                    loss_terms = torch.zeros(len(TARGETS), device=device)
+                    weights = torch.zeros(len(TARGETS), device=device)
+                    for t_index, target in enumerate(TARGETS):
+                        state, conf = weak_states[global_index][target]
+                        if state == "masked":
+                            continue
+                        weight = 1.0 if conf >= 0.9 else 0.5
+                        label_value = 1.0 if state == "positive" else 0.0
+                        loss_terms[t_index] = nn.functional.binary_cross_entropy_with_logits(
+                            logits[t_index],
+                            torch.tensor(label_value, device=device),
+                            reduction="none",
+                        )
+                        weights[t_index] = weight
+                    denom = weights.sum()
+                    if denom.item() > 0:
+                        batch_loss_tensor = batch_loss_tensor + (loss_terms * weights).sum() / denom
+                if batch_loss_tensor.item() == 0:
+                    continue
+                batch_loss_tensor.backward()
+                optimizer.step()
+                epoch_losses.append(float(batch_loss_tensor.item()) / max(len(batch_ids), 1))
+            mean_epoch_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
+            epoch_train_losses.append(rounded_float(mean_epoch_loss))
+            if epoch == 0:
+                first_loss = mean_epoch_loss
+            last_loss = mean_epoch_loss
+            best_loss = min(best_loss, mean_epoch_loss)
+            if time.monotonic() - started > budget - 600:
+                break
+
+        model.eval()
+        train_scores = np.zeros((len(train_indices), len(TARGETS)), dtype=np.float64)
+        with torch.no_grad():
+            for row_local, global_index in enumerate(train_indices):
+                x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                logits = model(x)[0]
+                train_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
+        val_losses = []
+        val_scores = np.zeros((len(val_indices), len(TARGETS)), dtype=np.float64)
+        with torch.no_grad():
+            for row_local, global_index in enumerate(val_indices):
+                x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                logits = model(x)[0]
+                val_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
+                obs_row = np.array(
+                    [
+                        1.0 if np.isfinite(official[global_index][t]) else 0.0
+                        for t in range(len(TARGETS))
+                    ]
+                )
+                tgt_np = np.nan_to_num(official[global_index], nan=0.0).astype(np.float32)
+                obs_tensor = torch.from_numpy(obs_row.astype(np.float32)).to(device)
+                tgt_tensor = torch.from_numpy(tgt_np).to(device)
+                raw_val_loss = nn.functional.binary_cross_entropy_with_logits(
+                    logits, tgt_tensor, reduction="none"
+                )
+                denom = obs_tensor.sum().item()
+                if denom > 0:
+                    val_losses.append(float(((raw_val_loss * obs_tensor).sum() / denom).item()))
+        computed_aucs = {}
+        support = {}
+        for t_index, target in enumerate(TARGETS):
+            truth = []
+            scores = []
+            pos = neg = 0
+            for row_local, global_index in enumerate(val_indices):
+                label_value = official[global_index][t_index]
+                if not np.isfinite(label_value):
+                    continue
+                truth.append(float(label_value))
+                scores.append(val_scores[row_local][t_index])
+                if label_value == 1.0:
+                    pos += 1
+                else:
+                    neg += 1
+            support[target] = {"positive": pos, "negative": neg}
+            if pos > 0 and neg > 0 and len(truth) >= 4:
+                auc = pairwise_auc(np.array(truth), np.array(scores))
+                if auc is not None:
+                    computed_aucs[target] = rounded_float(auc)
+        macro_auc = (
+            rounded_float(float(np.mean(list(computed_aucs.values())))) if computed_aucs else None
+        )
+        peak_memory_mb = 0.0
+        if gpu_usable:
+            peak_memory_mb = float(torch.cuda.max_memory_allocated()) / (1024 * 1024)
+        summary = {
+            "gate": "e02_weak_label_supervision",
+            "schema_version": 1,
+            "supervision_version": E02_SUPERVISION_VERSION,
+            "r16_code_commit": R16_COMMIT,
+            "bundle_sha256": EXPECTED_BUNDLE_SHA256,
+            "contract_sha256": EXPECTED_CONTRACT_SHA256,
+            "population_reconciled": bool(reconciliation.get("difference_reconciled", False)),
+            "weak_label_coverage": {
+                target: {
+                    "studies": per_target[target]["studies"],
+                    "positive": per_target[target].get("positive", 0),
+                    "negative": per_target[target].get("negative", 0),
+                    "uncertain": per_target[target].get("uncertain", 0),
+                    "unmasked_supervision_cells": per_target[target].get(
+                        "unmasked_supervision_cells", 0
+                    ),
+                }
+                for target in TARGETS
+            },
+            "confidence_tier_totals": dict(confidence_tiers),
+            "language_distribution": dict(language_counts),
+            "studies_total": len(keys),
+            "studies_preprocessed": len(tensors),
+            "series_processed": series_processed,
+            "train_study_count": len(train_indices),
+            "val_study_count": len(val_indices),
+            "skip_reason_counts": dict(skip_reasons),
+            "train_bce_first_epoch": rounded_float(first_loss),
+            "train_bce_last_epoch": rounded_float(last_loss),
+            "train_bce_best_epoch": rounded_float(best_loss),
+            "train_bce_per_epoch": epoch_train_losses,
+            "val_bce_mean": rounded_float(float(np.mean(val_losses))) if val_losses else None,
+            "val_per_label_auc_official": computed_aucs,
+            "val_per_label_support_official": support,
+            "val_macro_auc_official": macro_auc,
+            "n_computable_labels": len(computed_aucs),
+            "learning_rate_schedule": "constant",
+            "peak_gpu_memory_mb": rounded_float(peak_memory_mb),
+            "seed": SEED,
+            "privacy": {
+                "raw_reports_read": True,
+                "raw_reports_emitted": False,
+                "labels_used_in_training": "weak_only",
+                "official_labels_used_in_training": False,
+                "identifiers_emitted": False,
+                "pixels_accessed": True,
+                "external_api_calls": 0,
+            },
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / ".e02_summary.json.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / "e02_summary.json")
+        print(f"event=e02_complete train={len(train_indices)} val={len(val_indices)}")
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)

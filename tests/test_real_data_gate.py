@@ -225,6 +225,22 @@ class TestE01RDiagnostic:
 
 
 class TestWeakLabelsV1Policy:
+    def test_e02_constants_declared(self) -> None:
+        assert gate.E02_EPOCHS == 30
+        assert gate.E02_LEARNING_RATE == 1e-3
+        assert gate.E02_BATCH_SIZE == 8
+        assert gate.E02_SUPERVISION_VERSION == "weak-labels-v1"
+
+    def test_packager_includes_e02_entry_point(self, tmp_path: Path) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        output_root = tmp_path / "pkg-e02"
+        result = packager.package(repo_root, output_root, commit="f" * 40, gate="e02")
+        metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
+        notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
+        assert metadata["enable_gpu"] is True
+        assert result["kernel_slug"].endswith("-e2")
+        assert "run_e02_weak_label_supervision" in str(notebook["cells"])
+
     def test_not_mentioned_is_masked_and_ambiguity_targets_fail_closed(self) -> None:
         assert "not_mentioned" not in gate._AMBIGUOUS_TARGETS
         assert set(gate.TARGETS) >= gate._AMBIGUOUS_TARGETS
