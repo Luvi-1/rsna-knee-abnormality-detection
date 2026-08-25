@@ -1183,7 +1183,14 @@ def run_e01_fold_zero_training():
             raise GateError("split_empty")
 
         # Phase 2: build model and train on folds 1-4, validate on fold 0.
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        gpu_usable = False
+        if torch.cuda.is_available():
+            try:
+                capability = torch.cuda.get_device_capability(0)
+                gpu_usable = bool(capability[0] >= 7)
+            except Exception:
+                pass
+        device = torch.device("cuda" if gpu_usable else "cpu")
         torch.manual_seed(SEED)
         model = TinyCNNShared().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=E01_LEARNING_RATE, weight_decay=0.0)
@@ -1686,7 +1693,14 @@ def run_e01r_sparse_supervision_diagnostic():
         observed_val = np.isfinite(val_label_matrix)
 
         # Phase 2: model and supervised-only training with per-batch supervision.
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        gpu_usable = False
+        if torch.cuda.is_available():
+            try:
+                capability = torch.cuda.get_device_capability(0)
+                gpu_usable = bool(capability[0] >= 7)
+            except Exception:
+                pass
+        device = torch.device("cuda" if gpu_usable else "cpu")
         torch.manual_seed(SEED)
         model = TinyCNNShared().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=E01R_LEARNING_RATE, weight_decay=0.0)
@@ -2393,6 +2407,7 @@ REPR_EPOCHS: Final = 20
 REPR_BATCH_SIZE: Final = 16
 REPR_LEARNING_RATE: Final = 5e-4
 REPR_BUDGET_FRACTION: Final = 0.80
+REPR_MAX_STUDIES: Final = 400
 ROTATION_ANGLES: Final = (90, 180, 270)
 REPR_HIDDEN: Final = E00C_HIDDEN
 
@@ -2438,7 +2453,7 @@ def run_repr_v0():
         tensors = {}
         skip_reasons: Counter = Counter()
         series_processed = 0
-        for index in ranked:
+        for index in ranked[:REPR_MAX_STUDIES]:
             if time.monotonic() - started > BUDGET_SECONDS * REPR_BUDGET_FRACTION:
                 break
             key = keys[index]
@@ -2466,7 +2481,14 @@ def run_repr_v0():
         train_indices = eligible_ranked[val_cutoff:]
 
         # Phase 2: rotation-prediction model on TinyCNNShared.features encoder.
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        gpu_usable = False
+        if torch.cuda.is_available():
+            try:
+                capability = torch.cuda.get_device_capability(0)
+                gpu_usable = bool(capability[0] >= 7)
+            except Exception:
+                pass
+        device = torch.device("cuda" if gpu_usable else "cpu")
         torch.manual_seed(SEED)
         encoder_features, _ = _build_tiny_cnn(REPR_HIDDEN, 12)
         classifier_head = nn.Linear(REPR_HIDDEN, len(ROTATION_ANGLES) + 1)
