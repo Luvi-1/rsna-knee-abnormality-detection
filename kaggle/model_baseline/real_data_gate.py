@@ -2407,7 +2407,7 @@ REPR_EPOCHS: Final = 20
 REPR_BATCH_SIZE: Final = 16
 REPR_LEARNING_RATE: Final = 5e-4
 REPR_BUDGET_FRACTION: Final = 0.80
-REPR_MAX_STUDIES: Final = 400
+REPR_BUDGET_SECONDS: Final = 28800
 ROTATION_ANGLES: Final = (90, 180, 270)
 REPR_HIDDEN: Final = E00C_HIDDEN
 
@@ -2453,8 +2453,8 @@ def run_repr_v0():
         tensors = {}
         skip_reasons: Counter = Counter()
         series_processed = 0
-        for index in ranked[:REPR_MAX_STUDIES]:
-            if time.monotonic() - started > BUDGET_SECONDS * REPR_BUDGET_FRACTION:
+        for index in ranked:
+            if time.monotonic() - started > REPR_BUDGET_SECONDS:
                 break
             key = keys[index]
             study_tensors = []
