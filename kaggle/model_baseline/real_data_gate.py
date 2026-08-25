@@ -2266,7 +2266,7 @@ def run_weak_labels_v1():
             if time.monotonic() - started > BUDGET_SECONDS - 600:
                 raise GateError("weak_label_budget_exceeded")
 
-        exact_states_written = sum(len(states) * 2 for states in states_by_index) + 2 * len(TARGETS)
+        exact_states_written = sum(len(states) for states in states_by_index) + len(TARGETS)
         if exact_states_written > MAX_STATE_ROWS:
             raise GateError("state_inventory_too_large")
         inventory_digest = hashlib.sha256(
