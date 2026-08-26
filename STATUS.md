@@ -458,3 +458,36 @@ preparation, and fresh successor smoke remain pending, and Run A is not authoriz
   and renewed explicit human approval.
 - Human review remains NOT_STARTED; Chunk 5 remains technically incomplete; submission, merge,
   publication, and Chunk 6 remain blocked.
+
+
+### E03 cross-fit weak-label evaluation terminal result 2026-08-26
+
+Kernel lavicheema/rsna-knee-model-gate-1a5faf2-d261041b8568-e3 v1 COMPLETE in
+7,910 s (~2h12m of the 8.5h budget) on 2x Tesla T4 (sm_75). Preflight PASS:
+torch 2.10.0+cu128 supports sm_75, real forward/backward smoke OK, peak GPU
+227 MB. Output download privacy scan PASS: zero UID/UUID/credential patterns,
+no DICM markers, no raw reports in summary or log.
+
+- Population: 4,407 studies total; 1,456 preprocessed across 5 folds (6,049
+  series); skips: uneven_slice_spacing=136, laterality_invalid=2, blank_slice=1.
+  Skips are diffuse and not concentrated by label or scanner.
+- Pooled OOF macro AUC over all 12 targets: **0.497** (95% CI [0.450, 0.543],
+  study-level bootstrap n=2000, seed=42). Essentially chance.
+- Per-fold macro AUCs: fold0 0.474, fold1 0.484, fold2 0.400,
+  fold3 0.537, fold4 0.347.
+- Best labels: Effusion 0.678 (pos 33 / neg 22), Synovitis 0.622
+  (pos 26 / neg 29). Worst: Baker's 0.314, Lateral Meniscus 0.394.
+- Weak-label coverage under v1 policy: only Effusion (1,521 cells) and
+  Synovitis (302 cells) unmasked; remaining 10 targets contribute zero weak
+  supervision cells.
+- Official labels used only for held-out evaluation; never during training.
+- E01R comparison is contextual only: E01R val AUC was fold-0-only at 0.371;
+  E03 pooled OOF is a stronger estimate but still not above chance.
+
+Decision: weak-label supervision quality is the bottleneck, not infrastructure.
+The accelerator preflight + T4 pin resolved the earlier CPU-fallback issue, but
+the model does not generalize from AI-reviewed provisional labels to official
+labels beyond noise. Next step should target label quality (e.g., completed
+human review of the 80-row worksheet, expanded ontology, or multilingual rule
+coverage), not more architecture tuning.
+
