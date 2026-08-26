@@ -257,6 +257,8 @@ class TestWeakLabelsV1Policy:
         [
             ("row_id", "review_worksheet_row_id_invalid"),
             ("matched_sentence", "review_worksheet_evidence_incomplete"),
+            ("preceding_context", "review_worksheet_evidence_incomplete"),
+            ("following_context", "review_worksheet_evidence_incomplete"),
             ("proposed_state_blinded", "review_proposal_blinding_invalid"),
         ],
     )
@@ -326,6 +328,27 @@ class TestWeakLabelsV1Policy:
         assert state == "negative"
         assert 0.0 <= confidence <= 1.0
         assert evidence["match_count"] >= 1
+
+    def test_evidence_at_report_boundary_uses_explicit_markers(self) -> None:
+        _state, _confidence, evidence = gate._weak_label_state_for_target(
+            "FINDINGS:\nNo joint effusion.", "Effusion"
+        )
+        record = evidence["review_evidence"][0]
+        assert record["matched_sentence"] == "No joint effusion."
+        assert record["preceding_context"] == gate.REVIEW_CONTEXT_REPORT_BEGINNING
+        assert record["following_context"] == gate.REVIEW_CONTEXT_REPORT_END
+
+    def test_evidence_context_crosses_section_boundaries(self) -> None:
+        report = (
+            "FINDINGS:\nThe alignment is normal. No acute fracture.\n\n"
+            "IMPRESSION:\nSmall joint effusion."
+        )
+        _state, _confidence, evidence = gate._weak_label_state_for_target(report, "Effusion")
+        record = evidence["review_evidence"][0]
+        assert record["section"] == "impression"
+        assert record["matched_sentence"] == "Small joint effusion."
+        assert record["preceding_context"] == "The alignment is normal. No acute fracture."
+        assert record["following_context"] == gate.REVIEW_CONTEXT_REPORT_END
 
     def test_packager_includes_weak_v1_entry_point_cpu_only(self, tmp_path: Path) -> None:
         repo_root = Path(__file__).resolve().parents[1]

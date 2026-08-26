@@ -1370,6 +1370,8 @@ VALID_REVIEW_DECISIONS_ORDER: Final[tuple[str, ...]] = (
     "UNCERTAIN",
     "NOT_MENTIONED",
 )
+REVIEW_CONTEXT_REPORT_BEGINNING: Final[str] = "[report beginning]"
+REVIEW_CONTEXT_REPORT_END: Final[str] = "[report end]"
 QUEUE_ROW_SANITIZED_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "study_key_sha256",
@@ -2324,7 +2326,20 @@ def _weak_label_state_for_target(report_text, target):
 
     # Build review-only evidence records. These stay inside Kaggle and are
     # never copied into the downloadable summary payload.
+    # Sentences are indexed across the whole normalized report so context can
+    # cross section boundaries; genuine report boundaries get explicit markers.
     review_evidence = []
+    report_sentences: list[tuple[int, str]] = []
+    for sec in normalized.sections:
+        cursor = 0
+        for part in _SENTENCE_SPLIT.split(sec.text):
+            stripped = part.strip()
+            if not stripped:
+                continue
+            found = sec.text.find(stripped, cursor)
+            report_sentences.append((sec.start_offset + found, stripped))
+            cursor = found + len(stripped)
+
     # Present the decisive match first, then remaining supporting matches.
     ordered_matches = sorted(
         result.matches,
@@ -2340,28 +2355,20 @@ def _weak_label_state_for_target(report_text, target):
                 break
         if section is None:
             continue
-        # Split section body into sentences with offsets relative to section start.
-        local_start = match.span_start - section.start_offset
-        sents: list[tuple[int, str]] = []
-        pos = 0
-        for part in _SENTENCE_SPLIT.split(section.text):
-            stripped = part.strip()
-            if not stripped:
-                continue
-            off = section.text.find(stripped, pos)
-            sents.append((off, stripped))
-            pos = off + len(stripped)
+        sents = report_sentences
         sent_idx = None
         for si, (off, sent) in enumerate(sents):
-            if off <= local_start < off + len(sent):
+            if off <= match.span_start < off + len(sent):
                 sent_idx = si
                 break
         if sent_idx is None:
             continue
         lo = max(0, sent_idx - 2)
         hi = min(len(sents), sent_idx + 3)
-        context_before = " ".join(s[1] for s in sents[lo:sent_idx])
-        context_after = " ".join(s[1] for s in sents[sent_idx + 1 : hi])
+        before_parts = [s[1] for s in sents[lo:sent_idx]]
+        after_parts = [s[1] for s in sents[sent_idx + 1 : hi]]
+        context_before = " ".join(before_parts) if before_parts else REVIEW_CONTEXT_REPORT_BEGINNING
+        context_after = " ".join(after_parts) if after_parts else REVIEW_CONTEXT_REPORT_END
         matched_sentence = sents[sent_idx][1]
         review_evidence.append(
             {
