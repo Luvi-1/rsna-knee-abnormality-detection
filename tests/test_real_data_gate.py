@@ -494,6 +494,7 @@ class TestWeakLabelsV1Policy:
         metadata = json.loads((output_root / "kernel-metadata.json").read_bytes())
         notebook = json.loads((output_root / packager.NOTEBOOK_FILE).read_bytes())
         assert metadata["enable_gpu"] is True
+        assert metadata["machine_shape"] == "NvidiaTeslaT4"
         assert result["kernel_slug"].endswith("-e3")
         assert "run_e03_crossfit_weak_labels" in str(notebook["cells"])
 

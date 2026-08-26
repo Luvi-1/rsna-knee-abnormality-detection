@@ -168,6 +168,7 @@ def package(repo_root, output_root, commit=None, gate=None):
         "keywords": [],
         "language": "python",
         "model_sources": [],
+        **({"machine_shape": "NvidiaTeslaT4"} if enable_gpu else {}),
         "title": (
             f"Rsna Knee Model Gate {commit[:7]} {source_sha256[:12]}{gate_suffix.replace('-', ' ')}"
         ),
