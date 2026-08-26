@@ -1627,6 +1627,49 @@ _RULE_LABELER_SOURCE: Final[str] = (  # type: ignore[misc]
 _WEAK_MODULES_INSTALLED = False
 
 
+def _weak_states_for_population(keys):
+    """Compute frozen weak-labels-v1-ai-provisional states for every study.
+
+    Ambiguous-target matches and not_mentioned states are masked exactly as in
+    the E02 supervision path; this helper exists so cross-fitting reuses the
+    same masking policy without duplicating rule logic.
+    """
+    per_target = {target: Counter() for target in TARGETS}
+    language_counts: Counter = Counter()
+    tier_names = ("high_ge_0.9", "medium_0.7_to_0.9", "low_lt_0.7")
+    confidence_tiers: Counter = Counter({name: 0 for name in tier_names})
+    weak_states: list[dict[str, tuple[str, float]]] = []
+    for _index, raw_row in enumerate(_read_bounded_csv(keys)[1]):
+        raw_report = raw_row.get("Report") or ""
+        language_counts[_detect_report_language(raw_report)] += 1
+        row_states: dict[str, tuple[str, float]] = {}
+        for target in TARGETS:
+            state, rule_confidence, _evidence = _weak_label_state_for_target(raw_report, target)
+            ambiguous = target in _AMBIGUOUS_TARGETS and state != "not_mentioned"
+            usable = state != "not_mentioned" and not ambiguous
+            row_states[target] = (state if usable else "masked", rounded_float(rule_confidence))
+            stats = per_target[target]
+            stats["studies"] += 1
+            if usable:
+                stats["unmasked_supervision_cells"] += 1
+                stats[state] += 1
+                if rule_confidence >= 0.9:
+                    tier = "high_ge_0.9"
+                elif rule_confidence >= 0.7:
+                    tier = "medium_0.7_to_0.9"
+                else:
+                    tier = "low_lt_0.7"
+                stats[tier] += 1
+                confidence_tiers[tier] += 1
+        weak_states.append(row_states)
+    return {
+        "weak_states": weak_states,
+        "per_target": per_target,
+        "language_counts": language_counts,
+        "confidence_tiers": confidence_tiers,
+    }
+
+
 def _install_weak_label_modules():
     """Register the embedded, hash-bound label modules under canonical names."""
     global _WEAK_MODULES_INSTALLED
@@ -2697,6 +2740,338 @@ ROTATION_ANGLES: Final = (90, 180, 270)
 REPR_HIDDEN: Final = E00C_HIDDEN
 
 
+def run_e03_crossfit_weak_labels():
+    """E03: five-fold cross-fitted weak-label evaluation on official holdouts.
+
+    Frozen controls match E02 exactly (TinyCNNShared, r16 preprocessing, grouped
+    folds, seed, AdamW, epochs, batch size). For each fold the model trains on
+    weak labels from the other four folds and generates predictions only for
+    official-label studies in the held-out fold. Official validation labels are
+    never used for training. Pooled out-of-fold predictions support macro AUC,
+    per-target AUC, bootstrap confidence intervals, and the E01R comparison.
+    """
+    import torch
+    from torch import nn
+
+    started = time.monotonic()
+    competition_root = _bounded_mount("competitions", COMPETITION_SLUG)
+    bundle_root = _bounded_mount("datasets", BUNDLE_DATASET_REF)
+    runtime_root = _install_bundle_runtime(bundle_root)
+    sys.path.insert(0, str(runtime_root))
+    try:
+        from rsna_knee.dicom.pipeline import (
+            PipelineVersions,
+            PreprocessingConfig,
+            dicom_to_model,
+        )
+
+        preflight = _accelerator_preflight(torch, require_gpu=True)
+
+        keys, official = read_study_labels(competition_root / "train.csv")
+        assignments, _ = assign_grouped_folds(keys, official)
+        config = PreprocessingConfig(
+            sample_count=SAMPLE_COUNT,
+            resize_rows_columns=RESIZE_SHAPE,
+            adjacent_slice_channels=True,
+        )
+        versions = PipelineVersions(
+            code_commit=R16_COMMIT, source_manifest_version=SOURCE_MANIFEST_VERSION
+        )
+        weak_bundle = _weak_states_for_population(competition_root / "train.csv")
+        weak_states = weak_bundle["weak_states"]
+
+        def _has_weak_cell(index):
+            return any(state != "masked" for state, _c in weak_states[index].values())
+
+        fold_buckets = {f: [] for f in range(N_SPLITS)}
+        for index in range(len(keys)):
+            if _has_weak_cell(index) or np.isfinite(official[index]).any():
+                fold_buckets[assignments[keys[index]]].append(index)
+        for fold in fold_buckets:
+            fold_buckets[fold].sort(
+                key=lambda i: (
+                    -(int(_has_weak_cell(i)) + int(np.isfinite(official[i]).any())),
+                    i,
+                )
+            )
+        ordered_indices = []
+        for round_index in range(max((len(b) for b in fold_buckets.values()), default=0)):
+            for fold in range(N_SPLITS):
+                if round_index < len(fold_buckets[fold]):
+                    ordered_indices.append(fold_buckets[fold][round_index])
+        tensors = {}
+        skip_reasons: Counter = Counter()
+        series_processed = 0
+        preprocess_deadline = started + E03_PREPROCESS_BUDGET_SECONDS
+        for index in ordered_indices:
+            if time.monotonic() > preprocess_deadline:
+                break
+            key = keys[index]
+            study_tensors = []
+            try:
+                for paths in _series_paths(competition_root, key):
+                    result = dicom_to_model(paths, config, versions)
+                    study_tensors.append(result.tensor)
+                    series_processed += 1
+            except Exception as error:  # noqa: BLE001
+                skip_reasons[_safe_series_token(error)] += 1
+                continue
+            if not study_tensors:
+                skip_reasons["no_eligible_series"] += 1
+                continue
+            tensors[index] = np.stack(study_tensors, axis=0).astype(np.float32)
+
+        pooled_rows: list[tuple[int, int]] = []
+        pooled_scores = np.zeros((0, len(TARGETS)), dtype=np.float64)
+        pooled_truth = np.zeros((0, len(TARGETS)), dtype=np.float64)
+        per_fold_records: list[dict] = []
+        total_train_bce_first = float("nan")
+        total_train_bce_last = float("nan")
+        device = torch.device("cuda")
+        for held_fold in range(N_SPLITS):
+            train_indices = sorted(i for i in tensors if assignments[keys[i]] != held_fold)
+            eval_indices = sorted(
+                i
+                for i in tensors
+                if assignments[keys[i]] == held_fold and np.isfinite(official[i]).any()
+            )
+            if not train_indices or not eval_indices:
+                raise GateError("e03_fold_split_empty")
+            torch.manual_seed(SEED + held_fold)
+            model = TinyCNNShared().to(device)
+            optimizer = torch.optim.AdamW(
+                model.parameters(), lr=E03_LEARNING_RATE, weight_decay=0.0
+            )
+            rng = np.random.default_rng(SEED + held_fold)
+            order = np.arange(len(train_indices))
+            epoch_losses: list = []
+            first_loss = float("nan")
+            last_loss = float("nan")
+            train_deadline = min(
+                time.monotonic()
+                + max(E03_TOTAL_BUDGET_SECONDS - (time.monotonic() - started), 600),
+                started + E03_TOTAL_BUDGET_SECONDS - 900 * (N_SPLITS - held_fold - 1),
+            )
+            for epoch in range(E03_EPOCHS):
+                rng.shuffle(order)
+                batch_losses = []
+                for batch_start in range(0, len(order), E03_BATCH_SIZE):
+                    batch_ids = order[batch_start : batch_start + E03_BATCH_SIZE]
+                    batch_cells = sum(
+                        1
+                        for i in batch_ids
+                        for state, _c in weak_states[train_indices[i]].values()
+                        if state != "masked"
+                    )
+                    if batch_cells == 0:
+                        continue
+                    optimizer.zero_grad()
+                    batch_loss_tensor = torch.zeros((), device=device)
+                    for local_index in batch_ids:
+                        global_index = train_indices[local_index]
+                        x_np = tensors[global_index][np.newaxis]
+                        x = torch.from_numpy(x_np).to(device)
+                        logits = model(x)[0]
+                        loss_terms = torch.zeros(len(TARGETS), device=device)
+                        weights = torch.zeros(len(TARGETS), device=device)
+                        for t_index, target in enumerate(TARGETS):
+                            state, conf = weak_states[global_index][target]
+                            if state == "masked":
+                                continue
+                            weight = 1.0 if conf >= 0.9 else 0.5
+                            label_value = 1.0 if state == "positive" else 0.0
+                            loss_terms[t_index] = nn.functional.binary_cross_entropy_with_logits(
+                                logits[t_index],
+                                torch.tensor(label_value, device=device),
+                                reduction="none",
+                            )
+                            weights[t_index] = weight
+                        denom = weights.sum()
+                        if denom.item() > 0:
+                            masked_bce = (loss_terms * weights).sum() / denom
+                            batch_loss_tensor = batch_loss_tensor + masked_bce
+                    if batch_loss_tensor.item() == 0:
+                        continue
+                    batch_loss_tensor.backward()
+                    optimizer.step()
+                    batch_losses.append(float(batch_loss_tensor.item()))
+                mean_epoch_loss = float(np.mean(batch_losses)) if batch_losses else float("nan")
+                epoch_losses.append(rounded_float(mean_epoch_loss))
+                if epoch == 0:
+                    first_loss = mean_epoch_loss
+                last_loss = mean_epoch_loss
+                if time.monotonic() > train_deadline:
+                    break
+            total_train_bce_first = first_loss if held_fold == 0 else total_train_bce_first
+            total_train_bce_last = last_loss if held_fold == N_SPLITS - 1 else total_train_bce_last
+            model.eval()
+            fold_scores = np.zeros((len(eval_indices), len(TARGETS)), dtype=np.float64)
+            with torch.no_grad():
+                for row_local, global_index in enumerate(eval_indices):
+                    x = torch.from_numpy(tensors[global_index][np.newaxis]).to(device)
+                    logits = model(x)[0]
+                    fold_scores[row_local] = torch.sigmoid(logits).cpu().numpy()
+            fold_truth = np.vstack([official[i] for i in eval_indices])
+            observed_eval = np.isfinite(fold_truth)
+            pooled_scores = np.vstack([pooled_scores, fold_scores])
+            pooled_truth = np.vstack([pooled_truth, np.where(observed_eval, fold_truth, np.nan)])
+            for _row_local, global_index in enumerate(eval_indices):
+                pooled_rows.append((global_index, held_fold))
+            per_label_aucs = {}
+            for col, target in enumerate(TARGETS):
+                mask = observed_eval[:, col]
+                auc = rank_auc(fold_truth[mask, col], fold_scores[mask, col])
+                per_label_aucs[target] = rounded_float(auc) if auc is not None else None
+            computed = [v for v in per_label_aucs.values() if v is not None]
+            per_fold_records.append(
+                {
+                    "held_fold": held_fold,
+                    "train_studies": len(train_indices),
+                    "eval_studies_official": len(eval_indices),
+                    "series_processed_cumulative": series_processed,
+                    "epochs_completed": len(epoch_losses),
+                    "train_bce_first_epoch": rounded_float(first_loss),
+                    "train_bce_last_epoch": rounded_float(last_loss),
+                    "per_label_auc_within_fold": per_label_aucs,
+                    "macro_auc_within_fold_over_computable": rounded_float(float(np.mean(computed)))
+                    if computed
+                    else None,
+                }
+            )
+
+        observed_pooled = np.isfinite(pooled_truth)
+        per_target_metrics = {}
+        bootstrap_macro_deltas = []
+        boot_rng = np.random.default_rng(E03_BOOTSTRAP_SEED)
+        n_eval = len(pooled_rows)
+        base_aucs = {}
+        for col, target in enumerate(TARGETS):
+            mask = observed_pooled[:, col]
+            auc = rank_auc(pooled_truth[mask, col], pooled_scores[mask, col])
+            base_aucs[target] = auc
+            pos = int((pooled_truth[mask, col] == 1).sum()) if mask.any() else 0
+            neg = int((pooled_truth[mask, col] == 0).sum()) if mask.any() else 0
+            per_target_metrics[target] = {
+                "auc_rank": rounded_float(auc) if auc is not None else None,
+                "positive_support": pos,
+                "negative_support": neg,
+                "prediction_std": rounded_float(pooled_scores[:, col].std()),
+            }
+        computable_base = [v for v in base_aucs.values() if v is not None]
+        pooled_macro_auc = (
+            rounded_float(float(np.mean(computable_base))) if computable_base else None
+        )
+        for _round in range(E03_BOOTSTRAP_ROUNDS):
+            sample_idx = boot_rng.integers(0, n_eval, size=n_eval)
+            aucs_sample = []
+            for col in range(len(TARGETS)):
+                rows = sample_idx
+                truth_col = pooled_truth[rows, col]
+                score_col = pooled_scores[rows, col]
+                finite_mask = np.isfinite(truth_col)
+                if finite_mask.sum() < 2 or len(np.unique(truth_col[finite_mask])) < 2:
+                    continue
+                auc_value = rank_auc(truth_col[finite_mask], score_col[finite_mask])
+                if auc_value is not None:
+                    aucs_sample.append(auc_value)
+            if aucs_sample:
+                bootstrap_macro_deltas.append(float(np.mean(aucs_sample)))
+        ci_low = ci_high = None
+        if bootstrap_macro_deltas:
+            ordered = np.sort(bootstrap_macro_deltas)
+            ci_low = rounded_float(float(ordered[int(0.025 * len(ordered))]))
+            ci_high = rounded_float(
+                float(ordered[min(int(0.975 * len(ordered)), len(ordered) - 1)])
+            )
+        e01r_comparison = {
+            "note": (
+                "E01R was fold-0 only; its val AUCs are not pooled OOF. Comparison is contextual."
+            ),
+            "e01r_val_macro_auc_official": 0.371,
+            "e03_pooled_macro_auc_official": pooled_macro_auc,
+        }
+        summary = {
+            "schema_version": 1,
+            "gate": "e03_crossfit_weak_labels",
+            "supervision_version": E02_SUPERVISION_VERSION,
+            "label_status": "AI_REVIEWED_PROVISIONAL",
+            "human_review_status": "PENDING",
+            "r16_code_commit": R16_COMMIT,
+            "source_manifest_version": SOURCE_MANIFEST_VERSION,
+            "bundle_sha256": EXPECTED_BUNDLE_SHA256,
+            "accelerator_preflight": preflight,
+            "model_config": {
+                "architecture": "tiny_cnn_3conv_16-32-64_adaptive_pool_linear12",
+                "epochs_per_fold": E03_EPOCHS,
+                "learning_rate": E03_LEARNING_RATE,
+                "weight_decay": 0.0,
+                "optimizer": "adamw",
+                "seed_base": SEED,
+                "batch_size": E03_BATCH_SIZE,
+                "n_splits": N_SPLITS,
+                "device": device.type,
+            },
+            "studies_total": len(keys),
+            "studies_preprocessed": len(tensors),
+            "series_processed_total": series_processed,
+            "skip_reason_counts": dict(skip_reasons),
+            "official_eval_studies_pooled": n_eval,
+            "official_eval_cells_pooled": int(observed_pooled.sum()),
+            "per_target": per_target_metrics,
+            "pooled_macro_oof_auc": pooled_macro_auc,
+            "bootstrap": {
+                "rounds": E03_BOOTSTRAP_ROUNDS,
+                "seed": E03_BOOTSTRAP_SEED,
+                "macro_auc_ci95_low": ci_low,
+                "macro_auc_ci95_high": ci_high,
+                "method": "study-level percentile bootstrap",
+            },
+            "e01r_comparison": e01r_comparison,
+            "weak_label_coverage_summary": {
+                target: {
+                    "studies": weak_bundle["per_target"][target]["studies"],
+                    "unmasked_supervision_cells": weak_bundle["per_target"][target].get(
+                        "unmasked_supervision_cells", 0
+                    ),
+                }
+                for target in TARGETS
+            },
+            "language_distribution": dict(sorted(weak_bundle["language_counts"].items())),
+            "confidence_tier_totals": dict(weak_bundle["confidence_tiers"]),
+            "per_fold": per_fold_records,
+            "train_bce_first_epoch_fold0": rounded_float(total_train_bce_first),
+            "train_bce_last_epoch_fold4": rounded_float(total_train_bce_last),
+            "peak_gpu_memory_mb": round(torch.cuda.max_memory_allocated() / (1024 * 1024)),
+            "privacy": {
+                "raw_reports_read": True,
+                "raw_reports_emitted": False,
+                "labels_used_in_training": "weak_only",
+                "official_labels_used_in_training": False,
+                "identifiers_emitted": False,
+                "pixels_accessed": True,
+                "external_api_calls": 0,
+            },
+            "elapsed_seconds": rounded_float(time.monotonic() - started),
+        }
+        payload = _canonical_json_bytes(summary)
+        if not 0 < len(payload) <= MAX_SUMMARY_BYTES * 2:
+            raise GateError("summary_size_invalid")
+        output_root = Path("/kaggle/working")
+        output_root.mkdir(parents=True, exist_ok=True)
+        temporary = output_root / ".e03_summary.json.tmp"
+        temporary.write_bytes(payload)
+        os.replace(temporary, output_root / "e03_summary.json")
+        print(
+            f"event=e03_complete pooled_studies={n_eval}"
+            f" macro_auc={pooled_macro_auc} elapsed={rounded_float(time.monotonic() - started)}"
+        )
+        return 0
+    finally:
+        if str(runtime_root) in sys.path:
+            sys.path.remove(str(runtime_root))
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+
 def run_repr_v0():
     """Image-only rotation-prediction pretraining on all eligible MRI studies.
 
@@ -2916,6 +3291,100 @@ E02_LEARNING_RATE: Final = 1e-3
 # a future supervision set exceeds one kernel budget.
 E02_BUDGET_FRACTION: Final = 0.80
 E02_SUPERVISION_VERSION: Final = "weak-labels-v1-ai-provisional"
+E03_EPOCHS: Final = 30
+E03_LEARNING_RATE: Final = 1e-3
+E03_BATCH_SIZE: Final = 8
+E03_PREPROCESS_BUDGET_SECONDS: Final = 21600
+E03_TOTAL_BUDGET_SECONDS: Final = 30600
+E03_BOOTSTRAP_ROUNDS: Final = 2000
+E03_BOOTSTRAP_SEED: Final = 42
+_DEVICE_NAME_SAFE: Final = __import__("re").compile(r"[^A-Za-z0-9 ._()-]")
+
+
+def _sanitize_device_name(name):
+    """Disclosure-safe GPU marketing name without vendor-internal tokens."""
+    cleaned = _DEVICE_NAME_SAFE.sub("?", str(name))[:64]
+    return cleaned or "unknown"
+
+
+def _arch_supports_capability(arch_list, capability):
+    """True when the packaged CUDA build can run this device's compute capability."""
+    target = capability[0] * 10 + capability[1]
+    for arch in arch_list:
+        if arch == f"sm_{capability[0]}{capability[1]}":
+            return True
+        if arch.startswith("compute_"):
+            try:
+                ptx = int(arch[len("compute_") :])
+            except ValueError:
+                continue
+            if ptx <= target:
+                return True
+    return False
+
+
+def _accelerator_preflight(torch_module, *, require_gpu=True):
+    """Authenticate the assigned accelerator before any serious training run.
+
+    Verifies GPU model, compute capability, packaged torch CUDA architecture
+    support, and one real tensor forward/backward smoke. Serious experiments
+    must fail closed here instead of silently falling back to CPU; explicit
+    diagnostics may opt out with require_gpu=False.
+    """
+    if not torch_module.cuda.is_available():
+        if require_gpu:
+            raise GateError("preflight_cuda_unavailable")
+        return {"gpu_required": False, "device_count": 0, "devices": [], "smoke": None}
+    device_count = torch_module.cuda.device_count()
+    if device_count < 1:
+        raise GateError("preflight_no_device")
+    arch_list = list(torch_module.cuda.get_arch_list())
+    devices = []
+    for index in range(min(device_count, 2)):
+        capability = tuple(torch_module.cuda.get_device_capability(index))
+        devices.append(
+            {
+                "name": _sanitize_device_name(torch_module.cuda.get_device_name(index)),
+                "compute_capability": f"{capability[0]}.{capability[1]}",
+                "supported_in_build": _arch_supports_capability(arch_list, capability),
+                "total_memory_gb": rounded_float(
+                    torch_module.cuda.get_device_properties(index).total_memory / 1e9
+                ),
+            }
+        )
+    if require_gpu and not all(device["supported_in_build"] for device in devices):
+        raise GateError("preflight_capability_unsupported")
+    device = torch_module.device("cuda")
+    x = torch_module.arange(12, device=device, dtype=torch_module.float32).reshape(3, 4)
+    weight = torch_module.ones((4, 2), device=device, requires_grad=True)
+    out = x @ weight
+    loss = out.square().mean()
+    loss.backward()
+    reference = (x.detach().cpu()) @ (weight.detach().cpu())
+    max_diff = float((out.detach().cpu() - reference).abs().max().item())
+    grad_norm = float(weight.grad.norm().item())
+    smoke_ok = bool(
+        torch_module.cuda.synchronize() is None
+        and max_diff <= 1e-4
+        and grad_norm > 0.0
+        and bool(torch_module.isfinite(weight.grad).all().item())
+    )
+    if require_gpu and not smoke_ok:
+        raise GateError("preflight_smoke_failed")
+    return {
+        "gpu_required": require_gpu,
+        "device_count": device_count,
+        "devices": devices,
+        "torch_version": str(torch_module.__version__),
+        "torch_cuda_arch_list": arch_list,
+        "cuda_runtime_version": str(torch_module.version.cuda),
+        "smoke": {
+            "matmul_max_abs_diff_vs_cpu": rounded_float(max_diff),
+            "backward_grad_norm": rounded_float(grad_norm),
+            "grad_finite": True,
+            "status": "pass" if smoke_ok else "fail",
+        },
+    }
 
 
 def run_e02_weak_label_supervision():

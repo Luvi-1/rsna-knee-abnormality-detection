@@ -26,6 +26,7 @@ GATE_ENTRY_POINTS: Final = {
     "weak_v1": "run_weak_labels_v1",
     "repr_v0": "run_repr_v0",
     "e02": "run_e02_weak_label_supervision",
+    "e03": "run_e03_crossfit_weak_labels",
     "default": "run_real_data_gate",
 }
 GATE_SLUG_SUFFIX: Final = {
@@ -37,6 +38,7 @@ GATE_SLUG_SUFFIX: Final = {
     "weak_v1": "-wv1",
     "repr_v0": "-rv0",
     "e02": "-e2",
+    "e03": "-e3",
     "default": "",
 }
 
@@ -131,7 +133,7 @@ def package(repo_root, output_root, commit=None, gate=None):
     if commit is not None and HEX_40.fullmatch(commit) is None:
         raise PackagingError("argument_invalid")
     entry_point = GATE_ENTRY_POINTS[gate or "default"]
-    enable_gpu = gate in ("e00c", "e01", "e01r", "repr_v0", "e02")
+    enable_gpu = gate in ("e00c", "e01", "e01r", "repr_v0", "e02", "e03")
     if output_root.exists():
         raise PackagingError("output_root_exists")
     output_root.mkdir(parents=False)
