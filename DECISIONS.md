@@ -1407,3 +1407,61 @@ Outcome: the Chunk 1 instruction authorized creation. The new source-of-truth re
 - Analysis: The frozen r16 runner processes laterality via pipeline._laterality() which raises PipelineError only for inconsistent L/R/B/U values; the runner catches this and records "unknown" during batch preprocessing without halting. Run A and Run B independently completed all 4,407 train studies with byte-identical deterministic comparison, proving the core pipeline correctly handles every study including those with nonstandard laterality headers. The on-demand QA wrapper applies the same _laterality() call but wraps ANY exception as fatal via raise OnDemandReviewError("header_laterality_invalid"), making it stricter than the frozen preprocessing semantics it is meant to audit.
 - Classification: This is an orchestration/QA-wrapper strictness mismatch, not a substantive preprocessing defect. No wrong pixels, wrong slice order, wrong geometry, mirroring, invalid intensity transformation, clipping, systemic slot assignment failure, privacy breach, leakage, or competition-rule violation was demonstrated. The preprocessing research release under D-046 remains substantively validated.
 - Decision: Per the final stop rule, FORMAL_CHUNK5_ORCHESTRATION = DEFERRED. PREPROCESSING_RESEARCH_RELEASE = APPROVED under existing D-046 terms. HUMAN_QA = PENDING (visual review not performed). No further on-demand notebook iteration is authorized. Modeling may proceed under the documented research-release policy.
+
+## D-053 - Accelerator preflight, E03 pooled OOF result, and label-quality decision
+
+- Date: 2026-08-26
+- Owner: Luvi-1 and Codex
+- Question: Does weak-labels-v1-ai-provisional supervision materially improve image
+  learning over the official-only scarcity baseline, and what is the next scientific
+  priority?
+- Evidence:
+  * Preflight: commit 63b0f77 added _accelerator_preflight (GPU model, compute
+    capability, torch CUDA arch support check, real forward/backward smoke). First
+    E03 launch on P100 failed closed in 20 s with preflight_capability_unsupported —
+    the designed fail-closed behavior. Commit 1a5faf2 pinned GPU model-gate kernels
+    to machine_shape=NvidiaTeslaT4 at packaging time; relaunch passed preflight with
+    2x Tesla T4 sm_75, torch 2.10.0+cu128, real backward smoke OK.
+  * E03 terminal COMPLETE: kernel lavicheema/rsna-knee-model-gate-1a5faf2-d261041b8568-e3
+    v1 in 7,910 s (~2h12m of 8.5h budget), peak GPU 227 MB.
+    Pooled OOF macro AUC = 0.497 (95% CI [0.450, 0.543], study-level bootstrap n=2000,
+    seed=42) over all 55 official-label studies / 660 cells / 12 targets.
+    Per-fold AUCs: fold0 0.474, fold1 0.484, fold2 0.400, fold3 0.537, fold4 0.347.
+    Best targets: Effusion 0.678 (33/22), Synovitis 0.622 (26/29).
+    Worst: Baker's 0.314 (11/44), Lateral Meniscus 0.394 (23/32).
+    Skips: uneven_slice_spacing=136 studies (diffuse, no concentration by label or
+    scanner), laterality_invalid=2, blank_slice=1.
+    Privacy scan PASS on log and summary; official labels never used in training;
+    external API calls=0.
+  * Representation track: repr_v0 full-population run was already COMPLETE before this
+    session (kernel lavicheema/rsna-knee-model-gate-7497f42-2b0f62ee5feb-rv0): 3,994
+    studies preprocessed, rotation-prediction pretext, 20 epochs, train loss 1.348 ->
+    0.771, best val loss 0.724. Disposition accepted as controlled image-only track.
+  * Reviewer B provenance wording corrected in
+    private_outputs/weak_labels_v1_review/weak_labels_v1_ai_provisional_freeze.json:
+    role changed from REVIEWER_B_BLINDED_INDEPENDENT to REVIEWER_B_BLINDED, with an
+    explicit note that blindness does not imply statistical independence given A/B
+    agreement of 80/80.
+- Known producer gaps for future runs:
+  * Per-fold wall-clock runtime is not emitted by the current producer; only aggregate
+    elapsed_seconds and per-fold training stats are recorded. Future multi-fold kernels
+    should emit per-fold timing explicitly.
+  * The objective's conditional item about packaging a CUDA/PyTorch combo that also
+    supports sm_60 (P100) remains open but moot for serious runs now that T4 pinning
+    works; if a future experiment must use P100, revisit this separately rather than
+    weakening the T4 default.
+- Analysis: Pooled OOF macro AUC of 0.497 with CI [0.450, 0.543] is statistically
+  indistinguishable from chance (0.5). Weak labels under v1 policy unmask only
+  Effusion + Synovitis (1,521 + 302 cells); remaining 10 targets contribute zero weak
+  supervision cells. This is a supervision-quality bottleneck, not an infrastructure
+  bottleneck. E01R's val macro AUC of 0.371 was fold-0-only and not pooled OOF, so
+  direct numeric comparison is contextual only.
+- Decision: **Option B** — weak labels do NOT materially improve OOF. Prioritize
+  label-quality improvement before any architecture scaling. Concrete next actions:
+  completed human review of the 80-row worksheet, expanded ontology coverage beyond
+  English-only Effusion/Synovitis, multilingual rule support, and expansion of the
+  manually/AI-adjudicated validation set. Do NOT proceed to pretrained 2.5D
+  multi-series model under Option A. Do NOT treat this as Option C either — the CI
+  upper bound (0.543) does not reach the material-improvement threshold that would
+  justify more validation-set work instead of better labels.
+
