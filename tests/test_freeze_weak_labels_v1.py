@@ -27,6 +27,13 @@ def _summary() -> dict:
         "artifact_inventory_digest_sha256": "a" * 64,
         "empty_reports": 0,
         "human_review_queue": {"rows": [_queue_row(i) for i in range(1, 81)]},
+        "human_review_worksheet": {
+            "filename": "weak_labels_v1_review_worksheet.csv",
+            "rows": 80,
+            "proposal_blinding": "deterministic_A_B_C_labels",
+            "raw_report_text_emitted": False,
+            "kaggle_only": True,
+        },
     }
 
 
@@ -71,10 +78,25 @@ def test_provenance_rejects_bad_identity():
     summary["gate"] = "wrong"
     summary["empty_reports"] = 3
     summary["artifact_inventory_digest_sha256"] = ""
+    summary["human_review_worksheet"] = {"rows": 79}
     ok, problems = check_provenance(summary)
     assert not ok
     assert set(problems) >= {
-        "gate_identity_invalid", "inventory_digest_missing", "empty_reports_nonzero"}
+        "gate_identity_invalid",
+        "inventory_digest_missing",
+        "empty_reports_nonzero",
+        "review_worksheet_rows_invalid",
+        "review_worksheet_raw_text_unsafe",
+        "review_worksheet_boundary_invalid",
+    }
+
+
+def test_provenance_requires_evidence_worksheet_contract():
+    summary = _summary()
+    del summary["human_review_worksheet"]
+    ok, problems = check_provenance(summary)
+    assert not ok
+    assert "review_worksheet_contract_missing" in problems
 
 
 def test_cli_end_to_end(tmp_path):
@@ -83,8 +105,16 @@ def test_cli_end_to_end(tmp_path):
     ws = _worksheet(tmp_path, ["POSITIVE"] * 80)
     out = tmp_path / "freeze.json"
     proc = subprocess.run(
-        [sys.executable, "scripts/freeze_weak_labels_v1.py", "--summary", str(summary_path),
-         "--worksheet", str(ws), "--out", str(out)],
+        [
+            sys.executable,
+            "scripts/freeze_weak_labels_v1.py",
+            "--summary",
+            str(summary_path),
+            "--worksheet",
+            str(ws),
+            "--out",
+            str(out),
+        ],
         capture_output=True,
         text=True,
     )

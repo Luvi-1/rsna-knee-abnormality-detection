@@ -38,6 +38,26 @@ def check_provenance(summary: dict) -> tuple[bool, list[str]]:
     queue = summary.get("human_review_queue", {}).get("rows", [])
     if len(queue) < MIN_QUEUE_ROWS:
         problems.append("queue_rows_insufficient")
+    worksheet_contract = summary.get("human_review_worksheet")
+    if not isinstance(worksheet_contract, dict):
+        problems.append("review_worksheet_contract_missing")
+    else:
+        if worksheet_contract.get("rows") != MIN_QUEUE_ROWS:
+            problems.append("review_worksheet_rows_invalid")
+        if worksheet_contract.get("raw_report_text_emitted") is not False:
+            problems.append("review_worksheet_raw_text_unsafe")
+        if worksheet_contract.get("kaggle_only") is not True:
+            problems.append("review_worksheet_boundary_invalid")
+    worksheet_contract = summary.get("human_review_worksheet")
+    if not isinstance(worksheet_contract, dict):
+        problems.append("review_worksheet_contract_missing")
+    else:
+        if worksheet_contract.get("rows") != MIN_QUEUE_ROWS:
+            problems.append("review_worksheet_rows_invalid")
+        if worksheet_contract.get("raw_report_text_emitted") is not False:
+            problems.append("review_worksheet_raw_text_unsafe")
+        if worksheet_contract.get("kaggle_only") is not True:
+            problems.append("review_worksheet_boundary_invalid")
     for row_number, row in enumerate(queue, start=1):
         key = row.get("study_key_sha256", "")
         if len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
@@ -107,8 +127,15 @@ def main() -> int:
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(freeze_record, indent=2, sort_keys=True) + "\n")
-    print(json.dumps({"frozen": freeze_record["frozen"], "provenance_pass": provenance_ok,
-                      "precision_pass": precision_ok}))
+    print(
+        json.dumps(
+            {
+                "frozen": freeze_record["frozen"],
+                "provenance_pass": provenance_ok,
+                "precision_pass": precision_ok,
+            }
+        )
+    )
     return 0 if freeze_record["frozen"] else 2
 
 

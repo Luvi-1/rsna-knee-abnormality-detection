@@ -225,6 +225,75 @@ class TestE01RDiagnostic:
 
 
 class TestWeakLabelsV1Policy:
+    def _worksheet(self):
+        return [
+            {
+                "row_id": str(i),
+                "study_key_sha256": f"{i:064x}",
+                "target": "Fracture",
+                "language": "en",
+                "report_section": "findings",
+                "matched_sentence": "No acute fracture.",
+                "preceding_context": "Alignment is anatomic.",
+                "following_context": "Otherwise unremarkable.",
+                "proposed_state_blinded": gate._blinded_proposal_label(i),
+            }
+            for i in range(1, 81)
+        ]
+
+    def test_review_worksheet_validation_passes_exact_queue_lineage(self):
+        queue = [
+            {
+                "study_key_sha256": row["study_key_sha256"],
+                "target": "Fracture",
+                "language": "en",
+            }
+            for row in self._worksheet()
+        ]
+        gate._validate_review_worksheet(queue, self._worksheet())
+
+    @pytest.mark.parametrize(
+        ("field", "token"),
+        [
+            ("row_id", "review_worksheet_row_id_invalid"),
+            ("matched_sentence", "review_worksheet_evidence_incomplete"),
+            ("proposed_state_blinded", "review_proposal_blinding_invalid"),
+        ],
+    )
+    def test_review_worksheet_rejects_malformed_rows(self, field, token):
+        rows = self._worksheet()
+        queue = [
+            {
+                "study_key_sha256": row["study_key_sha256"],
+                "target": "Fracture",
+                "language": "en",
+            }
+            for row in rows
+        ]
+        if field == "proposed_state_blinded":
+            rows[0][field] = "Model proposal X"
+        else:
+            rows[0][field] = ""
+        with pytest.raises(gate.GateError, match=token):
+            gate._validate_review_worksheet(queue, rows)
+
+    def test_review_ui_is_self_contained_and_blinds_proposals(self):
+        html = gate._render_review_ui_html(self._worksheet()).decode("utf-8")
+        assert "Model proposal A" in html and "Model proposal B" in html
+        assert "No acute fracture." in html
+        assert "<script>" in html and "http://" not in html and "https://" not in html
+        assert "POSITIVE" in html and "NOT_MENTIONED" in html
+
+    def test_review_ui_payload_never_contains_raw_angle_brackets(self):
+        rows = self._worksheet()
+        rows[0]["matched_sentence"] = "</script><script>alert(1)</script>"
+        html = gate._render_review_ui_html(rows).decode("utf-8")
+        script_start = html.index("<script>")
+        script_end = html.index("</script>", script_start)
+        payload = html[script_start + len("<script>") : script_end]
+        assert "</script>" not in payload
+        assert "<script>" not in payload
+
     def test_e02_constants_declared(self) -> None:
         assert gate.E02_EPOCHS == 30
         assert gate.E02_LEARNING_RATE == 1e-3

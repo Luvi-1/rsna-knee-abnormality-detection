@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -1345,6 +1346,42 @@ MAX_STATE_ROWS: Final = 100_000
 MAX_QUEUE_ROWS: Final = 80
 TUNE_HOLDOUT_STUDIES: Final = 11
 STRATIFIED_REVIEW_PER_TARGET: Final = 5
+REVIEW_WORKSHEET_FILENAME: Final = "weak_labels_v1_review_worksheet.csv"
+REVIEW_UI_FILENAME: Final = "weak_labels_v1_review_ui.html"
+REVIEW_WORKSHEET_FIELDS: Final[tuple[str, ...]] = (
+    "row_id",
+    "study_key_sha256",
+    "target",
+    "language",
+    "report_section",
+    "matched_sentence",
+    "preceding_context",
+    "following_context",
+    "proposed_state_blinded",
+    "reviewer_decision",
+    "reviewer_notes",
+)
+VALID_REVIEW_DECISIONS: Final[frozenset[str]] = frozenset(
+    {"POSITIVE", "EXPLICIT_NEGATIVE", "UNCERTAIN", "NOT_MENTIONED"}
+)
+VALID_REVIEW_DECISIONS_ORDER: Final[tuple[str, ...]] = (
+    "POSITIVE",
+    "EXPLICIT_NEGATIVE",
+    "UNCERTAIN",
+    "NOT_MENTIONED",
+)
+QUEUE_ROW_SANITIZED_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "study_key_sha256",
+        "fold",
+        "target",
+        "state_before_mask",
+        "confidence",
+        "language",
+        "state_match_counts",
+        "priority_reason",
+    }
+)
 
 # Verbatim projection of configs/ontology/ontology_provisional_v0.yaml. The frozen
 # QA bundle does not ship the ontology, and this single-file notebook payload is
@@ -2092,6 +2129,135 @@ def _write_artifact(output_root, basename, payload):
     os.replace(temporary, output_root / basename)
 
 
+def _validate_review_worksheet(queue_rows, worksheet_rows):
+    """Fail closed unless every selected queue row has complete blinded evidence."""
+    if len(worksheet_rows) != MAX_QUEUE_ROWS:
+        raise GateError("review_worksheet_row_count_invalid")
+    queue_identity = {
+        (row["study_key_sha256"], row["target"], row["language"]) for row in queue_rows
+    }
+    seen_row_ids: set[int] = set()
+    for number, row in enumerate(worksheet_rows, start=1):
+        try:
+            row_id = int(row["row_id"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise GateError("review_worksheet_row_id_invalid") from error
+        if row_id != number or row_id in seen_row_ids:
+            raise GateError("review_worksheet_row_id_invalid")
+        seen_row_ids.add(row_id)
+        identity = (
+            row.get("study_key_sha256", ""),
+            row.get("target", ""),
+            row.get("language", ""),
+        )
+        if identity not in queue_identity:
+            raise GateError("review_worksheet_lineage_invalid")
+        for field in REVIEW_WORKSHEET_FIELDS:
+            if field == "reviewer_decision" or field == "reviewer_notes":
+                continue
+            if not isinstance(row.get(field), str) or not row[field].strip():
+                raise GateError("review_worksheet_evidence_incomplete")
+        proposal = row["proposed_state_blinded"]
+        if proposal not in {"Model proposal A", "Model proposal B", "Model proposal C"}:
+            raise GateError("review_proposal_blinding_invalid")
+
+
+def _blinded_proposal_label(row_number):
+    """Deterministic three-way blinding so proposal order carries no signal."""
+    return f"Model proposal {('A', 'B', 'C')[(row_number - 1) % 3]}"
+
+
+def _validate_sanitized_queue_row(row):
+    """Reject report-derived or unexpected fields before they reach the summary."""
+    if set(row) != QUEUE_ROW_SANITIZED_FIELDS:
+        raise GateError("review_queue_field_allowlist_invalid")
+    for _key, value in row.items():
+        if isinstance(value, str):
+            if len(value) > 128 or any(character in value for character in "\n\r"):
+                raise GateError("review_queue_text_unsafe")
+        elif not isinstance(value, int | float | dict):
+            raise GateError("review_queue_value_type_invalid")
+
+
+def _render_review_ui_html(worksheet_rows):
+    """Build one self-contained offline review page; no external requests."""
+    import html as html_module
+
+    payload = json.dumps(
+        [
+            {field: row.get(field, "") for field in REVIEW_WORKSHEET_FIELDS}
+            for row in worksheet_rows
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).replace("<", "\\u003c")
+    style = (
+        "body{font-family:-apple-system,Helvetica,Arial,sans-serif;margin:24px;"
+        "background:#f5f5f7;color:#1d1d1f}"
+        ".card{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;"
+        "box-shadow:0 1px 3px rgba(0,0,0,.08)}"
+        ".meta{color:#6e6e73;font-size:13px;margin-bottom:8px}"
+        ".ctx{color:#6e6e73}"
+        ".match{background:#fff3cd;font-weight:600;padding:0 2px}"
+        "label{display:inline-block;margin-right:12px}"
+        "textarea{width:100%;min-height:40px;margin-top:6px}"
+        "#bar{position:sticky;top:0;background:#1d1d1f;color:#fff;padding:10px 16px;"
+        "border-radius:8px;margin-bottom:16px;display:flex;gap:16px;align-items:center}"
+        "button{padding:6px 14px;border-radius:6px;border:none;cursor:pointer}"
+    )
+    head = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    head += "<title>Weak Labels v1 Human Review</title>"
+    head += f"<style>{style}</style></head><body>"
+    bar = (
+        "<div id='bar'><span id='count'></span>"
+        "<button onclick='downloadCsv()'>Download decisions CSV</button></div>"
+        f"<script>const ROWS={payload};"
+        "const OPTIONS=['POSITIVE','EXPLICIT_NEGATIVE','UNCERTAIN','NOT_MENTIONED'];"
+        "function csvEscape(v){return [String.fromCharCode(34),String(v).split("
+        "String.fromCharCode(34)).join(String.fromCharCode(34,34)),"
+        "String.fromCharCode(34)].join('');}"
+        "function update(){const d=ROWS.filter((r,i)=>document.querySelector("
+        "concat('input[name=dec',i,']:checked'))).length;"
+        "document.getElementById('count').textContent=d+' / '+ROWS.length+' decided';}"
+        "function downloadCsv(){const head='row_id,study_key_sha256,target,"
+        "reviewer_decision,reviewer_notes';"
+        "const lines=[head];for(let i=0;i<ROWS.length;i++){const r=ROWS[i];"
+        "const dec=(document.querySelector(concat('input[name=dec',i,']:checked'))||{}).value||'';"
+        "const notes=document.getElementById('notes'+i).value;"
+        "lines.push([csvEscape(r.row_id),q(r.study_key_sha256),q(r.target),q(dec),csvEscape(notes)].join(','));}"
+        "if(lines.length-1!==ROWS.length||lines.slice(1).some(l=>l.endsWith(',,')))"
+        "{if(!confirm('Some rows are undecided. Download anyway?'))return;}"
+        "const blob=new Blob([lines.join('\\n')],{type:'text/csv'});"
+        "const a=document.createElement('a');a.href=URL.createObjectURL(blob);"
+        "a.download='weak_labels_v1_human_completed.csv';a.click();}"
+        "document.addEventListener('change',update);update()</scr" + "ipt>"
+    )
+    body_parts = []
+    for index, row in enumerate(worksheet_rows):
+        before = html_module.escape(row["preceding_context"])
+        matched = html_module.escape(row["matched_sentence"])
+        after = html_module.escape(row["following_context"])
+        meta = html_module.escape(
+            f"Row {row['row_id']} | target: {row['target']} | language: "
+            f"{row['language']} | section: {row['report_section']}"
+        )
+        proposal = html_module.escape(row["proposed_state_blinded"])
+        radios = "".join(
+            f"<label><input type='radio' name='dec{index}' value='{opt}'> {opt}</label>"
+            for opt in VALID_REVIEW_DECISIONS_ORDER
+        )
+        body_parts.append(
+            "<div class='card'>"
+            f"<div class='meta'>{meta} | {proposal}</div>"
+            f"<p class='ctx'>{before} <span class='match'>{matched}</span> {after}</p>"
+            f"<div>{radios}</div>"
+            f"<textarea id='notes{index}' placeholder='Reviewer notes (optional)'>"
+            "</textarea></div>"
+        )
+    return (head + bar + "".join(body_parts) + "</body></html>").encode("utf-8")
+
+
 def _reconcile_population(competition_root, bundle_root):
     """Bind train.csv and DICOM-directory populations to the frozen contract."""
     contract_path = bundle_root / "competition-contract.json"
@@ -2139,7 +2305,11 @@ def _weak_label_state_for_target(report_text, target):
     """Apply one embedded ontology rule family to a normalized report."""
     _install_weak_label_modules()
     from rsna_knee.labels.normalization import normalize_report
-    from rsna_knee.labels.rule_labeler import _SENTENCE_SPLIT, apply_rule_labeler
+    from rsna_knee.labels.rule_labeler import (
+        _SECTION_PRIORITY,
+        _SENTENCE_SPLIT,
+        apply_rule_labeler,
+    )
 
     positive_terms, negative_terms, uncertain_terms = _ONTOLOGY_RULES[target]
     normalized = normalize_report(report_text)
@@ -2152,10 +2322,16 @@ def _weak_label_state_for_target(report_text, target):
     )
     state = result.label_state or "not_mentioned"
 
-    # Build evidence sentences with +/-1 sentence context for human review.
-    # Sentences are grouped by section; we locate the match inside its section.
-    evidence_sentences = []
-    for match in result.matches:
+    # Build review-only evidence records. These stay inside Kaggle and are
+    # never copied into the downloadable summary payload.
+    review_evidence = []
+    # Present the decisive match first, then remaining supporting matches.
+    ordered_matches = sorted(
+        result.matches,
+        key=lambda m: (_SECTION_PRIORITY.get(m.section, 0), m.span_start),
+        reverse=True,
+    )
+    for match in ordered_matches:
         # Find the containing section.
         section = None
         for sec in normalized.sections:
@@ -2182,23 +2358,27 @@ def _weak_label_state_for_target(report_text, target):
                 break
         if sent_idx is None:
             continue
-        lo = max(0, sent_idx - 1)
-        hi = min(len(sents), sent_idx + 2)
-        context = " ".join(s[1] for s in sents[lo:hi])
+        lo = max(0, sent_idx - 2)
+        hi = min(len(sents), sent_idx + 3)
+        context_before = " ".join(s[1] for s in sents[lo:sent_idx])
+        context_after = " ".join(s[1] for s in sents[sent_idx + 1 : hi])
         matched_sentence = sents[sent_idx][1]
-        evidence_sentences.append({
-            "matched_sentence": matched_sentence,
-            "context": context,
-            "section": match.section.value,
-            "term": match.term,
-            "state": match.state.value if hasattr(match.state, "value") else str(match.state),
-        })
+        review_evidence.append(
+            {
+                "matched_sentence": matched_sentence,
+                "preceding_context": context_before,
+                "following_context": context_after,
+                "section": match.section.value,
+                "term": match.term,
+                "state": match.state.value if hasattr(match.state, "value") else str(match.state),
+            }
+        )
 
     evidence = {
         "match_count": len(result.matches),
         "section_counts": dict(Counter(match.section.value for match in result.matches)),
         "state_match_counts": dict(Counter(match.state for match in result.matches)),
-        "evidence_sentences": evidence_sentences[:5],
+        "review_evidence": review_evidence[:5],
     }
     return state, float(result.confidence), evidence
 
@@ -2249,6 +2429,7 @@ def run_weak_labels_v1():
         language_counts: Counter = Counter()
         source_breakdown: Counter = Counter()
         queue_rows: list[dict] = []
+        review_evidence_by_identity: dict[tuple[str, str], list[dict]] = {}
         agreement_rows: list[dict] = []
         report_lengths = []
         empty_reports = 0
@@ -2294,20 +2475,19 @@ def run_weak_labels_v1():
                     confidence_tiers[tier] += 1
                     source_breakdown[f"{target}:rule_usable"] += 1
                 if ambiguous and evidence["match_count"]:
-                    queue_rows.append(
-                        {
-                            "study_key_sha256": key_hash,
-                            "fold": assignments[keys[index]],
-                            "target": target,
-                            "state_before_mask": state,
-                            "confidence": rounded_float(rule_confidence),
-                            "language": language,
-                            "section_counts": evidence["section_counts"],
-                            "state_match_counts": evidence["state_match_counts"],
-                            "evidence_sentences": evidence["evidence_sentences"],
-                            "priority_reason": "review_flagged_ambiguity_family",
-                        }
-                    )
+                    sanitized_row = {
+                        "study_key_sha256": key_hash,
+                        "fold": assignments[keys[index]],
+                        "target": target,
+                        "state_before_mask": state,
+                        "confidence": rounded_float(rule_confidence),
+                        "language": language,
+                        "state_match_counts": evidence["state_match_counts"],
+                        "priority_reason": "review_flagged_ambiguity_family",
+                    }
+                    _validate_sanitized_queue_row(sanitized_row)
+                    queue_rows.append(sanitized_row)
+                    review_evidence_by_identity[(key_hash, target)] = evidence["review_evidence"]
                 if index in tune_holdout and np.isfinite(official[index][TARGETS.index(target)]):
                     official_state = (
                         "positive" if official[index][TARGETS.index(target)] == 1 else "negative"
@@ -2387,6 +2567,41 @@ def run_weak_labels_v1():
             key=lambda row: (-row["confidence"], row["study_key_sha256"], row["target"])
         )
         selected_queue = queue_rows[:MAX_QUEUE_ROWS]
+        worksheet_rows: list[dict[str, str]] = []
+        proposal_labels = ("A", "B", "C")
+        for row_number, queue_row in enumerate(selected_queue, start=1):
+            identity = (queue_row["study_key_sha256"], queue_row["target"])
+            evidence_records = review_evidence_by_identity.get(identity, [])
+            if not evidence_records:
+                raise GateError("review_evidence_insufficient")
+            evidence_record = evidence_records[0]
+            proposal_label = proposal_labels[(row_number - 1) % 3]
+            worksheet_rows.append(
+                {
+                    "row_id": str(row_number),
+                    "study_key_sha256": queue_row["study_key_sha256"],
+                    "target": queue_row["target"],
+                    "language": queue_row["language"],
+                    "report_section": str(evidence_record["section"]),
+                    "matched_sentence": evidence_record["matched_sentence"],
+                    "preceding_context": evidence_record["preceding_context"],
+                    "following_context": evidence_record["following_context"],
+                    "proposed_state_blinded": f"Model proposal {proposal_label}",
+                    "reviewer_decision": "",
+                    "reviewer_notes": "",
+                }
+            )
+        if len(worksheet_rows) != MAX_QUEUE_ROWS:
+            raise GateError("review_evidence_insufficient")
+        _validate_review_worksheet(selected_queue, worksheet_rows)
+        worksheet_buffer = io.StringIO(newline="")
+        worksheet_writer = csv.DictWriter(
+            worksheet_buffer,
+            fieldnames=REVIEW_WORKSHEET_FIELDS,
+            lineterminator="\n",
+        )
+        worksheet_writer.writeheader()
+        worksheet_writer.writerows(worksheet_rows)
         summary = {
             "schema_version": WEAK_LABEL_SCHEMA_VERSION,
             "gate": "weak-labels-v1",
@@ -2420,6 +2635,13 @@ def run_weak_labels_v1():
                 "selection": "stratified by target with descending confidence",
                 "rows": selected_queue,
             },
+            "human_review_worksheet": {
+                "filename": REVIEW_WORKSHEET_FILENAME,
+                "rows": len(worksheet_rows),
+                "proposal_blinding": "deterministic_A_B_C_labels",
+                "raw_report_text_emitted": False,
+                "kaggle_only": True,
+            },
             "artifact_inventory_digest_sha256": inventory_digest,
             "privacy": {
                 "raw_reports_emitted": False,
@@ -2433,6 +2655,16 @@ def run_weak_labels_v1():
         if not 0 < len(payload) <= MAX_SUMMARY_BYTES * 8:
             raise GateError("summary_size_invalid")
         _write_artifact(output_root, "weak_labels_v1_summary.json", payload)
+        _write_artifact(
+            output_root,
+            REVIEW_WORKSHEET_FILENAME,
+            worksheet_buffer.getvalue().encode("utf-8"),
+        )
+        _write_artifact(
+            output_root,
+            REVIEW_UI_FILENAME,
+            _render_review_ui_html(worksheet_rows),
+        )
         print(
             f"event=weak_labels_v1_complete reports={len(keys)}"
             f" reconciled={int(reconciliation['difference_reconciled'])}"
