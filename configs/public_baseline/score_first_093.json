@@ -1,0 +1,127 @@
+{
+  "schema_version": "score-first-093-v1",
+  "competition": "rsna-knee-abnormality-detection",
+  "minimum_source_score": 0.93,
+  "claim_boundary": {
+    "source_scores_are_third_party": true,
+    "project_submission_performed": false,
+    "project_public_score": null,
+    "competition_submission_authorized": false
+  },
+  "execution_policy": {
+    "private_kaggle_resources_only": true,
+    "internet_disabled_for_reproduction": true,
+    "dynamic_test_discovery_required": true,
+    "test_report_access_forbidden": true,
+    "submission_api_calls_forbidden": true,
+    "exact_asset_binding_required": true,
+    "checkpoint_preflight_required": true,
+    "no_new_training": true,
+    "no_report_label_experiments": true
+  },
+  "candidates": [
+    {
+      "candidate_id": "take-care-v36",
+      "owner_slug": "anhadmahajan06/rsna-knee-take-care-of-your-knee",
+      "required_version": 36,
+      "script_version_id": null,
+      "source_reported_public_score": 0.936,
+      "current_page_version_observed": 39,
+      "current_page_runtime_seconds_observed": 165.0,
+      "notebook_license_observed": "Apache-2.0",
+      "visible_input_privacy": "public-only-on-current-page",
+      "visible_inputs": [
+        "Images for Competition Notebook",
+        "Knee MRI - Max-Span Dense Corpus",
+        "knee mri fold weights",
+        "Knee MRI model weights: twelve findings"
+      ],
+      "priority": 1,
+      "status": "PIN_REQUIRED",
+      "reason": "Highest currently observed public-score candidate without an explicit private-input marker on the current page. Exact V36 source, output, inputs, licenses, and scriptVersionId remain unverified."
+    },
+    {
+      "candidate_id": "raptor-coatnet-v1",
+      "owner_slug": "hdhsjdjd/rsna-knee-raptor-coatnet",
+      "required_version": 1,
+      "script_version_id": null,
+      "source_reported_public_score": 0.933,
+      "current_page_version_observed": 1,
+      "current_page_runtime_seconds_observed": 136.2,
+      "notebook_license_observed": "Apache-2.0",
+      "visible_input_privacy": "public-only-on-current-page",
+      "visible_inputs": [
+        "knee mri fold weights",
+        "Knee MRI model weights: twelve findings",
+        "Pilkwang_Public_Dataset_for_Notebooks_Figures",
+        "resnet-50-RadImageNet-Marwan"
+      ],
+      "priority": 2,
+      "status": "PIN_REQUIRED",
+      "reason": "Source-reported 0.933 with an immutable V1 and no explicit private-input marker, but the full 17-input graph and exact licenses still require authenticated binding."
+    },
+    {
+      "candidate_id": "dread-single-v1",
+      "owner_slug": "dreaddevelopment/knee-mri-twelve-findings-from-a-single-model",
+      "required_version": 1,
+      "script_version_id": null,
+      "source_reported_public_score": 0.924,
+      "current_page_version_observed": 6,
+      "current_page_runtime_seconds_observed": 53.2,
+      "notebook_license_observed": "UNVERIFIED",
+      "visible_input_privacy": "public-only-on-current-page",
+      "visible_inputs": [
+        "Knee MRI model weights: twelve findings"
+      ],
+      "priority": 3,
+      "status": "PIN_REQUIRED",
+      "reason": "Simplest visible dependency surface and fastest runtime; below the 0.93 objective but useful as a safe fallback and ensemble component."
+    },
+    {
+      "candidate_id": "head-shoulders-v38",
+      "owner_slug": "prvsiyan/head-and-shoulders-knees-and-toes",
+      "required_version": 38,
+      "script_version_id": null,
+      "source_reported_public_score": 0.936,
+      "current_page_version_observed": 45,
+      "current_page_runtime_seconds_observed": 228.0,
+      "notebook_license_observed": "Apache-2.0",
+      "visible_input_privacy": "contains-private-inputs",
+      "visible_inputs": [
+        "[Private Dataset]",
+        "[Private Dataset]",
+        "Knee MRI - Max-Span Dense Corpus",
+        "Knee MRI model weights: twelve findings"
+      ],
+      "priority": 90,
+      "status": "BLOCKED_PRIVATE_INPUTS",
+      "reason": "Best score is attractive, but the current source page exposes private input dependencies. It cannot be selected without a public immutable replacement for every indispensable input."
+    },
+    {
+      "candidate_id": "dinosaur-v4-v14",
+      "owner_slug": "romantamrazov/rsna-knee-dinosaur-v4",
+      "required_version": 14,
+      "script_version_id": 345082720,
+      "source_reported_public_score": 0.936,
+      "current_page_version_observed": 31,
+      "current_page_runtime_seconds_observed": 201.0,
+      "notebook_license_observed": "Apache-2.0",
+      "visible_input_privacy": "public-current-inputs-but-historical-lineage-blocked",
+      "visible_inputs": [
+        "Knee MRI - Max-Span Dense Corpus",
+        "Knee MRI model weights: twelve findings",
+        "RSNA Knee Bend the Knee 0.917 reproduction assets",
+        "DINO v2 V1",
+        "RSNA Knee DINOsaur V3 train"
+      ],
+      "priority": 95,
+      "status": "BLOCKED_BY_PRIOR_AUDIT",
+      "reason": "Historical V14 remains blocked by incomplete transitive provenance, asset terms, and unsafe checkpoint loading."
+    }
+  ],
+  "discovery_queries": [
+    "RSNA Knee 0.936 repro",
+    "rsna-base",
+    "RSNA Knee score 0.936"
+  ]
+}
