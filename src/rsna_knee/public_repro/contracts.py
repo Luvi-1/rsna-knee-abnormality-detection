@@ -7,12 +7,13 @@ being represented as project scores.
 
 from __future__ import annotations
 
+import json
+import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-import json
 from pathlib import Path
-import re
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -373,6 +374,6 @@ def _optional_int(value: Any) -> int | None:
 def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ContractError("optional float must be null or numeric")
     return float(value)
