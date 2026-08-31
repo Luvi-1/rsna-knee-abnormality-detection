@@ -7,12 +7,12 @@ required before deserialization.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
-from pathlib import Path, PurePosixPath
 import pickletools
-from typing import Iterable
 import zipfile
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 
 
 _DANGEROUS_PICKLE_OPCODES = frozenset(
@@ -107,9 +107,7 @@ def inspect_checkpoint_archive(
                 else:
                     dangerous.add("PICKLE_TOO_LARGE_TO_SCAN")
 
-    requires_sandbox = bool(
-        traversal or pickle_members or dangerous or oversized
-    )
+    requires_sandbox = bool(traversal or pickle_members or dangerous or oversized)
     return CheckpointPreflight(
         sha256=file_sha,
         size_bytes=size_bytes,
