@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-
 TARGETS: tuple[str, ...] = (
     "ACL",
     "MCL",
