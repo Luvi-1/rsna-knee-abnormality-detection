@@ -258,9 +258,9 @@ class FrozenRound:
     def canonical_bytes(self) -> bytes:
         """Return exactly the bytes that should be written as the manifest file."""
 
-        return json.dumps(
-            self.canonical_payload(), sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        return json.dumps(self.canonical_payload(), sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
 
     def sha256(self) -> str:
         return hashlib.sha256(self.canonical_bytes()).hexdigest()
@@ -296,9 +296,7 @@ def parse_candidate(value: Mapping[str, Any]) -> CandidateSpec:
     changed_raw = _require_array(value.get("changed_targets"), "changed_targets")
     model_raw = _require_array(value.get("model_ids"), "model_ids")
     weights_raw = _require_array(value.get("weights"), "weights")
-    checkpoint_raw = _require_array(
-        value.get("checkpoint_sha256s"), "checkpoint_sha256s"
-    )
+    checkpoint_raw = _require_array(value.get("checkpoint_sha256s"), "checkpoint_sha256s")
     candidate = CandidateSpec(
         candidate_id=str(value.get("candidate_id", "")),
         parent_submission_id=int(value.get("parent_submission_id", 0)),
@@ -308,9 +306,7 @@ def parse_candidate(value: Mapping[str, Any]) -> CandidateSpec:
         model_ids=tuple(str(item) for item in model_raw),
         weights=tuple(float(item) for item in weights_raw),
         runtime_seconds=float(value.get("runtime_seconds", float("nan"))),
-        expected_information_gain=float(
-            value.get("expected_information_gain", float("nan"))
-        ),
+        expected_information_gain=float(value.get("expected_information_gain", float("nan"))),
         checkpoint_sha256s=tuple(str(item) for item in checkpoint_raw),
         wheel_sha256=str(value.get("wheel_sha256", "")),
         config_sha256=str(value.get("config_sha256", "")),
