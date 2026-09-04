@@ -71,19 +71,13 @@ def candidate(**overrides: object) -> CandidateRecord:
 
 def test_training_opaque_can_be_inference_reproducible() -> None:
     item = candidate()
-    assert (
-        item.classification()
-        is InferenceClassification.INFERENCE_REPRODUCIBLE_TRAINING_OPAQUE
-    )
+    assert item.classification() is InferenceClassification.INFERENCE_REPRODUCIBLE_TRAINING_OPAQUE
     assert item.eligible_for_private_reproduction()
 
 
 def test_complete_training_lineage_gets_stronger_class() -> None:
     item = candidate(training_lineage_complete=True)
-    assert (
-        item.classification()
-        is InferenceClassification.INFERENCE_AND_TRAINING_REPRODUCIBLE
-    )
+    assert item.classification() is InferenceClassification.INFERENCE_AND_TRAINING_REPRODUCIBLE
 
 
 @pytest.mark.parametrize(
@@ -98,9 +92,7 @@ def test_complete_training_lineage_gets_stronger_class() -> None:
         ("calls_submission_api", True, InferenceClassification.INFERENCE_BLOCKED),
     ],
 )
-def test_candidate_blockers(
-    field: str, value: object, expected: InferenceClassification
-) -> None:
+def test_candidate_blockers(field: str, value: object, expected: InferenceClassification) -> None:
     item = candidate(**{field: value})
     assert item.classification() is expected
 
