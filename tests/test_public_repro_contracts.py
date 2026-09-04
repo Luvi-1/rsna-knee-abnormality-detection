@@ -20,7 +20,6 @@ from rsna_knee.public_repro import (
 )
 from rsna_knee.public_repro.checkpoint_security import inspect_checkpoint_archive
 
-
 GOOD_SHA = "a" * 64
 
 
@@ -72,19 +71,13 @@ def candidate(**overrides: object) -> CandidateRecord:
 
 def test_training_opaque_can_be_inference_reproducible() -> None:
     item = candidate()
-    assert (
-        item.classification()
-        is InferenceClassification.INFERENCE_REPRODUCIBLE_TRAINING_OPAQUE
-    )
+    assert item.classification() is InferenceClassification.INFERENCE_REPRODUCIBLE_TRAINING_OPAQUE
     assert item.eligible_for_private_reproduction()
 
 
 def test_complete_training_lineage_gets_stronger_class() -> None:
     item = candidate(training_lineage_complete=True)
-    assert (
-        item.classification()
-        is InferenceClassification.INFERENCE_AND_TRAINING_REPRODUCIBLE
-    )
+    assert item.classification() is InferenceClassification.INFERENCE_AND_TRAINING_REPRODUCIBLE
 
 
 @pytest.mark.parametrize(
@@ -99,9 +92,7 @@ def test_complete_training_lineage_gets_stronger_class() -> None:
         ("calls_submission_api", True, InferenceClassification.INFERENCE_BLOCKED),
     ],
 )
-def test_candidate_blockers(
-    field: str, value: object, expected: InferenceClassification
-) -> None:
+def test_candidate_blockers(field: str, value: object, expected: InferenceClassification) -> None:
     item = candidate(**{field: value})
     assert item.classification() is expected
 
@@ -243,7 +234,7 @@ def test_zip_path_traversal_is_detected(tmp_path: Path) -> None:
 
 def test_pickle_checkpoint_requires_sandbox(tmp_path: Path) -> None:
     path = tmp_path / "weights.zip"
-    payload = pickle.dumps({"value": set([1, 2, 3])})
+    payload = pickle.dumps({"value": {1, 2, 3}})
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("archive/data.pkl", payload)
     result = inspect_checkpoint_archive(path)

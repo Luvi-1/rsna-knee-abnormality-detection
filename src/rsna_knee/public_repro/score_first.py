@@ -7,15 +7,15 @@ public notebook can become a private reproduction candidate.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import csv
 import hashlib
 import io
 import json
-from pathlib import Path
 import re
-from typing import Any, Iterable, Mapping, Sequence
-
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 _SCORE_FIELDS = ("score", "publicScore", "public_score", "bestScore", "best_score")
 _REF_FIELDS = ("ref", "kernelRef", "kernel_ref", "id")
@@ -48,6 +48,7 @@ _DYNAMIC_TEST_PATTERNS = (
 _HARDCODED_THREE_PATTERNS = (
     re.compile(r"\brange\(3\)"),
     re.compile(r"\bhead\(3\)"),
+    re.compile(r"\b(?:test|submission)\s*\[:3\]"),
     re.compile(r"\b(?:test|submission)\s*=\s*(?:test|submission)\s*\[:3\]"),
 )
 
@@ -123,23 +124,19 @@ class CampaignCandidate:
     reason: str
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "CampaignCandidate":
+    def from_mapping(cls, value: Mapping[str, Any]) -> CampaignCandidate:
         candidate = cls(
             candidate_id=_required_text(value, "candidate_id"),
             owner_slug=_required_text(value, "owner_slug"),
             required_version=_required_positive_int(value, "required_version"),
             script_version_id=_optional_positive_int(value.get("script_version_id")),
-            source_reported_public_score=_required_score(
-                value, "source_reported_public_score"
-            ),
+            source_reported_public_score=_required_score(value, "source_reported_public_score"),
             priority=_required_positive_int(value, "priority"),
             status=_required_text(value, "status"),
             reason=_required_text(value, "reason"),
         )
         if "/" not in candidate.owner_slug:
-            raise ScoreFirstError(
-                f"{candidate.candidate_id}: owner_slug must use owner/slug"
-            )
+            raise ScoreFirstError(f"{candidate.candidate_id}: owner_slug must use owner/slug")
         return candidate
 
 
@@ -204,9 +201,7 @@ def shortlist_listings(
 
     if not 0.0 <= minimum_score <= 1.0:
         raise ScoreFirstError("minimum_score must be within [0, 1]")
-    selected = [
-        item for item in listings if item.score is not None and item.score >= minimum_score
-    ]
+    selected = [item for item in listings if item.score is not None and item.score >= minimum_score]
     selected.sort(
         key=lambda item: (
             -(item.score if item.score is not None else -1.0),
@@ -250,9 +245,7 @@ def load_campaign(path: str | Path) -> tuple[CampaignCandidate, ...]:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or not isinstance(raw.get("candidates"), list):
         raise ScoreFirstError("campaign must contain a candidates list")
-    candidates = tuple(
-        CampaignCandidate.from_mapping(item) for item in raw["candidates"]
-    )
+    candidates = tuple(CampaignCandidate.from_mapping(item) for item in raw["candidates"])
     ids = [item.candidate_id for item in candidates]
     if len(ids) != len(set(ids)):
         raise ScoreFirstError("candidate_id values must be unique")
@@ -384,7 +377,7 @@ def _optional_positive_int(value: Any) -> int | None:
 
 def _required_score(value: Mapping[str, Any], key: str) -> float:
     item = value.get(key)
-    if isinstance(item, bool) or not isinstance(item, (int, float)):
+    if isinstance(item, bool) or not isinstance(item, int | float):
         raise ScoreFirstError(f"{key} must be numeric")
     score = float(item)
     if not 0.0 <= score <= 1.0:

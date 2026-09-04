@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "round": "T137_TARGETWISE_SPECIALIST_001_PREPARED",
+  "goal_public_score": 0.95,
+  "protected_champion": {
+    "submission_id": 55976422,
+    "public_score": 0.929,
+    "candidate": "T133_RAPTOR_V42"
+  },
+  "rejected_window_ablation": {
+    "public_score": 0.928,
+    "disposition": "REJECTED_CLOSE_WINDOW_COUNT_ROUTE"
+  },
+  "families": {
+    "osteoarthritis": ["Medial OA", "Lateral OA", "PF OA"],
+    "fluid_inflammation": ["Effusion", "Synovitis", "Baker's"],
+    "bone": ["Contusion", "Fracture"]
+  },
+  "initial_leads": [
+    {
+      "model_id": "efficientnetv2_l_480",
+      "family": "osteoarthritis",
+      "status": "REQUIRES_LOCAL_REAUTHENTICATION",
+      "evidence_level": "C_SOURCE_TARGET_METRIC",
+      "note": "Previously reproduced locally; source OA-family lead only, not project OOF."
+    },
+    {
+      "model_id": "coatnet_384_arm",
+      "family": "fluid_inflammation",
+      "status": "REQUIRES_LOCAL_REAUTHENTICATION",
+      "evidence_level": "C_SOURCE_TARGET_METRIC",
+      "note": "Previously reproduced locally; source fluid-family lead only, not project OOF."
+    },
+    {
+      "model_id": "max_span",
+      "family": "bone",
+      "status": "ACTIVE_EXISTING_COMPONENT",
+      "evidence_level": "PUBLIC_LB_FAMILY_DIAGNOSTIC",
+      "note": "Bone family probe reached 0.925 against the older 0.924 anchor but did not beat the 0.929 champion."
+    },
+    {
+      "model_id": "tuannm_dinov2_small_maxpool",
+      "family": "osteoarthritis",
+      "status": "LOW_EXPECTED_VALUE_RESEARCH_LEAD",
+      "evidence_level": "C_SOURCE_TARGET_METRIC",
+      "note": "New report-free public GitHub lead. Overall public LB is only 0.687, but source max-vs-mean deltas favor Lateral OA, PF OA, Synovitis and Contusion. Requires third-party license/admissibility review before any private screen."
+    }
+  ],
+  "closed_routes": [
+    "report_labeling",
+    "qwen_weak_labels",
+    "report_distilled_dino_lineages",
+    "six_arm_raptor_report_distilled",
+    "window_count_ablation"
+  ],
+  "offline_candidate_limit": 12,
+  "submission_candidate_limit": 3,
+  "submission_authorized": false,
+  "privacy": {
+    "reports_allowed": false,
+    "hidden_labels_allowed": false,
+    "runtime_network_allowed": false,
+    "public_resource_creation_allowed": false
+  }
+}

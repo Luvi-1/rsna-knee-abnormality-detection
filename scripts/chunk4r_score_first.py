@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import subprocess
 import sys
-from typing import Any, Sequence
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
 
 from rsna_knee.public_repro.score_first import (
     collect_pull_evidence,
@@ -22,7 +23,6 @@ from rsna_knee.public_repro.score_first import (
     prioritized_campaign,
     shortlist_listings,
 )
-
 
 DEFAULT_CONFIG = Path("configs/public_baseline/score_first_093.json")
 DEFAULT_OUTPUT = Path("private_outputs/chunk4r/score_first_scan.json")
