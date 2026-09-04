@@ -87,9 +87,7 @@ def test_reconcile_identifier_order_rejects_different_sets() -> None:
 def test_write_prediction_csv_round_trip(tmp_path: Path) -> None:
     output = tmp_path / "candidate.csv"
     identifiers = ("a", "b")
-    matrix = np.vstack(
-        [np.linspace(0.01, 0.12, 12), np.linspace(0.21, 0.32, 12)]
-    )
+    matrix = np.vstack([np.linspace(0.01, 0.12, 12), np.linspace(0.21, 0.32, 12)])
     write_prediction_csv(output, identifiers, matrix)
     loaded_ids, loaded = load_prediction_csv(output)
     assert loaded_ids == identifiers
