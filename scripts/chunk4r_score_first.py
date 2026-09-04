@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import subprocess
 import sys
-from typing import Any, Sequence
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
 
 from rsna_knee.public_repro.score_first import (
     collect_pull_evidence,
