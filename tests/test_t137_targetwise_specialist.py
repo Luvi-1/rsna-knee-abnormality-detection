@@ -39,7 +39,6 @@ from rsna_knee.targetwise_specialist import (
     validate_submission_matrix,
 )
 
-
 GOOD_SHA = "a" * 64
 
 
