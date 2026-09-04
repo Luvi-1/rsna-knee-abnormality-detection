@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import math
 
 import numpy as np
 import pytest
 
 from rsna_knee.targetwise_specialist import (
+    BlendError,
     CandidateSpec,
     CandidateStatus,
     ContractError,
@@ -38,6 +40,9 @@ from rsna_knee.targetwise_specialist import (
 )
 
 
+GOOD_SHA = "a" * 64
+
+
 def _candidate(**overrides: object) -> CandidateSpec:
     values: dict[str, object] = {
         "candidate_id": "OA_RANK_75_25",
@@ -49,6 +54,16 @@ def _candidate(**overrides: object) -> CandidateSpec:
         "weights": (0.75, 0.25),
         "runtime_seconds": 1200.0,
         "expected_information_gain": 0.8,
+        "checkpoint_sha256s": (GOOD_SHA,),
+        "wheel_sha256": GOOD_SHA,
+        "config_sha256": GOOD_SHA,
+        "runner_sha256": GOOD_SHA,
+        "metadata_sha256": GOOD_SHA,
+        "privacy_pass": True,
+        "offline": True,
+        "dynamic_test": True,
+        "report_free": True,
+        "submission_api_absent": True,
     }
     values.update(overrides)
     result = CandidateSpec(**values)  # type: ignore[arg-type]
@@ -121,6 +136,28 @@ def test_candidate_rejects_unknown_target() -> None:
         _candidate(changed_targets=("Unknown",))
 
 
+def test_candidate_requires_exact_hashes() -> None:
+    with pytest.raises(ContractError, match="wheel_sha256"):
+        _candidate(wheel_sha256="not-a-sha")
+
+
+def test_candidate_requires_private_offline_dynamic_report_free_package() -> None:
+    for field in (
+        "privacy_pass",
+        "offline",
+        "dynamic_test",
+        "report_free",
+        "submission_api_absent",
+    ):
+        with pytest.raises(ContractError):
+            _candidate(**{field: False})
+
+
+def test_candidate_runtime_must_be_below_nine_hours() -> None:
+    with pytest.raises(ContractError, match="nine-hour"):
+        _candidate(runtime_seconds=9 * 60 * 60)
+
+
 def test_round_respects_live_allowance() -> None:
     with pytest.raises(ContractError, match="live submission allowance"):
         FrozenRound(
@@ -146,7 +183,7 @@ def test_round_rejects_reports_hidden_labels_network_and_submission_api() -> Non
             ).validate()
 
 
-def test_manifest_hash_is_deterministic() -> None:
+def test_manifest_hash_is_deterministic_and_matches_canonical_bytes() -> None:
     first = FrozenRound(
         round_id="T137_TARGETWISE_SPECIALIST_001_PREPARED",
         live_submission_allowance=1,
@@ -158,6 +195,7 @@ def test_manifest_hash_is_deterministic() -> None:
         candidates=(_candidate(),),
     )
     assert first.sha256() == second.sha256()
+    assert first.sha256() == hashlib.sha256(first.canonical_bytes()).hexdigest()
     assert len(first.sha256()) == 64
 
 
@@ -205,6 +243,16 @@ def test_parse_candidate_round_trip() -> None:
             "weights": [0.75, 0.25],
             "runtime_seconds": 500.0,
             "expected_information_gain": 0.5,
+            "checkpoint_sha256s": [GOOD_SHA],
+            "wheel_sha256": GOOD_SHA,
+            "config_sha256": GOOD_SHA,
+            "runner_sha256": GOOD_SHA,
+            "metadata_sha256": GOOD_SHA,
+            "privacy_pass": True,
+            "offline": True,
+            "dynamic_test": True,
+            "report_free": True,
+            "submission_api_absent": True,
         }
     )
     assert parsed.changed_targets == ("Fracture",)
@@ -282,14 +330,14 @@ def test_targetwise_rank_blend_preserves_unselected_targets() -> None:
 
 
 def test_submission_matrix_requires_12_targets() -> None:
-    with pytest.raises(Exception, match="12 targets"):
+    with pytest.raises(BlendError, match="12 targets"):
         validate_submission_matrix(np.zeros((3, 11)))
 
 
 def test_submission_matrix_rejects_out_of_range_values() -> None:
     values = np.zeros((3, 12))
     values[0, 0] = 1.5
-    with pytest.raises(Exception, match="\[0, 1\]"):
+    with pytest.raises(BlendError, match="\[0, 1\]"):
         validate_submission_matrix(values)
 
 
