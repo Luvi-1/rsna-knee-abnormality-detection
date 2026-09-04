@@ -43,9 +43,11 @@ scripts/t137_freeze_round.py
 src/rsna_knee/targetwise_specialist/__init__.py
 src/rsna_knee/targetwise_specialist/blend.py
 src/rsna_knee/targetwise_specialist/contracts.py
+src/rsna_knee/targetwise_specialist/hidden_safety.py
 src/rsna_knee/targetwise_specialist/io.py
 src/rsna_knee/targetwise_specialist/rank.py
 src/rsna_knee/targetwise_specialist/selection.py
+tests/test_t137_hidden_safety.py
 tests/test_t137_private_io.py
 tests/test_t137_targetwise_specialist.py
 ```
@@ -63,6 +65,8 @@ The portable package provides:
 - Pearson/Spearman/rank-disagreement diagnostics;
 - duplicate-like ranking detection;
 - transparent offline evidence ranking;
+- dynamic hidden-size row reconciliation and bounded batch helpers;
+- fail-closed malformed-series category handling and per-study usable-series coverage checks;
 - candidate package identity checks for checkpoint, wheel, config, runner and metadata SHA-256;
 - mandatory private/offline/dynamic-test/report-free/no-submission-call candidate gates;
 - frozen round manifests whose reported SHA-256 covers the exact written bytes;
@@ -88,9 +92,11 @@ git checkout origin/codex/t137-assistant-portable -- \
   src/rsna_knee/targetwise_specialist/__init__.py \
   src/rsna_knee/targetwise_specialist/blend.py \
   src/rsna_knee/targetwise_specialist/contracts.py \
+  src/rsna_knee/targetwise_specialist/hidden_safety.py \
   src/rsna_knee/targetwise_specialist/io.py \
   src/rsna_knee/targetwise_specialist/rank.py \
   src/rsna_knee/targetwise_specialist/selection.py \
+  tests/test_t137_hidden_safety.py \
   tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 ```
@@ -102,6 +108,7 @@ uv run ruff check \
   scripts/t137_build_candidate.py \
   scripts/t137_freeze_round.py \
   src/rsna_knee/targetwise_specialist \
+  tests/test_t137_hidden_safety.py \
   tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 
@@ -109,11 +116,15 @@ uv run ruff format --check \
   scripts/t137_build_candidate.py \
   scripts/t137_freeze_round.py \
   src/rsna_knee/targetwise_specialist \
+  tests/test_t137_hidden_safety.py \
   tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 
 uv run mypy src/rsna_knee/targetwise_specialist
-uv run pytest tests/test_t137_private_io.py tests/test_t137_targetwise_specialist.py -q
+uv run pytest \
+  tests/test_t137_hidden_safety.py \
+  tests/test_t137_private_io.py \
+  tests/test_t137_targetwise_specialist.py -q
 uv run python scripts/check_no_sensitive_files.py
 git diff --cached --check
 ```
