@@ -37,7 +37,11 @@ def score_evidence(evidence: SpecialistEvidence) -> RankedEvidence:
 
     evidence.validate()
     if evidence.status is not CandidateStatus.ADMISSIBLE_REPRODUCIBLE:
-        return RankedEvidence(evidence=evidence, heuristic_score=float("-inf"), reasons=("blocked",))
+        return RankedEvidence(
+            evidence=evidence,
+            heuristic_score=float("-inf"),
+            reasons=("blocked",),
+        )
 
     score = _EVIDENCE_WEIGHT[evidence.evidence_level]
     reasons: list[str] = [f"evidence={evidence.evidence_level.value}"]
@@ -70,10 +74,16 @@ def score_evidence(evidence: SpecialistEvidence) -> RankedEvidence:
 
     if not math.isfinite(score):
         raise ValueError("heuristic score must be finite for admissible evidence")
-    return RankedEvidence(evidence=evidence, heuristic_score=score, reasons=tuple(reasons))
+    return RankedEvidence(
+        evidence=evidence,
+        heuristic_score=score,
+        reasons=tuple(reasons),
+    )
 
 
-def rank_evidence(records: Iterable[SpecialistEvidence]) -> tuple[RankedEvidence, ...]:
+def rank_evidence(
+    records: Iterable[SpecialistEvidence],
+) -> tuple[RankedEvidence, ...]:
     """Rank evidence deterministically, highest heuristic value first."""
 
     ranked = [score_evidence(item) for item in records]
@@ -88,7 +98,9 @@ def rank_evidence(records: Iterable[SpecialistEvidence]) -> tuple[RankedEvidence
     return tuple(ranked)
 
 
-def best_by_target(records: Iterable[SpecialistEvidence]) -> dict[str, RankedEvidence]:
+def best_by_target(
+    records: Iterable[SpecialistEvidence],
+) -> dict[str, RankedEvidence]:
     """Return the highest-ranked admissible record for each represented target."""
 
     best: dict[str, RankedEvidence] = {}
