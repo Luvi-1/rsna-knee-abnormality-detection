@@ -7,19 +7,19 @@ import numpy as np
 import pytest
 
 from rsna_knee.targetwise_specialist import (
+    FAMILIES,
+    PROTECTED_CHAMPION_SCORE,
+    PROTECTED_CHAMPION_SUBMISSION_ID,
+    REJECTED_WINDOW_SUBMISSION_SCORE,
+    TARGETS,
     BlendError,
     CandidateSpec,
     CandidateStatus,
     ContractError,
     EvidenceLevel,
-    FAMILIES,
     FrozenRound,
-    PROTECTED_CHAMPION_SCORE,
-    PROTECTED_CHAMPION_SUBMISSION_ID,
-    REJECTED_WINDOW_SUBMISSION_SCORE,
     RankError,
     SpecialistEvidence,
-    TARGETS,
     authorization_request,
     best_by_target,
     identical_ordering,
@@ -403,9 +403,9 @@ def test_best_by_target_returns_one_admissible_model_per_target() -> None:
 
 def test_champion_only_improves_rule_is_strict() -> None:
     champion = 0.929
-    assert 0.930 > champion
-    assert not 0.929 > champion
-    assert not 0.928 > champion
+    assert champion < 0.930
+    assert champion >= 0.929
+    assert champion >= 0.928
 
 
 def test_success_gate_is_exactly_point_95_or_higher() -> None:
