@@ -12,6 +12,7 @@ from enum import StrEnum
 import hashlib
 import json
 import math
+import re
 from typing import Any, Mapping, Sequence
 
 
@@ -39,6 +40,7 @@ FAMILIES: dict[str, tuple[str, ...]] = {
 PROTECTED_CHAMPION_SUBMISSION_ID = 55976422
 PROTECTED_CHAMPION_SCORE = 0.929
 REJECTED_WINDOW_SUBMISSION_SCORE = 0.928
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ContractError(ValueError):
@@ -114,7 +116,7 @@ class SpecialistEvidence:
 
 @dataclass(frozen=True, slots=True)
 class CandidateSpec:
-    """One frozen targetwise challenger candidate."""
+    """One frozen targetwise challenger candidate and its exact package identity."""
 
     candidate_id: str
     parent_submission_id: int
@@ -125,6 +127,16 @@ class CandidateSpec:
     weights: tuple[float, ...]
     runtime_seconds: float
     expected_information_gain: float
+    checkpoint_sha256s: tuple[str, ...]
+    wheel_sha256: str
+    config_sha256: str
+    runner_sha256: str
+    metadata_sha256: str
+    privacy_pass: bool
+    offline: bool
+    dynamic_test: bool
+    report_free: bool
+    submission_api_absent: bool
 
     def validate(self) -> None:
         if not self.candidate_id.strip():
@@ -149,8 +161,28 @@ class CandidateSpec:
             raise ContractError("weights must sum to 1")
         if self.runtime_seconds < 0 or not math.isfinite(self.runtime_seconds):
             raise ContractError("runtime must be finite and nonnegative")
+        if self.runtime_seconds >= 9 * 60 * 60:
+            raise ContractError("runtime must remain below the nine-hour hard ceiling")
         if not math.isfinite(self.expected_information_gain):
             raise ContractError("expected_information_gain must be finite")
+        if not self.checkpoint_sha256s:
+            raise ContractError("at least one checkpoint SHA-256 is required")
+        for digest in self.checkpoint_sha256s:
+            _require_sha256(digest, "checkpoint_sha256")
+        _require_sha256(self.wheel_sha256, "wheel_sha256")
+        _require_sha256(self.config_sha256, "config_sha256")
+        _require_sha256(self.runner_sha256, "runner_sha256")
+        _require_sha256(self.metadata_sha256, "metadata_sha256")
+        if not self.privacy_pass:
+            raise ContractError("candidate privacy gate must pass")
+        if not self.offline:
+            raise ContractError("candidate inference must be offline")
+        if not self.dynamic_test:
+            raise ContractError("candidate must dynamically discover the test set")
+        if not self.report_free:
+            raise ContractError("candidate must be report-free")
+        if not self.submission_api_absent:
+            raise ContractError("candidate package must contain no submission API call")
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +236,16 @@ class FrozenRound:
                     "weights": list(item.weights),
                     "runtime_seconds": item.runtime_seconds,
                     "expected_information_gain": item.expected_information_gain,
+                    "checkpoint_sha256s": list(item.checkpoint_sha256s),
+                    "wheel_sha256": item.wheel_sha256,
+                    "config_sha256": item.config_sha256,
+                    "runner_sha256": item.runner_sha256,
+                    "metadata_sha256": item.metadata_sha256,
+                    "privacy_pass": item.privacy_pass,
+                    "offline": item.offline,
+                    "dynamic_test": item.dynamic_test,
+                    "report_free": item.report_free,
+                    "submission_api_absent": item.submission_api_absent,
                 }
                 for item in self.candidates
             ],
@@ -213,11 +255,15 @@ class FrozenRound:
             "submission_api_embedded": self.submission_api_embedded,
         }
 
-    def sha256(self) -> str:
-        encoded = json.dumps(
+    def canonical_bytes(self) -> bytes:
+        """Return exactly the bytes that should be written as the manifest file."""
+
+        return json.dumps(
             self.canonical_payload(), sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()
+
+    def sha256(self) -> str:
+        return hashlib.sha256(self.canonical_bytes()).hexdigest()
 
 
 def authorization_request(round_manifest: FrozenRound) -> str:
@@ -247,15 +293,12 @@ def authorization_request(round_manifest: FrozenRound) -> str:
 def parse_candidate(value: Mapping[str, Any]) -> CandidateSpec:
     """Parse one candidate from a JSON-compatible mapping."""
 
-    changed_raw = value.get("changed_targets")
-    model_raw = value.get("model_ids")
-    weights_raw = value.get("weights")
-    if not isinstance(changed_raw, Sequence) or isinstance(changed_raw, (str, bytes)):
-        raise ContractError("changed_targets must be an array")
-    if not isinstance(model_raw, Sequence) or isinstance(model_raw, (str, bytes)):
-        raise ContractError("model_ids must be an array")
-    if not isinstance(weights_raw, Sequence) or isinstance(weights_raw, (str, bytes)):
-        raise ContractError("weights must be an array")
+    changed_raw = _require_array(value.get("changed_targets"), "changed_targets")
+    model_raw = _require_array(value.get("model_ids"), "model_ids")
+    weights_raw = _require_array(value.get("weights"), "weights")
+    checkpoint_raw = _require_array(
+        value.get("checkpoint_sha256s"), "checkpoint_sha256s"
+    )
     candidate = CandidateSpec(
         candidate_id=str(value.get("candidate_id", "")),
         parent_submission_id=int(value.get("parent_submission_id", 0)),
@@ -268,6 +311,35 @@ def parse_candidate(value: Mapping[str, Any]) -> CandidateSpec:
         expected_information_gain=float(
             value.get("expected_information_gain", float("nan"))
         ),
+        checkpoint_sha256s=tuple(str(item) for item in checkpoint_raw),
+        wheel_sha256=str(value.get("wheel_sha256", "")),
+        config_sha256=str(value.get("config_sha256", "")),
+        runner_sha256=str(value.get("runner_sha256", "")),
+        metadata_sha256=str(value.get("metadata_sha256", "")),
+        privacy_pass=_require_bool(value.get("privacy_pass"), "privacy_pass"),
+        offline=_require_bool(value.get("offline"), "offline"),
+        dynamic_test=_require_bool(value.get("dynamic_test"), "dynamic_test"),
+        report_free=_require_bool(value.get("report_free"), "report_free"),
+        submission_api_absent=_require_bool(
+            value.get("submission_api_absent"), "submission_api_absent"
+        ),
     )
     candidate.validate()
     return candidate
+
+
+def _require_sha256(value: str, name: str) -> None:
+    if not _SHA256_RE.fullmatch(value):
+        raise ContractError(f"{name} must be a lowercase 64-character SHA-256")
+
+
+def _require_array(value: Any, name: str) -> Sequence[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ContractError(f"{name} must be an array")
+    return value
+
+
+def _require_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ContractError(f"{name} must be boolean")
+    return value
