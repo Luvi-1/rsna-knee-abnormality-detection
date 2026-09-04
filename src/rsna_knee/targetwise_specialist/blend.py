@@ -36,7 +36,7 @@ def probability_blend(
     weight_vector = validate_weights(weights, matrix.shape[0])
     if np.any((matrix < 0.0) | (matrix > 1.0)):
         raise BlendError("probability inputs must lie within [0, 1]")
-    return weight_vector @ matrix
+    return np.asarray(weight_vector @ matrix, dtype=np.float64)
 
 
 def logit_blend(
@@ -56,7 +56,7 @@ def logit_blend(
     clipped = np.clip(matrix, epsilon, 1.0 - epsilon)
     logits = np.log(clipped / (1.0 - clipped))
     blended = weight_vector @ logits
-    return 1.0 / (1.0 + np.exp(-blended))
+    return np.asarray(1.0 / (1.0 + np.exp(-blended)), dtype=np.float64)
 
 
 def rank_blend(predictions: Sequence[Iterable[float]], weights: Sequence[float]) -> np.ndarray:
@@ -65,7 +65,7 @@ def rank_blend(predictions: Sequence[Iterable[float]], weights: Sequence[float])
     matrix = _prediction_matrix(predictions)
     weight_vector = validate_weights(weights, matrix.shape[0])
     rank_matrix = np.vstack([normalized_average_ranks(row) for row in matrix])
-    return weight_vector @ rank_matrix
+    return np.asarray(weight_vector @ rank_matrix, dtype=np.float64)
 
 
 def target_swap(
