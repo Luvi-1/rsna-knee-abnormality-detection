@@ -87,9 +87,7 @@ def identical_ordering(left: Iterable[float], right: Iterable[float]) -> bool:
     """Return whether two vectors induce exactly the same normalized ranks."""
 
     a, b = _paired_vectors(left, right)
-    return bool(
-        np.array_equal(normalized_average_ranks(a), normalized_average_ranks(b))
-    )
+    return bool(np.array_equal(normalized_average_ranks(a), normalized_average_ranks(b)))
 
 
 def top_fraction_overlap(
@@ -110,9 +108,7 @@ def top_fraction_overlap(
     return len(left_top & right_top) / float(count)
 
 
-def _paired_vectors(
-    left: Iterable[float], right: Iterable[float]
-) -> tuple[np.ndarray, np.ndarray]:
+def _paired_vectors(left: Iterable[float], right: Iterable[float]) -> tuple[np.ndarray, np.ndarray]:
     a = as_finite_vector(left)
     b = as_finite_vector(right)
     if a.shape != b.shape:
