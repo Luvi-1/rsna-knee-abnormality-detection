@@ -270,10 +270,7 @@ class ClaimBoundary:
         if not self.project_submission_performed:
             return source + " This project has not independently submitted or achieved that score."
         if self.project_public_score is None:
-            return (
-                source
-                + " A project submission occurred, but no verified public score is recorded."
-            )
+            return source + " A project submission occurred, but no verified public score is recorded."
         return source + f" The project independently verified {self.project_public_score:.3f}."
 
 
