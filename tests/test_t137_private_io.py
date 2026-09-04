@@ -7,8 +7,9 @@ import numpy as np
 import pytest
 
 from rsna_knee.targetwise_specialist import (
-    PredictionTableError,
     TARGETS,
+    BlendError,
+    PredictionTableError,
     load_prediction_csv,
     reconcile_identifier_order,
     write_prediction_csv,
@@ -69,7 +70,7 @@ def test_load_prediction_csv_rejects_probability_outside_bounds(tmp_path: Path) 
     rows[1][1] = "1.2"
     path = tmp_path / "bad.csv"
     _write(path, rows)
-    with pytest.raises(Exception, match="\[0, 1\]"):
+    with pytest.raises(BlendError, match="\[0, 1\]"):
         load_prediction_csv(path)
 
 
