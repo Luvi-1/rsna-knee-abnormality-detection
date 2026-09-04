@@ -20,7 +20,6 @@ from rsna_knee.public_repro import (
 )
 from rsna_knee.public_repro.checkpoint_security import inspect_checkpoint_archive
 
-
 GOOD_SHA = "a" * 64
 
 
@@ -243,7 +242,7 @@ def test_zip_path_traversal_is_detected(tmp_path: Path) -> None:
 
 def test_pickle_checkpoint_requires_sandbox(tmp_path: Path) -> None:
     path = tmp_path / "weights.zip"
-    payload = pickle.dumps({"value": set([1, 2, 3])})
+    payload = pickle.dumps({"value": {1, 2, 3}})
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("archive/data.pkl", payload)
     result = inspect_checkpoint_archive(path)
