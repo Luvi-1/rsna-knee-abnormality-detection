@@ -48,6 +48,7 @@ _DYNAMIC_TEST_PATTERNS = (
 _HARDCODED_THREE_PATTERNS = (
     re.compile(r"\brange\(3\)"),
     re.compile(r"\bhead\(3\)"),
+    re.compile(r"\b(?:test|submission)\s*\[:3\]"),
     re.compile(r"\b(?:test|submission)\s*=\s*(?:test|submission)\s*\[:3\]"),
 )
 
