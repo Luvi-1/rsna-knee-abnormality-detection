@@ -37,12 +37,19 @@
       "status": "ACTIVE_EXISTING_COMPONENT",
       "evidence_level": "PUBLIC_LB_FAMILY_DIAGNOSTIC",
       "note": "Bone family probe reached 0.925 against the older 0.924 anchor but did not beat the 0.929 champion."
+    },
+    {
+      "model_id": "tuannm_dinov2_small_maxpool",
+      "family": "osteoarthritis",
+      "status": "LOW_EXPECTED_VALUE_RESEARCH_LEAD",
+      "evidence_level": "C_SOURCE_TARGET_METRIC",
+      "note": "New report-free public GitHub lead. Overall public LB is only 0.687, but source max-vs-mean deltas favor Lateral OA, PF OA, Synovitis and Contusion. Requires third-party license/admissibility review before any private screen."
     }
   ],
   "closed_routes": [
     "report_labeling",
     "qwen_weak_labels",
-    "dino_blocked_lineage",
+    "report_distilled_dino_lineages",
     "six_arm_raptor_report_distilled",
     "window_count_ablation"
   ],
