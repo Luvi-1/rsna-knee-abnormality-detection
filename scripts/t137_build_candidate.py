@@ -67,12 +67,8 @@ def main() -> int:
             {
                 "target": target,
                 "spearman": spearman_correlation(champion_values, challenger_values),
-                "rank_disagreement": rank_disagreement(
-                    champion_values, challenger_values
-                ),
-                "identical_ordering": identical_ordering(
-                    champion_values, challenger_values
-                ),
+                "rank_disagreement": rank_disagreement(champion_values, challenger_values),
+                "identical_ordering": identical_ordering(champion_values, challenger_values),
                 "champion_std": float(np.std(champion_values)),
                 "challenger_std": float(np.std(challenger_values)),
             }
