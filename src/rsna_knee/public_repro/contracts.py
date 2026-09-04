@@ -15,7 +15,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -71,7 +70,7 @@ class AssetRecord:
     notes: str = ""
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "AssetRecord":
+    def from_mapping(cls, value: Mapping[str, Any]) -> AssetRecord:
         return cls(
             resource=_required_text(value, "resource"),
             version=_optional_text(value.get("version")),
@@ -137,7 +136,7 @@ class CandidateRecord:
     notes: str = ""
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "CandidateRecord":
+    def from_mapping(cls, value: Mapping[str, Any]) -> CandidateRecord:
         assets_raw = value.get("assets", [])
         if not isinstance(assets_raw, list):
             raise ContractError("assets must be a list")
