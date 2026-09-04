@@ -24,7 +24,6 @@ from rsna_knee.public_repro.score_first import (
     shortlist_listings,
 )
 
-
 DEFAULT_CONFIG = Path("configs/public_baseline/score_first_093.json")
 DEFAULT_OUTPUT = Path("private_outputs/chunk4r/score_first_scan.json")
 DEFAULT_PULL_ROOT = Path("private_outputs/chunk4r/score_first_pulls")
