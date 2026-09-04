@@ -171,6 +171,8 @@ def test_collect_pull_evidence_is_path_relative(tmp_path: Path) -> None:
 def test_sha256_file_is_stable(tmp_path: Path) -> None:
     path = tmp_path / "value.bin"
     path.write_bytes(b"abc")
-    assert sha256_file(path) == (
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"  # pragma: allowlist secret
+    expected = (
+        "ba7816bf8f01cfea414140de5dae2223"  # pragma: allowlist secret
+        "b00361a396177a9cb410ff61f20015ad"  # pragma: allowlist secret
     )
+    assert sha256_file(path) == expected
