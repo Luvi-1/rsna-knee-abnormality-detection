@@ -24,6 +24,12 @@ from rsna_knee.targetwise_specialist.contracts import (
     authorization_request,
     parse_candidate,
 )
+from rsna_knee.targetwise_specialist.io import (
+    PredictionTableError,
+    load_prediction_csv,
+    reconcile_identifier_order,
+    write_prediction_csv,
+)
 from rsna_knee.targetwise_specialist.rank import (
     RankError,
     identical_ordering,
@@ -50,6 +56,7 @@ __all__ = [
     "FrozenRound",
     "PROTECTED_CHAMPION_SCORE",
     "PROTECTED_CHAMPION_SUBMISSION_ID",
+    "PredictionTableError",
     "REJECTED_WINDOW_SUBMISSION_SCORE",
     "RankError",
     "RankedEvidence",
@@ -58,6 +65,7 @@ __all__ = [
     "authorization_request",
     "best_by_target",
     "identical_ordering",
+    "load_prediction_csv",
     "logit_blend",
     "normalized_average_ranks",
     "parse_candidate",
@@ -66,10 +74,12 @@ __all__ = [
     "rank_blend",
     "rank_disagreement",
     "rank_evidence",
+    "reconcile_identifier_order",
     "score_evidence",
     "spearman_correlation",
     "target_swap",
     "targetwise_rank_blend",
     "top_fraction_overlap",
     "validate_submission_matrix",
+    "write_prediction_csv",
 ]
