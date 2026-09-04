@@ -59,9 +59,7 @@ def logit_blend(
     return 1.0 / (1.0 + np.exp(-blended))
 
 
-def rank_blend(
-    predictions: Sequence[Iterable[float]], weights: Sequence[float]
-) -> np.ndarray:
+def rank_blend(predictions: Sequence[Iterable[float]], weights: Sequence[float]) -> np.ndarray:
     """Blend independently normalized ranks for an AUC-oriented candidate."""
 
     matrix = _prediction_matrix(predictions)
