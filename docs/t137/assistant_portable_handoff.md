@@ -36,6 +36,8 @@ local campaign history.** Copy or cherry-pick only the files listed below after 
 
 ```text
 configs/t137/portable_campaign.json
+docs/t137/assistant_portable_handoff.md
+docs/t137/github_public_lead_audit.md
 scripts/t137_build_candidate.py
 scripts/t137_freeze_round.py
 src/rsna_knee/targetwise_specialist/__init__.py
@@ -44,6 +46,7 @@ src/rsna_knee/targetwise_specialist/contracts.py
 src/rsna_knee/targetwise_specialist/io.py
 src/rsna_knee/targetwise_specialist/rank.py
 src/rsna_knee/targetwise_specialist/selection.py
+tests/test_t137_private_io.py
 tests/test_t137_targetwise_specialist.py
 ```
 
@@ -60,7 +63,9 @@ The portable package provides:
 - Pearson/Spearman/rank-disagreement diagnostics;
 - duplicate-like ranking detection;
 - transparent offline evidence ranking;
-- frozen round manifests with deterministic SHA-256;
+- candidate package identity checks for checkpoint, wheel, config, runner and metadata SHA-256;
+- mandatory private/offline/dynamic-test/report-free/no-submission-call candidate gates;
+- frozen round manifests whose reported SHA-256 covers the exact written bytes;
 - exact placeholder-free authorization request generation;
 - a family candidate builder that has no Kaggle or submission code.
 
@@ -76,6 +81,8 @@ git fetch origin codex/t137-assistant-portable
 
 git checkout origin/codex/t137-assistant-portable -- \
   configs/t137/portable_campaign.json \
+  docs/t137/assistant_portable_handoff.md \
+  docs/t137/github_public_lead_audit.md \
   scripts/t137_build_candidate.py \
   scripts/t137_freeze_round.py \
   src/rsna_knee/targetwise_specialist/__init__.py \
@@ -84,6 +91,7 @@ git checkout origin/codex/t137-assistant-portable -- \
   src/rsna_knee/targetwise_specialist/io.py \
   src/rsna_knee/targetwise_specialist/rank.py \
   src/rsna_knee/targetwise_specialist/selection.py \
+  tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 ```
 
@@ -94,16 +102,18 @@ uv run ruff check \
   scripts/t137_build_candidate.py \
   scripts/t137_freeze_round.py \
   src/rsna_knee/targetwise_specialist \
+  tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 
 uv run ruff format --check \
   scripts/t137_build_candidate.py \
   scripts/t137_freeze_round.py \
   src/rsna_knee/targetwise_specialist \
+  tests/test_t137_private_io.py \
   tests/test_t137_targetwise_specialist.py
 
 uv run mypy src/rsna_knee/targetwise_specialist
-uv run pytest tests/test_t137_targetwise_specialist.py -q
+uv run pytest tests/test_t137_private_io.py tests/test_t137_targetwise_specialist.py -q
 uv run python scripts/check_no_sensitive_files.py
 git diff --cached --check
 ```
@@ -141,8 +151,41 @@ The candidate and identifier-bearing inputs must remain private/ignored.
 
 ## Freezing a round without submitting
 
-Prepare a private JSON file containing a `candidates` array matching the `CandidateSpec` contract,
-then run:
+Prepare a private JSON file with a top-level `candidates` array. Every candidate must include the
+exact package identity rather than placeholders. Example shape:
+
+```json
+{
+  "candidates": [
+    {
+      "candidate_id": "T137_OA_EFFNET_75_25",
+      "parent_submission_id": 55976422,
+      "parent_score": 0.929,
+      "changed_targets": ["Medial OA", "Lateral OA", "PF OA"],
+      "blend_type": "normalized_rank",
+      "model_ids": ["T133_RAPTOR_V42", "efficientnetv2_l_480"],
+      "weights": [0.75, 0.25],
+      "runtime_seconds": 12000.0,
+      "expected_information_gain": 0.8,
+      "checkpoint_sha256s": ["<64-lowercase-hex>"],
+      "wheel_sha256": "<64-lowercase-hex>",
+      "config_sha256": "<64-lowercase-hex>",
+      "runner_sha256": "<64-lowercase-hex>",
+      "metadata_sha256": "<64-lowercase-hex>",
+      "privacy_pass": true,
+      "offline": true,
+      "dynamic_test": true,
+      "report_free": true,
+      "submission_api_absent": true
+    }
+  ]
+}
+```
+
+The example uses placeholders only to document the schema. Replace every hash with a real value before
+running the freezer; the contract rejects non-SHA values.
+
+Then run:
 
 ```bash
 uv run python scripts/t137_freeze_round.py \
@@ -156,14 +199,26 @@ The script:
 
 1. fails when candidate count exceeds the live allowance;
 2. fails when a candidate is not descended from submission `55976422` at score `0.929`;
-3. fails on malformed weights or target names;
-4. computes deterministic manifest SHA-256;
+3. fails on malformed weights, targets, runtime, hashes or package-safety flags;
+4. writes canonical JSON bytes and computes SHA-256 over those exact file bytes;
 5. prints an exact authorization sentence with no placeholders;
-6. records `authorization_present=false`;
+6. prints `authorization_present=false`;
 7. contains no submission action.
 
 A real Kaggle submission still requires separate explicit authorization in the active Kaggle-enabled
 chat.
+
+## GitHub public-lead research completed
+
+`docs/t137/github_public_lead_audit.md` records two additional public-code findings:
+
+- a report-free DINOv2-small baseline whose overall public LB is only `0.687`, but whose published
+  max-vs-mean target deltas make Lateral OA, PF OA, Synovitis and Contusion possible low-priority
+  diversity leads; its third-party licenses still require reauthentication;
+- a source-reported `0.936` `evgendvorkin/rsna-baseline` route that explicitly loads the already
+  provenance-blocked `raptor-knee-widedense` weights, so it remains closed under the project rules.
+
+Neither source is promoted into a submission candidate.
 
 ## Recommended next local execution
 
@@ -172,10 +227,11 @@ chat.
 3. Measure per-target ranking disagreement against the `0.929` T133 champion.
 4. Reject models with effectively duplicate rankings.
 5. Build at most the highest-value OA / Fluid / Bone candidates.
-6. Refresh the live submission allowance.
-7. Freeze only the candidates allowed by that live count.
-8. Run hidden-shape safety simulations in the real local campaign code.
-9. Stop at `SUBMISSION_READY_AWAITING_AUTHORIZATION`.
+6. Use the clean DINOv2 lead only if the first two controls fail and its complete asset terms pass.
+7. Refresh the live submission allowance.
+8. Freeze only the candidates allowed by that live count.
+9. Run hidden-shape safety simulations in the real local campaign code.
+10. Stop at `SUBMISSION_READY_AWAITING_AUTHORIZATION`.
 
 ## Claim boundary
 
