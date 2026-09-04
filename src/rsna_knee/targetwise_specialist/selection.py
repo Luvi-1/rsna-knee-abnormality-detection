@@ -12,7 +12,6 @@ from rsna_knee.targetwise_specialist.contracts import (
     SpecialistEvidence,
 )
 
-
 _EVIDENCE_WEIGHT: dict[EvidenceLevel, float] = {
     EvidenceLevel.A_PROJECT_OOF: 1.00,
     EvidenceLevel.B_GROUPED_HELDOUT: 0.85,
