@@ -7,15 +7,15 @@ public notebook can become a private reproduction candidate.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import csv
 import hashlib
 import io
 import json
-from pathlib import Path
 import re
-from typing import Any, Iterable, Mapping, Sequence
-
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 _SCORE_FIELDS = ("score", "publicScore", "public_score", "bestScore", "best_score")
 _REF_FIELDS = ("ref", "kernelRef", "kernel_ref", "id")
@@ -123,7 +123,7 @@ class CampaignCandidate:
     reason: str
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "CampaignCandidate":
+    def from_mapping(cls, value: Mapping[str, Any]) -> CampaignCandidate:
         candidate = cls(
             candidate_id=_required_text(value, "candidate_id"),
             owner_slug=_required_text(value, "owner_slug"),
@@ -384,7 +384,7 @@ def _optional_positive_int(value: Any) -> int | None:
 
 def _required_score(value: Mapping[str, Any], key: str) -> float:
     item = value.get(key)
-    if isinstance(item, bool) or not isinstance(item, (int, float)):
+    if isinstance(item, bool) or not isinstance(item, int | float):
         raise ScoreFirstError(f"{key} must be numeric")
     score = float(item)
     if not 0.0 <= score <= 1.0:
