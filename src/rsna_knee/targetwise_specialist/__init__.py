@@ -10,17 +10,17 @@ from rsna_knee.targetwise_specialist.blend import (
     validate_submission_matrix,
 )
 from rsna_knee.targetwise_specialist.contracts import (
+    FAMILIES,
+    PROTECTED_CHAMPION_SCORE,
+    PROTECTED_CHAMPION_SUBMISSION_ID,
+    REJECTED_WINDOW_SUBMISSION_SCORE,
+    TARGETS,
     CandidateSpec,
     CandidateStatus,
     ContractError,
     EvidenceLevel,
-    FAMILIES,
     FrozenRound,
-    PROTECTED_CHAMPION_SCORE,
-    PROTECTED_CHAMPION_SUBMISSION_ID,
-    REJECTED_WINDOW_SUBMISSION_SCORE,
     SpecialistEvidence,
-    TARGETS,
     authorization_request,
     parse_candidate,
 )
