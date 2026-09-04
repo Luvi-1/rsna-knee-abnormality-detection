@@ -1,6 +1,7 @@
 """Freeze a T137 round manifest and print the exact authorization request.
 
-This utility is network-free and contains no submission functionality.
+This utility is network-free and contains no submission functionality. The
+written manifest bytes are exactly the bytes covered by the printed SHA-256.
 """
 
 from __future__ import annotations
@@ -40,25 +41,18 @@ def main() -> int:
             live_submission_allowance=args.live_allowance,
             candidates=candidates,
         )
-        payload = round_manifest.canonical_payload()
+        manifest_bytes = round_manifest.canonical_bytes()
         digest = round_manifest.sha256()
         request = authorization_request(round_manifest)
     except (ContractError, TypeError, ValueError) as exc:
         raise SystemExit(f"T137 round freeze failed: {exc}") from exc
 
-    complete = {
-        **payload,
-        "manifest_sha256": digest,
-        "authorization_present": False,
-        "authorization_request": request,
-    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(complete, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    args.output.write_bytes(manifest_bytes)
     print(f"round_id={round_manifest.round_id}")
     print(f"manifest_sha256={digest}")
     print(f"candidate_count={len(round_manifest.candidates)}")
+    print("authorization_present=false")
     print(f"authorization_request={request}")
     return 0
 
